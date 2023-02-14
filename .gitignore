@@ -1,0 +1,12 @@
+# KiCAD Temp and Backup #
+#########################
+fp-info-cache
+fp-lib-table
+sym-lib-table
+*.kicad_pcb-bak
+*.sch-bak
+*-cache.lib
+*-rescue.*
+*.dcm
+*.bck
+*-backups
