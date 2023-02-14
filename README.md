@@ -52,7 +52,7 @@ More Info:
 
 - [HAGIWO 6CH Euclidean rhythm sequencer Article](https://note.com/solder_state/n/n433b32ea6dbc "HAGIWO 6CH Euclidean rhythm sequencer module article").
 
-- [HAGIWO 6CH gate seq Article](https://note.com/solder_state/n/n4c600f2431c3 "HAGIWO 6CH gate sequencer module article").
+- [HAGIWO 6CH gate seq Article](https://note.com/solder_state/n/n17c69afd484d "HAGIWO 6CH gate sequencer module article").
 
 - [HAGIWO 6CH gate sequencer Video](https://www.youtube.com/watch?v=YszdC8YdFl0 "HAGIWO 6CH gate sequencer module Youtube Video").
 
