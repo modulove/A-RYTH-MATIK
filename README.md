@@ -31,6 +31,7 @@ It offers six outputs plus additional status LEDs per channel
 <h1>Changes we made to the original design</h1>
 <ul>
 	<li>All presoldered SMD Kits</li>
+	<li>Inputs / Outputs protected by protection circuit</li>
 	<li>Additional RESET input</li>
 	<li>Status LEDs per output</li>
 	<li>Clock Status LED</li>
