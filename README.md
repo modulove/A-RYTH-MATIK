@@ -1,4 +1,4 @@
-# A-RYTH-MATHIK
+# A-RYTH-MATIK
 6CH Eurorack trigger sequencer and euclidean Rhythm Generator with SSD1306 0.96 OLED
 
 This is our take on a PCB version of the HAGIWO 6 Channel OLED sequencer.
