@@ -43,11 +43,13 @@ Currently there are a few ideas floating around for further expanding / alternat
 Subscribe for updates and pitch your ideas!
 
 
-DIY Info:
+DIY Info / Links:
 
 Building the Module is simple and suited for beginners. All Kits come with SMD parts already soldered.
 
-Assembly Instructions / Video will follow soon,
+Assembly Instructions (Video soon)
+
+Modulargrid: [A-RYTH-MATIK on modulargrid.net](https://www.modulargrid.net/e/modulove-a-ryth-matik "A-RYTH-MATIK on modulargrid.net").
 
 More Info:
 
