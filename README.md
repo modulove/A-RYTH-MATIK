@@ -63,3 +63,5 @@ More Info:
 
 
 Thanks for all the inspiration and work they have done go out especially to [HAGIWO](https://www.youtube.com/@HAGIWO "HAGIWO Youtube Channel"), [Testbild-Synth Github](https://github.com/Testbild-synth "Testbild-synth Github Page"), [mzuelch Github](https://github.com/mzuelch "Michael Zülch Github Page") and all other people envolved in this corner!
+
+<a href="https://www.tindie.com/stores/modulove/?ref=offsite_badges&utm_source=sellers_modulove&utm_medium=badges&utm_campaign=badge_small"><img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-smalls.png" alt="I sell on Tindie" width="200" height="55"></a>
