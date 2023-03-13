@@ -25,6 +25,7 @@ long interval = 1000;
 #define OLED_ADDRESS 0x3C
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
+#define ENCODER_COUNT_PER_CLICK 4
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -189,7 +190,7 @@ void loop() {
 
 
   //-----------------Rotary encoder read----------------------
-  newPosition = myEnc.read();
+  newPosition = myEnc.read()/ENCODER_COUNT_PER_CLICK;
   if ( newPosition < oldPosition && enc_timer + 200 < millis()) { //turn left
     enc_timer = millis();
     oldPosition = newPosition;
