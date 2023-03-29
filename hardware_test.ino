@@ -1,5 +1,5 @@
-// This firmware is for testing the A-RYTH-MATIK Firmware
-// more info here: https://modulove.io/arythmatik/
+// This firmware is for testing the A-RYTH-MATIK hardware
+// info here: https://modulove.io/arythmatik/
 #include<Wire.h>
 #include<Adafruit_GFX.h>
 #include<Adafruit_SSD1306.h>
