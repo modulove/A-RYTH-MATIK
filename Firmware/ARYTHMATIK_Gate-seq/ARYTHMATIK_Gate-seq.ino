@@ -218,6 +218,8 @@ const static word bnk4_ptn[8][12]PROGMEM = {
 void setup() {
 
 
+  delay(1000); // Screen needs a sec to initialize
+
   // ディスプレイの初期化
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 

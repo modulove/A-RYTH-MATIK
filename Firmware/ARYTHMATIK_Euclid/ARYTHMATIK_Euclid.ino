@@ -125,6 +125,7 @@ void setup() {
    // }
   
   // OLED setting
+  delay(1000); // Screen needs a sec to initialize
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setTextSize(1);
   display.setTextColor(WHITE);
