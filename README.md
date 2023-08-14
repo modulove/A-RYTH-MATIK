@@ -49,7 +49,7 @@ Building the Module is simple and suited for beginners. All Kits come with SMD p
 
 Assembly Instructions (Quickstart) is here: [A-RYTH-MATIK QuickStart](https://github.com/modulove/A-RYTH-MATIK/blob/main/A-Ryth-Matik_QuickStart.pdf "A-RYTH-MATIK QuickStart Guide").
 
-(Buildvideo soon)
+[Buildvideo](https://www.youtube.com/watch?v=W5n_3bvGCUo)
 
 To update / load the firmware on to your Arduino Nano or LGT8F328P you can just use the [A-RYTH-MATIK Firmware uploader in Chrome Browser here:](https://dl.modulove.de/module/arythmatik/ "A-RYTH-MATIK Firmware uploader").
 
