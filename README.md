@@ -3,7 +3,7 @@
 
 This is our take on a PCB version of the HAGIWO 6 Channel OLED sequencer.
 
-![MODULOVE 6CH Eurorack trigger sequencer](https://modulove.de/arythmatik-b1/Modulove_A-RYTH-MATIK_Productshots_FrontPanel_PCB.jpg)
+![MODULOVE 6CH Eurorack trigger sequencer](https://dl.modulove.de/module/arythmatik/Modulove_A-RYTH-MATIK_Productshots_FrontPanel_PCB.jpg)
 
 The module is an Arduino-based 6CH Eurorack trigger sequencer and euclidean Rhythm Generator with SSD1306 0.96 OLED.
 Input and configuration of the parameters has changed with this firmware to be more performative and less 'clicky'.
@@ -15,7 +15,7 @@ It can be clocked via input and offers an additional reset input.
 
 Easy to modify / reprogramm it easily with the Arduino IDE.
 
-![HAGIWO 6CH Eurorack trigger sequencer](https://modulove.de/arythmatik-b1/Modulove_A-RYTH-MATIK_Productshots_Front.jpg)
+![HAGIWO 6CH Eurorack trigger sequencer](https://dl.modulove.de/module/arythmatik/Modulove_A-RYTH-MATIK_Productshots_Front.jpg)
 
 It offers six outputs plus additional status LEDs per channel
 
