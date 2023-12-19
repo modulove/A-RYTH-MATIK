@@ -17,6 +17,7 @@
 #define ENCODER_PIN2  3
 #define ENCODER_SW_PIN 12
 #define CLK_PIN 13
+#define RST_PIN 11
 #define ENCODER_COUNT_PER_ROTATION 4
 
 #define OUT_CH1 5
@@ -28,9 +29,9 @@
 #define LED_CH1 14
 #define LED_CH2 15
 #define LED_CH3 16
-#define LED_CH4 17
-#define LED_CH5 0
-#define LED_CH6 1
+#define LED_CH4 0
+#define LED_CH5 1
+#define LED_CH6 17
 #define LED_CLK 4
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -60,6 +61,7 @@ void setup() {
 
   Serial.begin(115200);
   // Initialize OLED display
+  delay(1000); // Screen needs a sec to initialize
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
     for (;;);
@@ -85,7 +87,7 @@ void setup() {
   //pin mode setting
   FastGPIO::Pin<ENCODER_SW_PIN>::setInputPulledUp(); //BUTTON
   FastGPIO::Pin<CLK_PIN>::setInput(); // CLK
-  FastGPIO::Pin<11>::setInput(); // CLK
+  FastGPIO::Pin<RST_PIN>::setInput(); // RST
 
   // Print out the I2C address of the display
   Serial.print(F("Display found at address: 0x"));
@@ -94,7 +96,6 @@ void setup() {
   display.setCursor(20, 12);
   display.println("Display found at address: 0x");
 
-  delay(1000);
 
 }
 
@@ -160,6 +161,7 @@ void loop() {
   }
   if (digitalRead(CLK_PIN) != clk_val) {
     clk_val = digitalRead(CLK_PIN);
+    FastGPIO::Pin<LED_CLK>::setOutputValue(clk_val);
     display.fillRect(120, 60, 4, 4, WHITE);
     Serial.println("CLOCK");
   }
@@ -196,7 +198,6 @@ void loop() {
     FastGPIO::Pin<LED_CH4>::setOutputValue(HIGH);
     FastGPIO::Pin<LED_CH5>::setOutputValue(HIGH);
     FastGPIO::Pin<LED_CH6>::setOutputValue(HIGH);
-    //FastGPIO::Pin<LED_CLK>::setOutputValue(HIGH);
   }
   else {
     FastGPIO::Pin<OUT_CH1>::setOutputValue(LOW);
@@ -211,7 +212,6 @@ void loop() {
     FastGPIO::Pin<LED_CH4>::setOutputValue(LOW);
     FastGPIO::Pin<LED_CH5>::setOutputValue(LOW);
     FastGPIO::Pin<LED_CH6>::setOutputValue(LOW);
-    FastGPIO::Pin<LED_CLK>::setOutputValue(LOW);
   }
 
 }
@@ -264,4 +264,3 @@ int freeMemory() {
   int v;
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
-
