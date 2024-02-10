@@ -1713,45 +1713,32 @@ void change_step() {
 }
 
 void fillin_step() {
- //フィルイン時のパターン設定
+  const uint16_t* current_bnk_ptn;
 
- //bnk1
- if (genre == 0) {
-   ch1_step = pgm_read_word(&(bnk1_ptn[change_bnk1][6]));
-   ch2_step = pgm_read_word(&(bnk1_ptn[change_bnk1][7]));
-   ch3_step = pgm_read_word(&(bnk1_ptn[change_bnk1][8]));
-   ch4_step = pgm_read_word(&(bnk1_ptn[change_bnk1][9]));
-   ch5_step = pgm_read_word(&(bnk1_ptn[change_bnk1][10]));
-   ch6_step = pgm_read_word(&(bnk1_ptn[change_bnk1][11]));
- }
+  // Determine which bnk_ptn array to use based on the genre
+  switch (genre) {
+    case 0:
+      current_bnk_ptn = bnk1_ptn[change_bnk1];
+      break;
+    case 1:
+      current_bnk_ptn = bnk2_ptn[change_bnk2];
+      break;
+    case 2:
+      current_bnk_ptn = bnk3_ptn[change_bnk3];
+      break;
+    case 3:
+      current_bnk_ptn = bnk4_ptn[change_bnk4];
+      break;
+    default:
+      // Handle invalid genre
+      return;
+  }
 
- //bnk2
- if (genre == 1) {
-   ch1_step = pgm_read_word(&(bnk2_ptn[change_bnk2][6]));
-   ch2_step = pgm_read_word(&(bnk2_ptn[change_bnk2][7]));
-   ch3_step = pgm_read_word(&(bnk2_ptn[change_bnk2][8]));
-   ch4_step = pgm_read_word(&(bnk2_ptn[change_bnk2][9]));
-   ch5_step = pgm_read_word(&(bnk2_ptn[change_bnk2][10]));
-   ch6_step = pgm_read_word(&(bnk2_ptn[change_bnk2][11]));
- }
-
- //bnk3
- if (genre == 2) {
-   ch1_step = pgm_read_word(&(bnk3_ptn[change_bnk3][6]));
-   ch2_step = pgm_read_word(&(bnk3_ptn[change_bnk3][7]));
-   ch3_step = pgm_read_word(&(bnk3_ptn[change_bnk3][8]));
-   ch4_step = pgm_read_word(&(bnk3_ptn[change_bnk3][9]));
-   ch5_step = pgm_read_word(&(bnk3_ptn[change_bnk3][10]));
-   ch6_step = pgm_read_word(&(bnk3_ptn[change_bnk3][11]));
- }
-
- //bnk4
- if (genre == 3) {
-   ch1_step = pgm_read_word(&(bnk4_ptn[change_bnk4][6]));
-   ch2_step = pgm_read_word(&(bnk4_ptn[change_bnk4][7]));
-   ch3_step = pgm_read_word(&(bnk4_ptn[change_bnk4][8]));
-   ch4_step = pgm_read_word(&(bnk4_ptn[change_bnk4][9]));
-   ch5_step = pgm_read_word(&(bnk4_ptn[change_bnk4][10]));
-   ch6_step = pgm_read_word(&(bnk4_ptn[change_bnk4][11]));
- } 
+  // Assign values using the determined bnk_ptn array
+  ch1_step = pgm_read_word(&(current_bnk_ptn[6]));
+  ch2_step = pgm_read_word(&(current_bnk_ptn[7]));
+  ch3_step = pgm_read_word(&(current_bnk_ptn[8]));
+  ch4_step = pgm_read_word(&(current_bnk_ptn[9]));
+  ch5_step = pgm_read_word(&(current_bnk_ptn[10]));
+  ch6_step = pgm_read_word(&(current_bnk_ptn[11]));
 }
