@@ -4,13 +4,10 @@ unsigned long startMillis;  //some global variables available anywhere in the pr
 unsigned long currentMillis;
 const unsigned long period = 1000;  //the value is a number of milliseconds
 const byte ledPin = 4;    //using the built in LED
-int tempo = 120;
-int lasttempo = 120;
-int ledState = LOW;
-long previousMillis = 0;
-long interval = 1000;
+int tempo = 120, lasttempo = 120;
+long previousMillis = 0, interval = 1000;
 
-//EEPROM
+#include <FastGPIO.h>
 #include <EEPROM.h>
 
 //Encoder setting
@@ -18,9 +15,9 @@ long interval = 1000;
 #include <Encoder.h>
 
 //Oled setting
-#include<Wire.h>
-#include<Adafruit_GFX.h>
-#include<Adafruit_SSD1306.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 #define OLED_ADDRESS 0x3C
 #define SCREEN_WIDTH 128
@@ -34,23 +31,37 @@ Encoder myEnc(3, 2);//use 3pin 2pin
 int oldPosition  = -999;
 int newPosition = -999;
 int i = 0;
+bool flr = 1; //first loop run -> no encU wanted
+
+// Replace the separate declarations with combined ones:
+byte bpm = 120, lastbpm = 120, ledState = LOW;
+
+// Configuration data structure for each save state slot
+struct SlotConfiguration {
+  byte hits[6];
+  byte offset[6];
+  bool mute[6];
+  byte limit[6];
+};
 
 //push button
-bool sw = 0;//push button
-bool old_sw;//countermeasure of sw chattering
+bool sw = 0, old_sw;//countermeasure of sw chattering
 unsigned long sw_timer = 0;//countermeasure of sw chattering
 
+//each channel param (modified by ms)
+//byte hits[6] = { 4, 2, 8, 1, 2, 3}, offset[6] = { 0, 4, 0, 1, 3, 15}, limit[6] = {16, 16, 16, 16, 16, 16};
+//bool mute[6] = {0, 0, 0, 0, 0, 0}; //mute 0 = off , 1 = on
+
+// Hagiwo defaults
 //each channel param
 byte hits[6] = { 4, 4, 5, 3, 2, 16};//each channel hits
 byte offset[6] = { 0, 2, 0, 8, 3, 9};//each channele step offset
 bool mute[6] = {0, 0, 0, 0, 0, 0}; //mute 0 = off , 1 = on
 byte limit[6] = {16, 16, 16, 16, 16, 16};//eache channel max step
 
+
 //Sequence variable
-byte j = 0;
-byte k = 0;
-byte m = 0;
-byte buf_count = 0;
+byte j = 0, k = 0, m = 0, buf_count = 0;
 
 const static byte euc16[17][16] PROGMEM = {//euclidian rythm
   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -89,10 +100,10 @@ unsigned long enc_timer = 0;//countermeasure of sw chattering
 //display param
 byte select_menu = 0;//0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,
 byte select_ch = 0;//0~5 = each channel -1 , 6 = random mode
-bool disp_refresh = 1;//0=not refresh display , 1= refresh display , countermeasure of display refresh bussy
+bool disp_refresh = 0;//0=not refresh display , 1= refresh display , countermeasure of display refresh bussy
 
 const byte graph_x[6] = {0, 40, 80, 15, 55, 95};//each chanel display offset
-const byte graph_y[6] = {0, 0,  0,  32, 32, 32};//each chanel display offset
+const byte graph_y[6] = {1, 1,  1,  33, 33, 33};//each chanel display offset -> +1 vs. original
 
 byte line_xbuf[17];//Buffer for drawing lines
 byte line_ybuf[17];//Buffer for drawing lines
@@ -100,24 +111,102 @@ byte line_ybuf[17];//Buffer for drawing lines
 const byte x16[16] = {15,  21, 26, 29, 30, 29, 26, 21, 15, 9,  4,  1,  0,  1,  4,  9};//Vertex coordinates
 const byte y16[16] = {0,  1,  4,  9,  15, 21, 26, 29, 30, 29, 26, 21, 15, 9,  4,  1};//Vertex coordinates
 
-
 //random assign
-byte hit_occ[6] = {0, 10, 20, 20, 40, 80}; //random change rate of occurrence
-byte off_occ[6] = {10, 20, 20, 30, 40, 20}; //random change rate of occurrence
-byte mute_occ[6] = {20, 20, 20, 20, 20, 20}; //random change rate of occurrence
-byte hit_rng_max[6] = {0, 14, 16, 8, 9, 16}; //random change range of max
-byte hit_rng_min[6] = {0, 13, 6, 1, 5, 10}; //random change range of max
+byte hit_occ[6] = { 0, 0, 20, 20, 40, 80}; //random change rate of occurrence
+byte off_occ[6] = { 0, 0, 20, 30, 40, 20}; //random change rate of occurrence
+byte mute_occ[6] = { 0,  0, 20, 20, 20, 20}; //random change rate of occurrence
+byte hit_rng_max[6] = {4, 2, 8, 4, 4, 6}; //random change range of max
+byte hit_rng_min[6] = {4, 2, 2, 1, 1, 1}; //random change range of min
 
 byte bar_now = 1;//count 16 steps, the bar will increase by 1.
-byte bar_max[4] = {2, 4, 8, 16} ;//selectable bar
+//byte bar_max[4] = {2, 4, 8, 16} ;//selectable bar
+constexpr byte bar_max[4] = {2, 4, 8, 16};
 byte bar_select = 1;//selected bar
 byte step_cnt = 0;//count 16 steps, the bar will increase by 1.
+
+//#define MAX_STEPS 16  // Adjust the value based on your actual maximum steps
+constexpr byte MAX_STEPS = 16;
+
+#define NUM_MEMORY_SLOTS 2 // Number of memory slots for saving patterns
+#define EEPROM_START_ADDRESS 0 // Starting address in EEPROM to save data
+#define CONFIG_SIZE (6 * 4) // Size of configuration data to be saved for each slot (hits, offset, mute, limit)
+
+SlotConfiguration memorySlots[NUM_MEMORY_SLOTS]; // Array to store configurations for each slot
+
+// Fast random number
+unsigned long m_w = 1;
+unsigned long m_z = 2;
+unsigned long seed;
+
+#define ButtonPin 12
+
+// DEBUG memory use
+//#include <MemoryFree.h>
+//#include <pgmStrToRAM.h>
+
+
+void saveState() {
+  for (int i = 0; i < 6; i++) {
+    EEPROM.update(i, hits[i]);
+    EEPROM.update(i + 6, offset[i]);
+    EEPROM.update(i + 12, mute[i]);
+    EEPROM.update(i + 18, limit[i]);
+  }
+
+  // success message 
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(22, 10);
+  display.println(F("SAVED"));
+  display.display();
+  delay(500);
+  display.clearDisplay();
+  display.display();
+}
+
+void loadState() {
+  for (int i = 0; i < 6; i++) {
+    hits[i] = EEPROM.read(i);
+    offset[i] = EEPROM.read(i + 6);
+    mute[i] = EEPROM.read(i + 12);
+    limit[i] = EEPROM.read(i + 18);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(22, 10);
+  display.println(F("LOADED"));
+  display.display();
+  delay(300); 
+  display.clearDisplay();
+  display.display();
+  display.setTextSize(1);
+}
+
+void autoSaveState() {
+  static unsigned long lastSaveTime = 0;
+  const unsigned long autoSaveInterval = 1 * 60 * 1000;  // 1 minutes
+
+  unsigned long currentTime = millis();
+
+  // Check if it's time for auto-save
+  if (currentTime - lastSaveTime >= autoSaveInterval) {
+    // Save the state
+    saveState();
+    
+    // Update the last save time
+    lastSaveTime = currentTime;
+  }
+}
+
+
 
 void setup() {
 
   // test display
   //Serial.begin(57600);
-   
     // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
  //   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
   //  Serial.println(("SSD1306 allocation failed"));
@@ -127,31 +216,33 @@ void setup() {
   // OLED setting
   delay(1000); // Screen needs a sec to initialize
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.setRotation(2);
   display.setTextSize(1);
   display.setTextColor(WHITE);
   OLED_display();
 
   //pin mode setting
-  pinMode(11, INPUT_PULLUP); //RST
-  pinMode(12, INPUT_PULLUP); //BUTTON
-  pinMode(13, INPUT_PULLUP); //CLOCK
-  pinMode(3, INPUT_PULLUP); //ENCODER A?
-  pinMode(2, INPUT_PULLUP); //ENCODER B?
-  pinMode(5, OUTPUT); //CH1
-  pinMode(6, OUTPUT); //CH2
-  pinMode(7, OUTPUT); //CH3
-  pinMode(8, OUTPUT); //CH4
-  pinMode(9, OUTPUT); //CH5
-  pinMode(10, OUTPUT); //CH6
-  pinMode(14, OUTPUT); //CH1 LED (DIGITAL)
-  pinMode(15, OUTPUT); //CH2 LED (DIGITAL)
-  pinMode(16, OUTPUT); //CH3 LED (DIGITAL)
-  pinMode(17, OUTPUT); //CH6 LED (DIGITAL)
-  pinMode(0, OUTPUT); //CH4 LED (DIGITAL)
-  pinMode(1, OUTPUT); //CH5 LED (DIGITAL)
-  pinMode(4, OUTPUT); //CLK LED (DIGITAL)
+  FastGPIO::Pin<11>::setInput(); // RST
+  FastGPIO::Pin<12>::setInputPulledUp(); //BUTTON
+  FastGPIO::Pin<13>::setInput(); // CLK
+  FastGPIO::Pin<3>::setInputPulledUp(); //ENCODER A
+  FastGPIO::Pin<2>::setInputPulledUp(); //ENCODER B
+  FastGPIO::Pin<5>::setOutputLow(); //CH1
+  FastGPIO::Pin<6>::setOutputLow(); //CH2
+  FastGPIO::Pin<7>::setOutputLow(); //CH3
+  FastGPIO::Pin<8>::setOutputLow(); //CH4
+  FastGPIO::Pin<9>::setOutputLow(); //CH5
+  FastGPIO::Pin<10>::setOutputLow(); //CH6
+  FastGPIO::Pin<14>::setOutputLow(); //CH1 LED (DIGITAL)
+  FastGPIO::Pin<15>::setOutputLow(); //CH2 LED (DIGITAL)
+  FastGPIO::Pin<16>::setOutputLow(); //CH3 LED (DIGITAL)
+  FastGPIO::Pin<17>::setOutputLow(); //CH6 LED (DIGITAL)
+  FastGPIO::Pin<0>::setOutputLow(); //CH4 LED (DIGITAL)
+  FastGPIO::Pin<1>::setOutputLow(); //CH5 LED (DIGITAL)
+  FastGPIO::Pin<4>::setOutputLow(); //CLK LED (DIGITAL)
 
   enc_timer = 0;
+  //loadState();
 
 }
 
@@ -164,75 +255,132 @@ void loop() {
   oldPosition = newPosition;
 
   //-----------------push button----------------------
-
   sw = 1;
-  if ((digitalRead(12) == 0 ) && ( sw_timer + 300 <= millis() )) { //push button on ,Logic inversion , sw_timer is countermeasure of chattering
+  if ((!FastGPIO::Pin<12>::isInputHigh()) && ( sw_timer + 300 <= millis() )) { //push button on ,Logic inversion , sw_timer is countermeasure of chattering
     sw_timer = millis();
     sw = 0;
     disp_refresh = debug;
-    Serial.println("button");
+   
   }
   if (sw == 0) {
     disp_refresh = debug;
     select_menu ++;
   }
-  if (select_ch != 6 && select_menu >= 6) { // not random mode
+  if (select_ch != 6 && select_menu >= 7) { // not random mode
     select_menu = 0;
   }
-  if (select_ch == 6 && select_menu >= 1) { // random mode
-    select_menu = 0;
+  if (select_ch == 6 && select_menu > 1) { // random mode
+    select_menu = 0;                       //Ruecksetzung nach weiterem Klick aus Stufe select_menu = 1 (Occurence)
   }
   if (select_ch != 6 && select_menu < 0) { // not random mode
     select_menu = 5;
   }
-  if (select_ch == 6 && select_menu < 0) { // random mode
-    select_menu = 1;
+  if (select_ch == 6 && select_menu < 0) { // random mode  //Begrenzer
+    select_menu = 0;
+  }
+  if (select_ch >= 7 && select_menu >= 2) { // modes only having a button
+    select_menu = 0;
+  }
+  
+  if (select_ch == 7 && select_menu == 1) { // save whith encoder rotation
+    //saveEEPROM();
+    saveConfiguration();
+    select_menu = 0;
+  }
+  if (select_ch == 8 && select_menu == 1) { // load whith encoder rotation
+    //loadFromEEPROM();
+    loadConfiguration();
+    select_menu = 0;
+  }
+  if (select_ch == 9 && select_menu == 1) { // reset whith encoder rotation
+    //resetDefault();
+    //factoryReset();
+    select_menu = 0;
+  }
+  if (select_ch == 10 && select_menu == 1) { // check mute status and toggle mute / unmute with encoder rotation
+    //muteToggle();
+    select_menu = 0;
+  }
+  if (select_ch == 10 && select_menu == 2) { // check mute status and toggle mute / unmute with encoder rotation
+    //performanceMute();
+    disp_refresh = debug;
+    //select_menu = 0;
+  }
+  if (select_ch == 11 && select_menu == 2) { // modes only having a button
+    
+    if (bpm >= 180) {
+      bpm = 180;
+      }
+    if (bpm <= 60) {
+      bpm = 60;
+      }
+      //adjustBPM();
+    //select_menu = 0;
+    // debug output bpm on OLED
+    //display.clearDisplay();
+    //display.setCursor(0, 0);
+    //display.print("BPM: ");
+    //display.print(tempo);
+    //display.display();
+    //delay(100);
+    //tapTempo.setBPM(bpm);
+    disp_refresh = 1;
+  }
+  
+  if (select_ch == 12 && select_menu == 1) { // check mute status and toggle mute / unmute with encoder rotation
+    Random_change();
+    disp_refresh = 1;
+    //select_menu = 0;
   }
 
 
   //-----------------Rotary encoder read----------------------
   newPosition = myEnc.read()/ENCODER_COUNT_PER_CLICK;
-  if ( newPosition < oldPosition && enc_timer + 200 < millis()) { //turn left
+    if (newPosition < oldPosition && enc_timer + 100 < millis()) { //turn left
     enc_timer = millis();
     oldPosition = newPosition;
     disp_refresh = debug;//Enable while debugging.
     encD = 1;
-    Serial.println("<<< encoder <<<");
   } else {
     encD = 0;
   }
-
-  if ( newPosition > oldPosition && enc_timer + 200 < millis()) { //turn right
+ 
+    if (newPosition > oldPosition && enc_timer + 100 < millis()) { //turn right
     enc_timer = millis();
     oldPosition = newPosition;
     disp_refresh = debug;//Enable while debugging.
     encU = 1;
-    Serial.println(">>> encoder >>>");
+    if (flr == 1) { //suppresses faulty encU in first loop run
+      disp_refresh = debug; // only refresh whith encoder when debug mode is enabled (debug=1), else there might be jumps in the sequence while running
+      encU = 0;
+      flr = 0;
+    }
   } else {
     encU = 0;
   }
 
-
-  if (old_encU == 0 && encU == 1) {
+if (old_encU == 0 && encU == 1) {
     switch (select_menu) {
-      case 0: //select chanel
+      case 0: //select channel 
+      // Modes are: 0,1,2,3,4,5,6,7,8,9,10,11,12 (0-5 are channels, 6 is random, 7 is complete mute, 8 is save, 9 load, 10 settings factory reset, 11 MUTE ALL, 12 tempo adjust, 13 new random mode)
         select_ch ++;
-        if (select_ch >= 7) {
-          select_ch = 6;
+        if (select_ch >= 13) {
+          select_ch = 12;
         }
         break;
 
       case 1: //hits
-        if (select_ch != 6) { // not random mode
+        if (select_ch != 6 && select_ch <= 6) { // dial in hits for each channel
           hits[select_ch]++ ;
           if (hits[select_ch] >= 17) {
             hits[select_ch] = 0;
           }
         }
-        else  if (select_ch == 6 && sw == 0) { // random mode
+        //else  if (select_ch == 6 && sw == 0) { // dial in change duration for random mode	
+        else if (select_ch == 6) { // random mode - aber ohne die zweite Bedingung "&& sw == 0"
           bar_select ++;
-          if (bar_select >= 4) {
-            bar_select = 0;
+          if (bar_select >= 4) { //Begrenzer nach oben
+            bar_select = 3;      //Bei Überschreitung Rücksetzung auf den Maximalwert, Pendant zu Z 289
           }
         }
         break;
@@ -240,7 +388,7 @@ void loop() {
       case 2: //offset
         offset[select_ch]-- ;
         if (offset[select_ch] >= 16) {
-          offset[select_ch] = 0;
+          offset[select_ch] = 15; //geaendert von 0 auf 15, d. h. Schleife bei Ueberlauf
         }
         break;
 
@@ -261,6 +409,13 @@ void loop() {
           playing_step[k] = 0;
         }
         break;
+
+      case 6: //random advance
+        if (select_ch >= 2) {
+          select_ch = 0;
+        }
+          Random_change_one();
+        break;
     }
   }
 
@@ -268,7 +423,7 @@ void loop() {
     switch (select_menu) {
       case 0: //select chanel
         select_ch --;
-        if (select_ch >= 7) {
+        if (select_ch >= 7) {  //Begrenzer nach unten durch Rücklauf "unter Null", d. h. auf 255 wegen vorzeichenloser Byte-Definition, Pendant zu Z 223
           select_ch = 0;
         }
         break;
@@ -276,14 +431,14 @@ void loop() {
       case 1: //hits
         if (select_ch != 6) { // not random mode
           hits[select_ch]-- ;
-          if (hits[select_ch] >= 17) {
-            hits[select_ch] = 0;
+          if (hits[select_ch] >= 17) { //Begrenzer nach unten durch Rücklauf "unter Null", d. h. auf 255 wegen vorzeichenloser Byte-Definition
+            hits[select_ch] = 16;      //Schleife zu größtem Wert (damit 0 -> 16 möglich wird)
           }
         }
-        else  if (select_ch == 6) { // random mode
+        else if (select_ch == 6) { // random mode
           bar_select --;
-          if (bar_select >= 4) {
-            bar_select = 0;
+          if (bar_select >= 4) {  //Begrenzer "nach unten" durch Rücklauf auf 255 wegen vorzeichenloser Byte-Definition
+            bar_select = 0;       //Bei Unterschreitung Rücksetzung auf den Minimalwert, Pendant zu Z 238
           }
         }
         break;
@@ -295,13 +450,14 @@ void loop() {
         }
         break;
 
-      case 3: //limit
+      case 3: //limit for now only up direction since there is a bug with the playing indicatior dot / circle somewhere
         limit[select_ch]-- ;
         if (limit[select_ch] >= 17) {
           limit[select_ch] = 0;
         }
 
         break;
+
 
       case 4: //mute
         mute[select_ch] = !mute[select_ch] ;
@@ -311,6 +467,13 @@ void loop() {
         for (k = 0; k <= 5; k++) {
           playing_step[k] = 0;
         }
+        break;
+      
+      case 6: //random advance
+          //Random_change_one();
+          // test
+          //Randomize();
+          Random_change();
         break;
     }
   }
@@ -327,21 +490,22 @@ void loop() {
   }
 
   //-----------------trigger detect, reset & output----------------------
-  rst_in = digitalRead(11);//external reset in
+  rst_in = FastGPIO::Pin<11>::isInputHigh();//external reset in
   if (old_rst_in == 0 && rst_in == 1) {
     for (k = 0; k <= 5; k++) {
       playing_step[k] = 0;
       disp_refresh = 1;
     }
   }
-  trg_in = digitalRead(13);//external trigger in
-  if (old_trg_in == 0 && trg_in == 0 && gate_timer + 1000 <= millis()) {
-    void BPM();
+  trg_in = FastGPIO::Pin<13>::isInputHigh();//external trigger in
+  if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
+    //void BPM();
     debug = 1;
+    disp_refresh = 1;
   }
   else if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
-    digitalWrite(4, HIGH);
+    FastGPIO::Pin<4>::setOutput(1);
     debug = 0;
     for (i = 0; i <= 5; i++) {
       playing_step[i]++;      //When the trigger in, increment the step by 1.
@@ -353,33 +517,33 @@ void loop() {
       if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
         switch (k) {
           case 0://CH1
-            digitalWrite(5, HIGH);
-            digitalWrite(14, HIGH);
+            FastGPIO::Pin<5>::setOutput(1);
+            FastGPIO::Pin<14>::setOutput(1);
             break;
 
           case 1://CH2
-            digitalWrite(6, HIGH);
-            digitalWrite(15, HIGH);
+            FastGPIO::Pin<6>::setOutput(1);
+            FastGPIO::Pin<15>::setOutput(1);
             break;
 
           case 2://CH3
-            digitalWrite(7, HIGH);
-            digitalWrite(16, HIGH);
+            FastGPIO::Pin<7>::setOutput(1);
+            FastGPIO::Pin<16>::setOutput(1);
             break;
 
           case 3://CH4
-            digitalWrite(8, HIGH);
-            digitalWrite(0, HIGH);
+            FastGPIO::Pin<8>::setOutput(1);
+            FastGPIO::Pin<0>::setOutput(1);
             break;
 
           case 4://CH5
-            digitalWrite(9, HIGH);
-            digitalWrite(1, HIGH);
+            FastGPIO::Pin<9>::setOutput(1);
+            FastGPIO::Pin<1>::setOutput(1);
             break;
 
           case 5://CH6
-            digitalWrite(10, HIGH);
-            digitalWrite(17, HIGH);
+            FastGPIO::Pin<10>::setOutput(1);
+            FastGPIO::Pin<17>::setOutput(1);
             break;
         }
       }
@@ -401,36 +565,224 @@ void loop() {
 
   if  (gate_timer + 10 <= millis()) { //off all gate , gate time is 10msec
 
-    digitalWrite(5, LOW);
-    digitalWrite(6, LOW);
-    digitalWrite(7, LOW);
-    digitalWrite(8, LOW);
-    digitalWrite(9, LOW);
-    digitalWrite(10, LOW);
+    FastGPIO::Pin<5>::setOutput(0);
+    FastGPIO::Pin<6>::setOutput(0);
+    FastGPIO::Pin<7>::setOutput(0);
+    FastGPIO::Pin<8>::setOutput(0);
+    FastGPIO::Pin<9>::setOutput(0);
+    FastGPIO::Pin<10>::setOutput(0);
   }
 
-  if  (gate_timer + 100 <= millis()) { //off all gate , gate time is 10msec
+  if  (gate_timer + 30 <= millis()) { //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
 
-    digitalWrite(4, LOW);
-    digitalWrite(14, LOW);
-    digitalWrite(15, LOW);
-    digitalWrite(16, LOW);
-    digitalWrite(17, LOW);
-    digitalWrite(0, LOW);
-    digitalWrite(1, LOW);
+    FastGPIO::Pin<4>::setOutput(0);
+    FastGPIO::Pin<14>::setOutput(0);
+    FastGPIO::Pin<15>::setOutput(0);
+    FastGPIO::Pin<16>::setOutput(0);
+    FastGPIO::Pin<17>::setOutput(0);
+    FastGPIO::Pin<0>::setOutput(0);
+    FastGPIO::Pin<1>::setOutput(0);
   }
 
-  if  (gate_timer + 100 <= millis()) { //off all gate , gate time is 10msec
-    digitalWrite(4, LOW);
-  }
-  
+ 
   if (disp_refresh == 1) {
     OLED_display();//refresh display
     disp_refresh = 0;
   }
+   //autoSaveState();
 }
 
-void Random_change() { // when random mode and full of bar_now ,
+/*
+
+// Factory reset function to start from scratch
+void factoryReset() {
+  for (int slot = 0; slot < NUM_MEMORY_SLOTS; slot++) {
+    for (int i = 0; i < 6; i++) {
+      memorySlots[slot].hits[i] = 4;
+      memorySlots[slot].offset[i] = 0;
+      memorySlots[slot].mute[i] = false;
+      memorySlots[slot].limit[i] = 16;  // Initialize limit values
+    }
+  }
+}
+
+
+*/
+
+// Function to save configuration to EEPROM for a specific slot
+void saveToEEPROM(int slot) {
+  int address = EEPROM_START_ADDRESS + (slot * CONFIG_SIZE);
+
+  // Save each field individually
+  for (int ch = 0; ch < 6; ++ch) {
+    int hitsAddress = address + ch * sizeof(int);
+    int offsetAddress = hitsAddress + sizeof(int);
+    int muteAddress = offsetAddress + sizeof(int);
+    int limitAddress = muteAddress + sizeof(int);
+
+    EEPROM.put(hitsAddress, memorySlots[slot].hits[ch]);
+    EEPROM.put(offsetAddress, memorySlots[slot].offset[ch]);
+    EEPROM.put(muteAddress, memorySlots[slot].mute[ch]);
+    EEPROM.put(limitAddress, memorySlots[slot].limit[ch]);
+  }
+}
+
+// Function to load configuration from EEPROM for a specific slot
+void loadFromEEPROM(int slot) {
+  int address = EEPROM_START_ADDRESS + (slot * CONFIG_SIZE);
+
+  // Load each field individually
+  for (int ch = 0; ch < 6; ++ch) {
+    int hitsAddress = address + ch * sizeof(int);
+    int offsetAddress = hitsAddress + sizeof(int);
+    int muteAddress = offsetAddress + sizeof(int);
+    int limitAddress = muteAddress + sizeof(int);
+
+    EEPROM.get(hitsAddress, memorySlots[slot].hits[ch]);
+    EEPROM.get(offsetAddress, memorySlots[slot].offset[ch]);
+    EEPROM.get(muteAddress, memorySlots[slot].mute[ch]);
+    EEPROM.get(limitAddress, memorySlots[slot].limit[ch]);
+  }
+}
+
+
+
+// New function to handle the saving process and display on the OLED
+void saveConfiguration() {
+  int selectedSlot = 0;
+  bool saving = true;
+
+  while (saving) {
+    // Display selected slot and save prompt on OLED
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(20, 20);
+    display.print("Save to Slot:");
+    display.setTextSize(2);
+    display.setCursor(20, 29);
+    display.print(selectedSlot + 1);
+    display.display();
+    display.setTextSize(1);
+
+    // Check for encoder rotation to select memory slot
+    newPosition = myEnc.read();
+    if (newPosition != oldPosition) {
+      if (newPosition > oldPosition) {
+        selectedSlot++;
+        if (selectedSlot >= NUM_MEMORY_SLOTS) {
+          selectedSlot = 0;
+        }
+      } else {
+        selectedSlot--;
+        if (selectedSlot < 0) {
+          selectedSlot = NUM_MEMORY_SLOTS - 1;
+        }
+      }
+      oldPosition = newPosition;
+    }
+
+    // Check for button press to save configuration
+    sw = digitalRead(ButtonPin) == LOW;
+    if (sw && sw_timer + 300 <= millis()) { // Push button pressed
+      sw_timer = millis();
+      saving = false;
+      for (int ch = 0; ch < 6; ++ch) {
+        memorySlots[selectedSlot].hits[ch] = hits[ch];
+        memorySlots[selectedSlot].offset[ch] = offset[ch];
+        memorySlots[selectedSlot].mute[ch] = mute[ch];
+        memorySlots[selectedSlot].limit[ch] = limit[ch];  // Save limit values
+      }
+      saveToEEPROM(selectedSlot);
+      // Display success message on OLED
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      display.setCursor(20, 20);
+      display.println(F("Configuration saved!"));
+      display.display();
+      delay(200); // Display success message for 1 second
+    }
+  }
+}
+
+// Function to handle the loading process and display on the OLED
+void loadConfiguration() {
+  int selectedSlot = 0;
+  bool loading = true;
+
+  while (loading) {
+    // Display selected slot and load prompt on OLED
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(20, 20);
+    display.print("Load from Slot:");
+    display.setCursor(29, 29);
+    display.setTextSize(2);
+    display.print(selectedSlot + 1);
+    display.setTextSize(1);
+    display.display();
+
+    // Check for encoder rotation to select memory slot
+    newPosition = myEnc.read();
+    if (newPosition != oldPosition) {
+      if (newPosition > oldPosition) {
+        selectedSlot++;
+        if (selectedSlot >= NUM_MEMORY_SLOTS) {
+          selectedSlot = 0;
+        }
+      } else {
+        selectedSlot--;
+        if (selectedSlot < 0) {
+          selectedSlot = NUM_MEMORY_SLOTS - 1;
+        }
+      }
+      oldPosition = newPosition;
+    }
+
+    // Check for button press to load configuration
+    sw = digitalRead(ButtonPin) == LOW;
+    if (sw && sw_timer + 300 <= millis()) { // Push button pressed
+      sw_timer = millis();
+      loadFromEEPROM(selectedSlot);  // Load values from EEPROM first
+
+      // Update individual arrays after loading from EEPROM
+      for (int ch = 0; ch < 6; ++ch) {
+        hits[ch] = memorySlots[selectedSlot].hits[ch];
+        offset[ch] = memorySlots[selectedSlot].offset[ch];
+        mute[ch] = memorySlots[selectedSlot].mute[ch];
+        limit[ch] = memorySlots[selectedSlot].limit[ch];  // Load limit values
+      }
+
+      // Display success message on OLED
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      display.setCursor(20, 20);
+      display.println(F("Configuration loaded!"));
+      display.display();
+      delay(100);
+      loading = false;
+    }
+  }
+}
+
+
+
+// generate a random number with less computation TODO: check if this is actually faster
+unsigned long getRandom()
+{
+    m_z = 36969L * (m_z & 65535L) + (m_z >> 16);
+    m_w = 18000L * (m_w & 65535L) + (m_w >> 16);
+    return (m_z << 16) + m_w;  /* 32-bit result */
+}
+
+// Random change function for all channels at once
+void Random_change() {
+  unsigned long seed = analogRead(A0);  //  seed value
+  randomSeed(seed);       // initialize the PRNG with the seed value
+
   for (k = 1; k <= 5; k++) {
 
     if (hit_occ[k] >= random(1, 100)) { //hit random change
@@ -450,33 +802,256 @@ void Random_change() { // when random mode and full of bar_now ,
   }
 }
 
+// random change function for one channel at a time only!
+void Random_change_one() {
+  unsigned long seed = analogRead(A0);  //  seed value
+  randomSeed(seed);       // initialize the PRNG with the seed value
+
+  if (hit_occ[select_ch] >= random(1, 100)) { //hit random change
+    hits[select_ch] = random(hit_rng_min[select_ch], hit_rng_max[select_ch]);
+  }
+
+  if (off_occ[select_ch] >= random(1, 100)) { //hit random change
+    offset[select_ch] = random(0, 16);
+  }
+
+  if (mute_occ[select_ch] >= random(1, 100)) { //hit random change
+    mute[select_ch] = 1;
+  }
+  else if (mute_occ[select_ch] < random(1, 100)) { //hit random change
+    mute[select_ch] = 0;
+  }
+  
+}
+
+
+
+// use Random_change() to generate five sets of hits, offsets, and mutes and store in an 3D array
+// declare the array as global
+int randomize_array[5][3][6];
+void Randomize() {
+  for (int i = 0; i < 5; i++) {
+    Random_change();
+    for (int j = 0; j < 3; j++) {
+      if (j == 0) {
+        for (int k = 0; k < 6; k++) {
+          randomize_array[i][j][k] = hits[k];
+        }
+      }
+      else if (j == 1) {
+        for (int k = 0; k < 6; k++) {
+          randomize_array[i][j][k] = offset[k];
+        }
+      }
+      else if (j == 2) {
+        for (int k = 0; k < 6; k++) {
+          randomize_array[i][j][k] = mute[k];
+        }
+      }
+    }
+  }
+}
+
+
+
+
+
+
+
+// mute all channels one at a time until all channels are muted and while the button is pressed and when rotated anticlockwise
+// unmute all channels one at a time until all channels are unmuted and while the button is pressed and when rotated clockwise
+// not working as expected
+/*
+void performanceMute() 
+{
+  if (myEnc.read() < 0) {
+    for (int i = 0; i < 6; i++) {
+      mute[i] = 1;
+    }
+  }
+  // unmute all channels
+  if (myEnc.read() > 0) {
+    for (int i = 0; i < 6; i++) {
+      mute[i] = 0;
+    }
+  }
+
+}
+
+*/
+
+/*
+void muteOne() {
+  if (myEnc.read() < 0) {
+    for (int i = 0; i < 6; i++) {
+      if (mute[i] == 0) {
+        mute[i] = 1;
+        if (i > 0) {
+          mute[i - 1] = 0;
+        }
+        break;
+      }
+    }
+  }
+  // unmute all channels
+  if (myEnc.read() > 0) {
+    for (int i = 5; i >= 0; i--) {
+      if (mute[i] == 1) {
+        mute[i] = 0;
+        if (i < 5) {
+          mute[i + 1] = 1;
+        }
+        break;
+      }
+    }
+  }
+}
+
+*/
+
+/*
+void resetDefault()
+{
+  // default values for the 6 channels
+  hits[6] = { 4, 4, 5, 3, 2, 16} ;//each channel hits 
+  offset[6] = { 0, 2, 0, 8, 3, 9};//each channele step offset
+  mute[6] = {1, 1, 1, 1, 1, 1}; //mute 0 = off , 1 = on
+  limit[6] = {16, 16, 16, 16, 16, 16};//eache channel max step
+  // add bpm with resolution of 1200 for 120 bpm
+  int tempo = 120;
+  // write default values to eeprom
+  // dont overwrite the EEPROM with defaults, just load them
+    for (int i = 0; i < 6; i++) {
+    EEPROM.write(i, hits[i]);
+    EEPROM.write(i + 6, offset[i]);
+    EEPROM.write(i + 12, mute[i]);
+    EEPROM.write(i + 18, limit[i]);
+    // include bpm value 
+    EEPROM.write(24, tempo);
+  }
+  //delay(500);
+  // load values from eeprom
+  for (int i = 0; i < 6; i++)
+  {
+    hits[i] = EEPROM.read(i);
+    offset[i] = EEPROM.read(i + 6);
+    mute[i] = EEPROM.read(i + 12);
+    limit[i] = EEPROM.read(i + 18);
+    // bpm
+    tempo = EEPROM.read(24);
+  }
+  delay(5);
+  // draw succes message on the center of the screeen for half a second
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(5, 5 );
+  display.println(F("RESET"));
+  display.setTextSize(1);
+  display.display();
+  delay(10);
+}
+*/
+
+/*
+void adjustBPM()
+{
+  // adjust tempo with the rotary encoder if in tempo adjust mode (11)
+  bpm ++;
+  if(select_menu == 11) {
+    
+    if (myEnc.read() != lasttempo) {
+      tempo = map(myEnc.read(), 0, 127, 30, 300);
+      lasttempo = myEnc.read();
+    }
+  //tempo = map(myEnc.read(), 0, 127, 30, 300);
+  // draw tempo value on the center of the screeen for half a second
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 10 );
+  display.println(tempo);
+  display.setTextSize(1);
+  display.display();
+  delay(200);
+
+  }
+}
+
+*/
+
+// Display 
+
 void OLED_display() {
   display.clearDisplay();
-  //-------------------------euclidean circle display------------------
+    //-------------------------euclidean circle display------------------
   //draw setting menu
   display.setCursor(120, 0);
-  if (select_ch != 6) { // not random mode
+  // if select channel is not random mode (6) OR! not in modes higher than 7 (factory reset)
+  if (select_ch != 6 && select_ch <= 6 ) { // not random mode
     display.print(select_ch + 1);
   }
-  else if (select_ch == 6) { //random mode
+  if (select_ch == 6) { // R for RANDOM
     display.print("R");
+  }
+  else if (select_ch == 7) { // S for SAVE
+    display.print("S");
+  }
+  else if (select_ch == 8) { // L for LOAD
+    display.print("L");
+  }
+  else if (select_ch == 9) { // Factory reset
+    display.print("F");
+  }
+  else if (select_ch == 10) { // MUTE
+    display.print("M");
+  }
+  else if (select_ch == 11) { // TEMPO
+    display.print("T");
+  }
+    else if (select_ch == 12) { // NEW RANDOM
+    display.print("X");
   }
   display.setCursor(120, 9);
-  if (select_ch != 6) { // not random mode
-    display.print("H");
+  if (select_ch != 6 && select_ch <= 6) { // not random mode
+    display.print("H"); // Hits
   }
-  else if (select_ch == 6) { //random mode
+  else if (select_ch == 6) { //
     display.print("O");
   }
+  /*
+  else if (select_ch == 7) { // save
+    display.drawRect(120, 9, 8, 8, WHITE);
+  }
+  else if (select_ch == 8) { // load
+    display.drawRect(120, 9, 8, 8, WHITE);
+  }
+  else if (select_ch == 9) { // Factory reset
+    display.drawRect(120, 9, 8, 8, WHITE);
+  }
+  
+  else if (select_ch == 11) { // Tempo
+      display.drawRect(120, 9, 8, 8, WHITE);
+  }
+  */
+  else if (select_ch == 10) { // Mute
+      display.setCursor(120, 9);
+      //display.drawRect(120, 9, 8, 8, WHITE);
+      display.println(F("<>"));
+  }
+
   display.setCursor(120, 18);
-  if (select_ch != 6) { // not random mode
-    display.print("O");
-    display.setCursor(0, 36);
-    display.print("L");
-    display.setCursor(0, 45);
-    display.print("M");
-    display.setCursor(0, 54);
-    display.print("R");
+  if (select_ch != 6 && select_ch <= 6) { // not random mode and no config modes
+    display.print("O"); // Offset
+    display.setCursor(0, 29);
+    display.print("L"); // Loop
+    display.setCursor(0, 38);
+    display.print("M"); // Mute
+    display.setCursor(0, 47);
+    display.print("R"); // Reset
+    display.setCursor(0, 56);
+    display.print("X"); // Advance random mode
   }
 
 
@@ -487,6 +1062,68 @@ void OLED_display() {
     display.drawRect(1, 62 - bar_max[bar_select] * 2, 6, bar_max[bar_select] * 2 + 2, WHITE);
     display.fillRect(1, 64 - bar_now * 2 , 6, bar_max[bar_select] * 2, WHITE);
   }
+  // write mode text left bottom verticaly
+  if (select_ch == 7) { //random mode
+    display.setCursor(0, 30);
+    display.print("S");
+    display.setCursor(0, 39);
+    display.print("A");
+    display.setCursor(0, 48);
+    display.print("V");
+    display.setCursor(0, 57);
+    display.print("E");    
+  }
+  else if (select_ch == 8) { // load mode
+    display.setCursor(0, 30);
+    display.print("L");
+    display.setCursor(0, 39);
+    display.print("O");
+    display.setCursor(0, 48);
+    display.print("A");
+    display.setCursor(0, 57);
+    display.print("D");
+  }
+  else if (select_ch == 9) { // reset mode
+    display.setCursor(0, 30);
+    display.print("R");
+    display.setCursor(0, 39);
+    display.print("S");
+    display.setCursor(0, 48);
+    display.print("E");
+    display.setCursor(0, 57);
+    display.print("T");
+  }
+  else if (select_ch == 10) { // MUTE ALL
+    display.setCursor(0, 30);
+    display.print("M");
+    display.setCursor(0, 39);
+    display.print("U");
+    display.setCursor(0, 48);
+    display.print("T");
+    display.setCursor(0, 57);
+    display.print("E");
+  }
+  else if (select_ch == 11) { // TEMPO
+    display.setCursor(0, 30);
+    display.print("T");
+    display.setCursor(0, 39);
+    display.print("E");
+    display.setCursor(0, 48);
+    display.print("M");
+    display.setCursor(0, 57);
+    display.print("P");
+  }
+else if (select_ch == 12) { // NEW RANDOM SEQUENCE SELECT MODE
+    display.setCursor(0, 30);
+    display.print("R");
+    display.setCursor(0, 39);
+    display.print("A");
+    display.setCursor(0, 48);
+    display.print("N");
+    display.setCursor(0, 57);
+    display.print("D");
+  }
+
   //draw select triangle
   if ( select_menu == 0) {
     display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
@@ -495,27 +1132,34 @@ void OLED_display() {
     display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
   }
 
-  if (select_ch != 6) { // not random mode
+  if (select_ch != 6 && select_ch <= 6 ) { // not random mode and no config modes
     if ( select_menu == 2) {
       display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
     }
     else  if ( select_menu == 3) {
-      display.drawTriangle(12, 36, 12, 42, 7, 39, WHITE);
+      display.drawTriangle(12, 26, 12, 31, 7, 30, WHITE);
     }
     else  if ( select_menu == 4) {
-      display.drawTriangle(12, 45, 12, 51, 7, 48, WHITE);
+      display.drawTriangle(12, 34, 12, 42, 7, 39, WHITE);
     }
     else  if ( select_menu == 5) {
+      display.drawTriangle(12, 45, 12, 51, 7, 48, WHITE);
+    }
+    else  if ( select_menu == 6) {
       display.drawTriangle(12, 54, 12, 60, 7, 57, WHITE);
     }
   }
 
-  //draw step dot
-  for (k = 0; k <= 5; k++) { //k = 1~6ch
-    for (j = 0; j <= limit[k] - 1; j++) { // j = steps
-      display.drawPixel(x16[j] + graph_x[k], y16[j] + graph_y[k], WHITE);
+ // draw step dot
+ // prevents out-of-bounds access
+for (k = 0; k <= 5; k++) { // k = 1~6ch
+    for (j = 0; j < limit[k]; j++) { // j = steps
+        // Ensure that the index is within bounds of x16 and y16 arrays
+        if (j < 16) {
+            display.drawPixel(x16[j] + graph_x[k], y16[j] + graph_y[k], WHITE);
+        }
     }
-  }
+}
 
   //draw hits line : 2~16hits
   for (k = 0; k <= 5; k++) { //ch count
@@ -557,29 +1201,27 @@ void OLED_display() {
       }
     }
   }
-  display.display();
-}
-
-void BPM ()
-{
-  int tempo = 120;
-  //algorithm to convert tempo into BPM
-  float interval = (1000 / tempo) * 60 / 4;
-  unsigned long currentMillis = millis();
-  lasttempo = tempo;
 
 
-  if (currentMillis - previousMillis > interval) {
-    // save the last time you blinked the LED
-    previousMillis = currentMillis;
-    if (ledState == LOW) {
-      playing_step[i]++;
-      ledState = HIGH;
+   //write hit and offset values for H > 6 -> 9 to 16 hits
+  for (k = 0; k <= 5; k++) { //ch count
+    if (hits[k] > 6) {
+      display.setCursor(7 + graph_x[k], 8 + graph_y[k]);
+      display.print("h");
+      display.print(hits[k]);
+      display.setCursor(7 + graph_x[k], 17 + graph_y[k]);
+      display.print("o");
+      if (offset[k] == 0) {
+        display.print(offset[k]);
+      }
+      else {
+        display.print(16 - offset[k]);
+      }
     }
-    else
-      ledState = LOW;
-
-    // set the LED with the ledState of the variable:
-    digitalWrite(ledPin, ledState);
   }
+  
+
+
+    // display the buffer on the display
+  display.display();
 }
