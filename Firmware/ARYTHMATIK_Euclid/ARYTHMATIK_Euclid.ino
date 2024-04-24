@@ -1,3 +1,28 @@
+/**
+ * @file ARYTHMATIK_Euclid.ino
+ * @author Modulove & friends (https://github.com/modulove/)
+ * @brief 6CH Eurorack (HAGIWO) euclidean Rhythm Generator with SSD1306 0.96 OLED
+ * @version 0.1
+ * @date 2024-04-23
+ *
+ * @copyright Copyright (c) 2024
+ *
+ * Connect a clock source to the CLK input and each output will
+ * output triggers according to settings set in the UI OLED screen
+ *
+ * Encoder:
+ *      short press: Toggle between top menue options (dial with rotation)
+ *      long press: Save settings to default slot 1.
+ *
+ *
+ * RST: Trigger this input to reset the sequence.
+ *
+ */
+
+// Flag for enabling debug print to serial monitoring output.
+// Note: this affects performance and locks LED 4 & 5 on HIGH.
+// #define DEBUG
+
 int debug = 0;  // 1 =on 0 =off
 unsigned long startMillis;
 unsigned long currentMillis;
@@ -12,6 +37,17 @@ long previousMillis = 0, interval = 1000;
 //Encoder setting
 #define ENCODER_OPTIMIZE_INTERRUPTS  //countermeasure of encoder noise
 #include <Encoder.h>
+
+// Use SimpleRotary
+#include <SimpleRotary.h>
+
+// Define pins for the rotary encoder.
+int pinA = 3;       // CLK
+int pinB = 2;       // DT
+int buttonPin = 4;  // SW
+
+// Create a SimpleRotary object.
+SimpleRotary rotary(pinA, pinB, buttonPin);
 
 //Oled setting
 #include <Wire.h>
@@ -41,6 +77,16 @@ struct SlotConfiguration {
   byte offset[6];
   byte mute[6];
   byte limit[6];
+};
+
+// Default patterns for five slots (for factoryRest)
+// put in RAM?
+SlotConfiguration defaultSlots[5] = {
+  { { 3, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Bossa Nova
+  { { 5, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Son Clave
+  { { 5, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Rumba Clave
+  { { 3, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Tresillo
+  { { 7, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 16, 16, 16, 16, 16, 16 } }   // Cumbia
 };
 
 //push button
@@ -109,43 +155,35 @@ const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }
 const byte y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 
 //random assign
-byte hit_occ[6] = { 0, 0, 20, 20, 40, 80 };   //random change rate of occurrence
-byte off_occ[6] = { 0, 0, 20, 30, 40, 20 };   //random change rate of occurrence
-byte mute_occ[6] = { 0, 0, 20, 20, 20, 20 };  //random change rate of occurrence
-byte hit_rng_max[6] = { 4, 2, 8, 4, 4, 6 };   //random change range of max
-byte hit_rng_min[6] = { 4, 2, 2, 1, 1, 1 };   //random change range of min
+byte hit_occ[6] = { 5, 1, 20, 20, 40, 80 };   //random change rate of occurrence
+byte off_occ[6] = { 1, 3, 20, 30, 40, 20 };   //random change rate of occurrence
+byte mute_occ[6] = { 0, 2, 20, 20, 20, 20 };  //random change rate of occurrence
+byte hit_rng_max[6] = { 5, 6, 8, 4, 4, 6 };   //random change range of max
+byte hit_rng_min[6] = { 3, 2, 2, 1, 1, 1 };   //random change range of min
 
-byte bar_now = 1;  //count 16 steps, the bar will increase by 1.
-//byte bar_max[4] = {2, 4, 8, 16} ;//selectable bar
+byte bar_now = 1;
 constexpr byte bar_max[4] = { 2, 4, 8, 16 };
 byte bar_select = 1;  //selected bar
-byte step_cnt = 0;    //count 16 steps, the bar will increase by 1.
+byte step_cnt = 0;
 
 //#define MAX_STEPS 16  // Adjust the value based on your actual maximum steps
 constexpr byte MAX_STEPS = 16;
 
-#define NUM_MEMORY_SLOTS 2      // Number of memory slots for saving patterns
+#define NUM_MEMORY_SLOTS 5      // Number of memory slots for saving patterns
 #define EEPROM_START_ADDRESS 0  // Starting address in EEPROM to save data
 #define CONFIG_SIZE (6 * 4)     // Size of configuration data to be saved for each slot (hits, offset, mute, limit)
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Array to store configurations for each slot
 
-// Fast random number ?
-unsigned long m_w = 1;
-unsigned long m_z = 2;
-unsigned long seed;
-
 #define ButtonPin 12
-
-// DEBUG memory use
-//#include <MemoryFree.h>
-//#include <pgmStrToRAM.h>
-
 
 void setup() {
 
+#ifdef DEBUG
+  Serial.begin(115200);
+#endif
+
   // test display
-  //Serial.begin(57600);
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   //   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
   //  Serial.println(("SSD1306 allocation failed"));
@@ -155,6 +193,7 @@ void setup() {
   // OLED setting
   delay(1000);  // Screen needs a sec to initialize
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  // TODO: Add upside down switch
   //display.setRotation(2);
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -240,7 +279,6 @@ void loop() {
     //select_menu = 0;
   }
   if (select_ch == 11 && select_menu == 2) {  // modes only having a button
-
     if (bpm >= 180) {
       bpm = 180;
     }
@@ -250,7 +288,6 @@ void loop() {
     //adjustTempo();
     disp_refresh = 1;
   }
-
   if (select_ch == 12 && select_menu == 1) {  // check mute status and toggle mute / unmute with encoder rotation
     Random_change();
     disp_refresh = 1;
@@ -288,8 +325,11 @@ void loop() {
       case 0:  //select channel
                // Modes are: 0,1,2,3,4,5,6,7,8,9,10,11,12 (0-5 are channels, 6 is random, 7 is complete mute, 8 is save, 9 load, 10 settings factory reset, 11 MUTE ALL, 12 tempo adjust, 13 new random mode)
         select_ch++;
-        if (select_ch >= 13) {
-          select_ch = 12;
+        //if (select_ch >= 13) {
+        //            select_ch = 12;
+        //}
+      if (select_ch >= 9) {
+          select_ch = 0;
         }
         break;
 
@@ -338,7 +378,8 @@ void loop() {
         if (select_ch >= 2) {
           select_ch = 0;
         }
-        //Random_change_one();
+        Random_change_one();
+        disp_refresh = 1;
         break;
     }
   }
@@ -348,7 +389,7 @@ void loop() {
       case 0:  //select chanel
         select_ch--;
         if (select_ch >= 7) {  //Begrenzer nach unten durch Rücklauf "unter Null", d. h. auf 255 wegen vorzeichenloser Byte-Definition, Pendant zu Z 223
-          select_ch = 0;
+          select_ch = 7;
         }
         break;
 
@@ -394,6 +435,7 @@ void loop() {
 
       case 6:  //random advance
         Random_change();
+        disp_refresh = 1;
         break;
     }
   }
@@ -418,6 +460,7 @@ void loop() {
     }
   }
   trg_in = FastGPIO::Pin<13>::isInputHigh();  //external trigger
+  // refresh dirsplay if there is no clock for 8 sec ? maybe internal clock here ?
   if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
     debug = 1;
     disp_refresh = 1;
@@ -512,6 +555,8 @@ void loop() {
 
 
 void factoryReset() {
+  initializeDefaultRhythms();  // Re-initialize EEPROM with default rhythms
+  // Indicate on display or via LED that factory reset is complete
 }
 
 
@@ -590,7 +635,7 @@ void saveConfiguration() {
       display.setCursor(20, 20);
       display.println(F("Configuration saved!"));
       display.display();
-      delay(200);
+      delay(300);
     }
   }
 }
@@ -650,10 +695,39 @@ void loadConfiguration() {
       display.setCursor(20, 20);
       display.println(F("Configuration loaded!"));
       display.display();
-      delay(100);
+      delay(300);
       loading = false;
     }
   }
+}
+
+void saveCurrentConfigurationToEEPROM() {
+  // could save to the last selected save slot. For now default slot5
+  saveToEEPROM(5); 
+}
+
+void displaySuccessMessage() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(20, 20);
+  display.println(F("Config saved to Slot "));
+  display.println(1);  // Display the slot number
+  display.display();
+  delay(300);
+  display.clearDisplay();
+}
+
+// reset the whole saved slots and put in traditional euclid patterns
+void initializeDefaultRhythms() {
+  for (int slot = 0; slot < 5; slot++) {
+    saveDefaultsToEEPROM(slot, defaultSlots[slot]);
+  }
+}
+
+void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
+  int address = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
+  EEPROM.put(address, config);
 }
 
 // Random change function for all channels at once
@@ -681,11 +755,12 @@ void Random_change() {
 
 // random change function for one channel at a time only!
 void Random_change_one() {
+
   unsigned long seed = analogRead(A0);  //  seed value
   randomSeed(seed);                     // initialize the PRNG with the seed value
 
-  if (hit_occ[select_ch] >= random(1, 100)) {  //hit random change
-    hits[select_ch] = random(hit_rng_min[select_ch], hit_rng_max[select_ch]);
+  if (random(100) < hit_occ[select_ch]) {
+    hits[select_ch] = random(hit_rng_min[select_ch], hit_rng_max[select_ch] + 1);
   }
 
   if (off_occ[select_ch] >= random(1, 100)) {  //hit random change
@@ -723,7 +798,6 @@ void Randomize() {
   }
 }
 
-
 // mute all channels one at a time until all channels are muted and while the button is pressed and when rotated anticlockwise
 // unmute all channels one at a time until all channels are unmuted and while the button is pressed and when rotated clockwise
 // not working as expected
@@ -741,9 +815,6 @@ void performanceMute() {
     }
   }
 }
-
-
-
 
 void muteOne() {
   if (myEnc.read() < 0) {
@@ -771,14 +842,10 @@ void muteOne() {
   }
 }
 
-
 void adjustTempo() {
   // adjust tempo with the rotary encoder
   // taptempo via encoder click ?
 }
-
-
-
 
 void OLED_display() {
   display.clearDisplay();
@@ -805,6 +872,8 @@ void OLED_display() {
     display.print("X");
   }
   display.setCursor(120, 9);
+  
+  
   if (select_ch != 6 && select_ch <= 6) {  // not random mode
     display.print("H");                    // Hits
   } else if (select_ch == 6) {             //
@@ -812,9 +881,9 @@ void OLED_display() {
   } else if (select_ch == 10) {  // Mute
     display.setCursor(120, 9);
     //display.drawRect(120, 9, 8, 8, WHITE);
-    display.println(F("<>"));
+    //display.println(F("<>"));
   }
-
+  
   display.setCursor(120, 18);
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes
     display.print("O");                    // Offset
@@ -827,7 +896,6 @@ void OLED_display() {
     display.setCursor(0, 56);
     display.print("X");  // Advance random mode (current channel)
   }
-
 
   //random count square
   if (select_ch == 6) {  //random mode
@@ -913,12 +981,13 @@ void OLED_display() {
   }
 
   // draw step dot
-  // prevents out-of-bounds access
   for (k = 0; k <= 5; k++) {          // k = 1~6ch
     for (j = 0; j < limit[k]; j++) {  // j = steps
-      // Ensure that the index is within bounds of x16 and y16 arrays
-      if (j < 16) {
-        display.drawPixel(x16[j] + graph_x[k], y16[j] + graph_y[k], WHITE);
+      // Ensure that the index is within bounds 
+    int x_pos = x16[j % 16] + graph_x[k];
+    int y_pos = y16[j % 16] + graph_y[k];
+    if (x_pos < 128 && y_pos < 64) {  // Check if in display
+      display.drawPixel(x_pos, y_pos, WHITE);
       }
     }
   }
@@ -928,15 +997,19 @@ void OLED_display() {
     buf_count = 0;
     for (m = 0; m < 16; m++) {
       if (offset_buf[k][m] == 1) {
-        line_xbuf[buf_count] = x16[m] + graph_x[k];  //store active step
-        line_ybuf[buf_count] = y16[m] + graph_y[k];
+      int x_pos = x16[m] + graph_x[k];
+      int y_pos = y16[m] + graph_y[k];
+      if (x_pos < 128 && y_pos < 64) {  // Only store coordinates within bounds
+        line_xbuf[buf_count] = x_pos;
+        line_ybuf[buf_count] = y_pos;
         buf_count++;
+      }
       }
     }
 
     for (j = 0; j < buf_count - 1; j++) {
       display.drawLine(line_xbuf[j], line_ybuf[j], line_xbuf[j + 1], line_ybuf[j + 1], WHITE);
-    }
+  }
     display.drawLine(line_xbuf[0], line_ybuf[0], line_xbuf[j], line_ybuf[j], WHITE);
   }
   for (j = 0; j < 16; j++) {  //line_buf reset
@@ -963,7 +1036,6 @@ void OLED_display() {
       }
     }
   }
-
 
   //write hit and offset values for H > 6 -> 9 to 16 hits
   for (k = 0; k <= 5; k++) {  //ch count
