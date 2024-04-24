@@ -38,7 +38,9 @@ long previousMillis = 0, interval = 1000;
 #define ENCODER_OPTIMIZE_INTERRUPTS  //countermeasure of encoder noise
 #include <Encoder.h>
 
-// Use SimpleRotary
+/*
+
+// Use SimpleRotary (not yet)
 #include <SimpleRotary.h>
 
 // Define pins for the rotary encoder.
@@ -48,6 +50,8 @@ int buttonPin = 4;  // SW
 
 // Create a SimpleRotary object.
 SimpleRotary rotary(pinA, pinB, buttonPin);
+
+*/
 
 //Oled setting
 #include <Wire.h>
@@ -68,8 +72,13 @@ int newPosition = -999;
 int i = 0;
 bool flr = 1;  //first loop run -> no encU wanted
 
-// internal clock not yet implemented
-byte bpm = 120, lastbpm = 120, ledState = LOW;
+// additional internal clock
+unsigned long lastTriggerTime = 0;
+bool useInternalClock = false;
+int internalBPM = 120;
+int lastBPM = 120;
+unsigned long internalClockPeriod = 60000 / internalBPM / 2;
+unsigned long lastInternalClockTime = 0;
 
 // Configuration data structure for each save state slot
 struct SlotConfiguration {
@@ -79,8 +88,7 @@ struct SlotConfiguration {
   byte limit[6];
 };
 
-// Default patterns for five slots (for factoryRest)
-// put in RAM?
+// Default patterns for five slots (factoryRest)
 SlotConfiguration defaultSlots[5] = {
   { { 3, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Bossa Nova
   { { 5, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Son Clave
@@ -101,7 +109,6 @@ byte hits[6] = { 4, 2, 8, 1, 2, 3 }, offset[6] = { 0, 4, 0, 1, 3, 15 }, mute[6] 
 //byte offset[6] = { 0, 2, 0, 8, 3, 9 };       //each channele step offset
 //byte mute[6] = { 0, 0, 0, 0, 0, 0 };         //mute 0 = off , 1 = on
 //byte limit[6] = { 16, 16, 16, 16, 16, 16 };  //eache channel max step
-
 
 //Sequence variables
 byte j = 0, k = 0, m = 0, buf_count = 0;
@@ -220,10 +227,10 @@ void setup() {
   FastGPIO::Pin<4>::setOutputLow();       //CLK LED (DIGITAL)
 
   enc_timer = 0;
+  lastTriggerTime = millis();
 }
 
 void loop() {
-
   old_trg_in = trg_in;
   old_rst_in = rst_in;
   old_encD = encD;
@@ -265,30 +272,28 @@ void loop() {
     loadConfiguration();
     select_menu = 0;
   }
-  if (select_ch == 9 && select_menu == 1) {  // reset whith encoder rotation
-    //factoryReset();
+  if (select_ch == 9 && select_menu == 1) {  // reset the whole sequence
+    resetSeq();
     select_menu = 0;
   }
-  if (select_ch == 10 && select_menu == 1) {  // check mute status and toggle mute / unmute with encoder rotation
-    //muteToggle();
+  if (select_ch == 10 && select_menu == 1) {  // check mute status and toggle mute
+    toggleAllMutes();
+    disp_refresh = 1;
     select_menu = 0;
   }
-  if (select_ch == 10 && select_menu == 2) {  // check mute status and toggle mute / unmute with encoder rotation
-    //performanceMute();
-    disp_refresh = debug;
-    //select_menu = 0;
-  }
+
+
   if (select_ch == 11 && select_menu == 2) {  // modes only having a button
-    if (bpm >= 180) {
-      bpm = 180;
+    if (internalBPM >= 180) {
+      internalBPM = 180;
     }
-    if (bpm <= 60) {
-      bpm = 60;
+    if (internalBPM <= 60) {
+      internalBPM = 60;
     }
-    //adjustTempo();
+    adjustTempo();
     disp_refresh = 1;
   }
-  if (select_ch == 12 && select_menu == 1) {  // check mute status and toggle mute / unmute with encoder rotation
+  if (select_ch == 12 && select_menu == 1) {  //
     Random_change();
     disp_refresh = 1;
     //select_menu = 0;
@@ -328,7 +333,7 @@ void loop() {
         //if (select_ch >= 13) {
         //            select_ch = 12;
         //}
-      if (select_ch >= 9) {
+        if (select_ch >= 11) {
           select_ch = 0;
         }
         break;
@@ -340,19 +345,19 @@ void loop() {
             hits[select_ch] = 0;
           }
         }
-        // reintroduce the possibility to dial in change duration for random mode
-        else if (select_ch == 6) {  // random mode - aber ohne die zweite Bedingung "&& sw == 0"
+        // reintroduce the dial to change duration for random mode
+        else if (select_ch == 6) {  // random mode
           bar_select++;
-          if (bar_select >= 4) {  //Begrenzer nach oben
-            bar_select = 3;       //Bei Überschreitung Rücksetzung auf den Maximalwert
+          if (bar_select >= 4) {
+            bar_select = 3;
           }
         }
         break;
 
-      case 2:  //offset
+      case 2:  //offset (now its possible to use encoder in both directions)
         offset[select_ch]--;
         if (offset[select_ch] >= 16) {
-          offset[select_ch] = 15;  //geaendert von 0 auf 15, d. h. Schleife bei Ueberlauf
+          offset[select_ch] = 15;
         }
         break;
 
@@ -361,24 +366,18 @@ void loop() {
         if (limit[select_ch] >= 17) {
           limit[select_ch] = 0;
         }
-
         break;
 
       case 4:  //mute
         mute[select_ch] = !mute[select_ch];
         break;
 
-      case 5:  //reset
-        for (k = 0; k <= 5; k++) {
-          playing_step[k] = 0;
-        }
+      case 5:  //reset channel
+        playing_step[select_ch] = 0;
         break;
 
-      case 6:  //random advance
-        if (select_ch >= 2) {
-          select_ch = 0;
-        }
-        Random_change_one();
+      case 6:  //random advance (X in bottom left corner of OLED UI)
+        Random_change_one(select_ch);
         disp_refresh = 1;
         break;
     }
@@ -388,8 +387,8 @@ void loop() {
     switch (select_menu) {
       case 0:  //select chanel
         select_ch--;
-        if (select_ch >= 7) {  //Begrenzer nach unten durch Rücklauf "unter Null", d. h. auf 255 wegen vorzeichenloser Byte-Definition, Pendant zu Z 223
-          select_ch = 7;
+        if (select_ch >= 0) {  //Begrenzer nach unten durch Rücklauf "unter Null", d. h. auf 255 wegen vorzeichenloser Byte-Definition, Pendant zu Z 223
+          select_ch = 10;
         }
         break;
 
@@ -414,28 +413,24 @@ void loop() {
         }
         break;
 
-      case 3:  //limit for now only up direction since there is a bug with the playing indicatior dot hiding
+      case 3:  // there seemed to be a bug with the playing indicatior dot hiding but cant spot it now
         limit[select_ch]--;
-        if (limit[select_ch] >= 17) {
-          limit[select_ch] = 0;
+        if (limit[select_ch] <= 0) {
+          limit[select_ch] = 17;
         }
-
         break;
-
 
       case 4:  //mute
         mute[select_ch] = !mute[select_ch];
         break;
 
-      case 5:  //reset
-        for (k = 0; k <= 5; k++) {
-          playing_step[k] = 0;
-        }
+      case 5:  //reset selected ch only
+        playing_step[select_ch] = 0;
         break;
 
-      case 6:  //random advance
-        Random_change();
-        disp_refresh = 1;
+      case 6:  //random advance selected ch
+        Random_change_one(select_ch);
+        //disp_refresh = 1;
         break;
     }
   }
@@ -459,13 +454,16 @@ void loop() {
       disp_refresh = 1;
     }
   }
-  trg_in = FastGPIO::Pin<13>::isInputHigh();  //external trigger
-  // refresh dirsplay if there is no clock for 8 sec ? maybe internal clock here ?
+
+  trg_in = FastGPIO::Pin<13>::isInputHigh();
+  // no external trigger for more than 8 sec -> internal clock (not implemented yet)
   if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
+    //useInternalClock = true;
     debug = 1;
     disp_refresh = 1;
   } else if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
+    //useInternalClock = false;
     FastGPIO::Pin<4>::setOutput(1);
     debug = 0;
     for (i = 0; i <= 5; i++) {
@@ -651,7 +649,7 @@ void loadConfiguration() {
     display.setTextColor(WHITE);
     display.setCursor(20, 20);
     display.print("Load from Slot:");
-    display.setCursor(29, 29);
+    display.setCursor(32, 32);
     display.setTextSize(2);
     display.print(selectedSlot + 1);
     display.setTextSize(1);
@@ -703,7 +701,7 @@ void loadConfiguration() {
 
 void saveCurrentConfigurationToEEPROM() {
   // could save to the last selected save slot. For now default slot5
-  saveToEEPROM(5); 
+  saveToEEPROM(5);
 }
 
 void displaySuccessMessage() {
@@ -711,14 +709,14 @@ void displaySuccessMessage() {
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(20, 20);
-  display.println(F("Config saved to Slot "));
-  display.println(1);  // Display the slot number
+  display.println(F("Config saved"));
   display.display();
   delay(300);
   display.clearDisplay();
 }
 
-// reset the whole saved slots and put in traditional euclid patterns
+
+// reset the whole saved slots and put in traditional euclid patterns?
 void initializeDefaultRhythms() {
   for (int slot = 0; slot < 5; slot++) {
     saveDefaultsToEEPROM(slot, defaultSlots[slot]);
@@ -730,51 +728,51 @@ void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
   EEPROM.put(address, config);
 }
 
-// Random change function for all channels at once
+// Random change function for all channels
 void Random_change() {
-  unsigned long seed = analogRead(A0);  //  seed value
-  randomSeed(seed);                     // initialize the PRNG with the seed value
+  unsigned long seed = analogRead(A0);
+  randomSeed(seed);
 
   for (k = 1; k <= 5; k++) {
 
-    if (hit_occ[k] >= random(1, 100)) {  //hit random change
+    if (hit_occ[k] >= random(1, 100)) {
       hits[k] = random(hit_rng_min[k], hit_rng_max[k]);
     }
 
-    if (off_occ[k] >= random(1, 100)) {  //hit random change
+    if (off_occ[k] >= random(1, 100)) {
       offset[k] = random(0, 16);
     }
 
-    if (mute_occ[k] >= random(1, 100)) {  //hit random change
+    if (mute_occ[k] >= random(1, 100)) {
       mute[k] = 1;
-    } else if (mute_occ[k] < random(1, 100)) {  //hit random change
+    } else if (mute_occ[k] < random(1, 100)) {
       mute[k] = 0;
     }
   }
 }
 
-// random change function for one channel at a time only!
-void Random_change_one() {
+// random change function for one channel
+void Random_change_one(int select_ch) {
 
-  unsigned long seed = analogRead(A0);  //  seed value
-  randomSeed(seed);                     // initialize the PRNG with the seed value
+  unsigned long seed = analogRead(A0);
+  randomSeed(seed);
 
   if (random(100) < hit_occ[select_ch]) {
     hits[select_ch] = random(hit_rng_min[select_ch], hit_rng_max[select_ch] + 1);
   }
 
-  if (off_occ[select_ch] >= random(1, 100)) {  //hit random change
+  if (off_occ[select_ch] >= random(1, 100)) {
     offset[select_ch] = random(0, 16);
   }
 
-  if (mute_occ[select_ch] >= random(1, 100)) {  //hit random change
+  if (mute_occ[select_ch] >= random(1, 100)) {
     mute[select_ch] = 1;
-  } else if (mute_occ[select_ch] < random(1, 100)) {  //hit random change
+  } else if (mute_occ[select_ch] < random(1, 100)) {
     mute[select_ch] = 0;
   }
 }
 
-// TODO:
+// TODO: Idea was to have random generated patterns that are stored and can be selected
 // generate five sets of hits, offsets, and mutes and store in array
 int randomize_array[5][3][6];
 void Randomize() {
@@ -798,25 +796,27 @@ void Randomize() {
   }
 }
 
-// mute all channels one at a time until all channels are muted and while the button is pressed and when rotated anticlockwise
-// unmute all channels one at a time until all channels are unmuted and while the button is pressed and when rotated clockwise
-// not working as expected
 
-void performanceMute() {
-  if (myEnc.read() < 0) {
-    for (int i = 0; i < 6; i++) {
-      mute[i] = 1;
+// toggle Mute in quick Menue (rotate encoder left)
+void toggleAllMutes() {
+  // Check if all channels are currently muted
+  bool allMuted = true;
+  for (int i = 0; i < 6; i++) {
+    if (mute[i] == 0) {
+      allMuted = false;
+      break;
     }
   }
-  // unmute all channels
-  if (myEnc.read() > 0) {
-    for (int i = 0; i < 6; i++) {
-      mute[i] = 0;
-    }
+  // Toggle mute state for all channels
+  for (int i = 0; i < 6; i++) {
+    mute[i] = !allMuted;
   }
+  // Optional: display other indicators if needed
+  //disp_refresh = 1;
 }
 
 void muteOne() {
+  // mute though channels in a row
   if (myEnc.read() < 0) {
     for (int i = 0; i < 6; i++) {
       if (mute[i] == 0) {
@@ -828,7 +828,7 @@ void muteOne() {
       }
     }
   }
-  // unmute all channels
+  // unmute through all channels in a row
   if (myEnc.read() > 0) {
     for (int i = 5; i >= 0; i--) {
       if (mute[i] == 1) {
@@ -842,17 +842,25 @@ void muteOne() {
   }
 }
 
+
 void adjustTempo() {
   // adjust tempo with the rotary encoder
   // taptempo via encoder click ?
 }
+
+void resetSeq() {
+  for (k = 0; k <= 5; k++) {
+    playing_step[k] = 0;
+  }
+}
+
 
 void OLED_display() {
   display.clearDisplay();
   //-------------------------euclidean oled display------------------
   //draw setting menu
   display.setCursor(120, 0);
-  // if select channel is not random mode (6) OR! not in modes higher than 7 (factory reset)
+  // if select channel is not random mode (6) OR! not in modes higher than 7 (reset)
   if (select_ch != 6 && select_ch <= 6) {  // not random mode
     display.print(select_ch + 1);
   }
@@ -862,8 +870,8 @@ void OLED_display() {
     display.print("S");
   } else if (select_ch == 8) {  // L for LOAD
     display.print("L");
-  } else if (select_ch == 9) {  // Factory reset
-    display.print("F");
+  } else if (select_ch == 9) {  // reset the whole sequence
+    display.print("R");
   } else if (select_ch == 10) {  // MUTE
     display.print("M");
   } else if (select_ch == 11) {  // TEMPO
@@ -872,8 +880,7 @@ void OLED_display() {
     display.print("X");
   }
   display.setCursor(120, 9);
-  
-  
+
   if (select_ch != 6 && select_ch <= 6) {  // not random mode
     display.print("H");                    // Hits
   } else if (select_ch == 6) {             //
@@ -883,7 +890,8 @@ void OLED_display() {
     //display.drawRect(120, 9, 8, 8, WHITE);
     //display.println(F("<>"));
   }
-  
+
+
   display.setCursor(120, 18);
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes
     display.print("O");                    // Offset
@@ -894,8 +902,9 @@ void OLED_display() {
     display.setCursor(0, 47);
     display.print("R");  // Reset
     display.setCursor(0, 56);
-    display.print("X");  // Advance random mode (current channel)
+    display.print("X");  // Advance random mode only selected channel
   }
+
 
   //random count square
   if (select_ch == 6) {  //random mode
@@ -921,7 +930,7 @@ void OLED_display() {
     display.print("A");
     display.setCursor(0, 57);
     display.print("D");
-  } else if (select_ch == 9) {  // reset
+  } else if (select_ch == 9) {  // factory rest
     display.setCursor(0, 30);
     display.print("R");
     display.setCursor(0, 39);
@@ -983,11 +992,11 @@ void OLED_display() {
   // draw step dot
   for (k = 0; k <= 5; k++) {          // k = 1~6ch
     for (j = 0; j < limit[k]; j++) {  // j = steps
-      // Ensure that the index is within bounds 
-    int x_pos = x16[j % 16] + graph_x[k];
-    int y_pos = y16[j % 16] + graph_y[k];
-    if (x_pos < 128 && y_pos < 64) {  // Check if in display
-      display.drawPixel(x_pos, y_pos, WHITE);
+      // Ensure that the index is within bounds
+      int x_pos = x16[j % 16] + graph_x[k];
+      int y_pos = y16[j % 16] + graph_y[k];
+      if (x_pos < 128 && y_pos < 64) {  // Check if in display
+        display.drawPixel(x_pos, y_pos, WHITE);
       }
     }
   }
@@ -997,19 +1006,19 @@ void OLED_display() {
     buf_count = 0;
     for (m = 0; m < 16; m++) {
       if (offset_buf[k][m] == 1) {
-      int x_pos = x16[m] + graph_x[k];
-      int y_pos = y16[m] + graph_y[k];
-      if (x_pos < 128 && y_pos < 64) {  // Only store coordinates within bounds
-        line_xbuf[buf_count] = x_pos;
-        line_ybuf[buf_count] = y_pos;
-        buf_count++;
-      }
+        int x_pos = x16[m] + graph_x[k];
+        int y_pos = y16[m] + graph_y[k];
+        if (x_pos < 128 && y_pos < 64) {  // Only store coordinates within bounds
+          line_xbuf[buf_count] = x_pos;
+          line_ybuf[buf_count] = y_pos;
+          buf_count++;
+        }
       }
     }
 
     for (j = 0; j < buf_count - 1; j++) {
       display.drawLine(line_xbuf[j], line_ybuf[j], line_xbuf[j + 1], line_ybuf[j + 1], WHITE);
-  }
+    }
     display.drawLine(line_xbuf[0], line_ybuf[0], line_xbuf[j], line_ybuf[j], WHITE);
   }
   for (j = 0; j < 16; j++) {  //line_buf reset
@@ -1018,16 +1027,23 @@ void OLED_display() {
   }
 
   //draw hits line : 1hits
-  for (k = 0; k <= 5; k++) {  //ch count
-    buf_count = 0;
+  for (k = 0; k <= 5; k++) {  // Channel count
     if (hits[k] == 1) {
-      display.drawLine(15 + graph_x[k], 15 + graph_y[k], x16[offset[k]] + graph_x[k], y16[offset[k]] + graph_y[k], WHITE);
+      int x1 = 15 + graph_x[k];
+      int y1 = 15 + graph_y[k];
+      int x2 = x16[offset[k]] + graph_x[k];
+      int y2 = y16[offset[k]] + graph_y[k];
+      if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
+        display.drawLine(x1, y1, x2, y2, WHITE);
+      }
     }
   }
 
+
   //draw play step circle
-  for (k = 0; k <= 5; k++) {  //ch count
-    if (mute[k] == 0) {       //mute on = no display circle
+  // This function draws outside the display bounds!
+  for (k = 0; k <= 5; k++) {
+    if (mute[k] == 0) {
       if (offset_buf[k][playing_step[k]] == 0) {
         display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
       }
@@ -1037,18 +1053,46 @@ void OLED_display() {
     }
   }
 
+
+  /*
+  //draw play step circle within display bounds
+  // here the top 3 channels are not displaying the dot anymore
+  for (k = 0; k <= 5; k++) {  // Channel count
+    if (mute[k] == 0) {       // Only draw if not muted
+      int x = x16[playing_step[k]] + graph_x[k];
+      int y = y16[playing_step[k]] + graph_y[k];
+      if (x - 3 >= 0 && x + 3 < 128 && y - 3 >= 0 && y + 3 < 64) {  // Check for both non-filled and filled circles max radius
+        if (offset_buf[k][playing_step[k]] == 0) {
+          display.drawCircle(x, y, 2, WHITE);
+        }
+        if (offset_buf[k][playing_step[k]] == 1) {
+          display.fillCircle(x, y, 3, WHITE);
+        }
+      }
+    }
+  }
+
+*/
+
+
   //write hit and offset values for H > 6 -> 9 to 16 hits
-  for (k = 0; k <= 5; k++) {  //ch count
+  for (k = 0; k <= 5; k++) {  // Channel count
     if (hits[k] > 6) {
-      display.setCursor(7 + graph_x[k], 8 + graph_y[k]);
-      display.print("h");
-      display.print(hits[k]);
-      display.setCursor(7 + graph_x[k], 17 + graph_y[k]);
-      display.print("o");
-      if (offset[k] == 0) {
-        display.print(offset[k]);
-      } else {
-        display.print(16 - offset[k]);
+      int x_base = 7 + graph_x[k];
+      int y_base_hit = 8 + graph_y[k];
+      int y_base_offset = 17 + graph_y[k];
+      if (x_base < 120 && y_base_hit < 64 && y_base_offset < 64) {  // Ensure text starts within bounds
+        display.setCursor(x_base, y_base_hit);
+        display.print("h");
+        display.print(hits[k]);
+
+        display.setCursor(x_base, y_base_offset);
+        display.print("o");
+        if (offset[k] == 0) {
+          display.print(offset[k]);
+        } else {
+          display.print(16 - offset[k]);
+        }
       }
     }
   }
