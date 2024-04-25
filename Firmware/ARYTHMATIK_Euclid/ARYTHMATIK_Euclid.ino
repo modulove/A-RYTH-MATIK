@@ -73,6 +73,9 @@ int i = 0;
 bool flr = 1;  //first loop run -> no encU wanted
 
 // additional internal clock
+// ToDo: Add internal clock running at 120BPM if no clock for 8 sec
+// Use encoder to Tap BPM or dial in Menue
+// Save BPM in EEPROM
 unsigned long lastTriggerTime = 0;
 bool useInternalClock = false;
 int internalBPM = 120;
@@ -81,6 +84,7 @@ unsigned long internalClockPeriod = 60000 / internalBPM / 2;
 unsigned long lastInternalClockTime = 0;
 
 // Configuration data structure for each save state slot
+// ToDo: Add version and routine to populate default settings in EEPROM
 struct SlotConfiguration {
   byte hits[6];
   byte offset[6];
@@ -88,13 +92,19 @@ struct SlotConfiguration {
   byte limit[6];
 };
 
-// Default patterns for five slots (factoryRest)
-SlotConfiguration defaultSlots[5] = {
-  { { 3, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Bossa Nova
-  { { 5, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Son Clave
-  { { 5, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Rumba Clave
-  { { 3, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Tresillo
-  { { 7, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { false, true, true, true, true, true }, { 16, 16, 16, 16, 16, 16 } }   // Cumbia
+// Default patterns for five slots (factoryReset)
+// ToDO: Add more generative spatterns (sparse)
+SlotConfiguration defaultSlots[10] = {
+  { { 3, 3, 2, 3, 1, 1 }, { 0, 1, 0, 3, 0, 2 }, { true, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Bossa Nova (use clave, bass drum, snare, and hi-hat)
+  { { 5, 4, 3, 4, 3, 2 }, { 0, 1, 3, 2, 1, 0 }, { true, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Son Clave (Rhythm in many Afro-Cuban music styles, often played with claves, congas, and other percussion instruments)
+  { { 5, 4, 3, 4, 3, 2 }, { 0, 2, 3, 1, 1, 0 }, { true, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Rumba Clave (Similar instruments as Son Clave but with a different rhythm)
+  { { 3, 3, 2, 3, 1, 1 }, { 0, 1, 0, 3, 0, 2 }, { true, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Tresillo (Common rhythm in Latin American music, played on a variety of percussion instruments)
+  { { 7, 6, 5, 4, 3, 2 }, { 0, 1, 3, 2, 1, 0 }, { true, true, true, true, true, true }, { 16, 16, 16, 16, 16, 16 } },  // Cumbia (steady backbeat along with syncopated rhythms typically found in Colombian music)
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { true, true, true, true, true, true }, { 16, 12, 8, 16, 12, 9 } },    // Techno (Pattern with varying lengths that evolves over time)
+  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { true, true, true, true, true, true }, { 16, 15, 16, 10, 12, 18 } },  // House (mix of steady beats and syncopated patterns to keep groove fresh)
+  { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { true, true, true, true, true, true }, { 16, 14, 12, 16, 18, 16 } },  // Drum and Bass (Fast, complex drum patterns that shift against each other to create energetic grooves)
+  { { 3, 4, 2, 3, 5, 4 }, { 0, 1, 2, 1, 0, 2 }, { true, true, true, true, true, true }, { 14, 12, 10, 14, 16, 12 } },  // Dubstep (halftime rhythms and syncopated snares, with different grove)
+  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { true, true, true, true, true, true }, { 24, 18, 24, 21, 16, 30 } }   // Ambient (Minimal beats)
 };
 
 //push button
@@ -148,7 +158,7 @@ unsigned long gate_timer = 0;
 unsigned long enc_timer = 0;
 
 //display param
-byte select_menu = 0;   //0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,
+byte select_menu = 0;   //0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD
 byte select_ch = 0;     //0~5 = each channel -1 , 6 = random mode
 bool disp_refresh = 0;  //0=not refresh display , 1= refresh display , countermeasure of display refresh bussy
 
@@ -162,15 +172,16 @@ const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }
 const byte y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 
 //random assign
+// making these settings configurable ?
 byte hit_occ[6] = { 5, 1, 20, 20, 40, 80 };   //random change rate of occurrence
 byte off_occ[6] = { 1, 3, 20, 30, 40, 20 };   //random change rate of occurrence
 byte mute_occ[6] = { 0, 2, 20, 20, 20, 20 };  //random change rate of occurrence
-byte hit_rng_max[6] = { 5, 6, 8, 4, 4, 6 };   //random change range of max
+byte hit_rng_max[6] = { 6, 5, 8, 4, 4, 6 };   //random change range of max
 byte hit_rng_min[6] = { 3, 2, 2, 1, 1, 1 };   //random change range of min
 
 byte bar_now = 1;
-constexpr byte bar_max[4] = { 2, 4, 8, 16 };
-byte bar_select = 1;  //selected bar
+constexpr byte bar_max[6] = { 2, 4, 6, 8, 12, 16 };  // more fine control
+byte bar_select = 4;                                 // selected bar -> This needs to be in EEPROM as well
 byte step_cnt = 0;
 
 //#define MAX_STEPS 16  // Adjust the value based on your actual maximum steps
@@ -278,7 +289,6 @@ void loop() {
   }
   if (select_ch == 10 && select_menu == 1) {  // check mute status and toggle mute
     toggleAllMutes();
-    disp_refresh = 1;
     select_menu = 0;
   }
 
@@ -291,11 +301,11 @@ void loop() {
       internalBPM = 60;
     }
     adjustTempo();
-    disp_refresh = 1;
+    //disp_refresh = 1;
   }
-  if (select_ch == 12 && select_menu == 1) {  //
+  if (select_ch == 12 && select_menu == 2) {  //
     Random_change();
-    disp_refresh = 1;
+    //disp_refresh = 1;
     //select_menu = 0;
   }
 
@@ -345,11 +355,11 @@ void loop() {
             hits[select_ch] = 0;
           }
         }
-        // reintroduce the dial to change duration for random mode
+        // reintroduce the dial to change duration for random mode with more fine
         else if (select_ch == 6) {  // random mode
           bar_select++;
-          if (bar_select >= 4) {
-            bar_select = 3;
+          if (bar_select >= 6) {
+            bar_select = 5;
           }
         }
         break;
@@ -378,7 +388,7 @@ void loop() {
 
       case 6:  //random advance (X in bottom left corner of OLED UI)
         Random_change_one(select_ch);
-        disp_refresh = 1;
+        //disp_refresh = 1;
         break;
     }
   }
@@ -387,8 +397,8 @@ void loop() {
     switch (select_menu) {
       case 0:  //select chanel
         select_ch--;
-        if (select_ch >= 0) {  //Begrenzer nach unten durch Rücklauf "unter Null", d. h. auf 255 wegen vorzeichenloser Byte-Definition, Pendant zu Z 223
-          select_ch = 10;
+        if (select_ch >= 0) {  // quick access menue for reset and mute
+          select_ch = 9;
         }
         break;
 
@@ -400,8 +410,8 @@ void loop() {
           }
         } else if (select_ch == 6) {  // random mode
           bar_select--;
-          if (bar_select >= 4) {  //Begrenzer "nach unten" durch Rücklauf auf 255 wegen vorzeichenloser Byte-Definition
-            bar_select = 0;       //Bei Unterschreitung Rücksetzung auf den Minimalwert, Pendant zu Z 238
+          if (bar_select >= 6) {  // six different change length setting
+            bar_select = 0;
           }
         }
         break;
@@ -459,7 +469,7 @@ void loop() {
   // no external trigger for more than 8 sec -> internal clock (not implemented yet)
   if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
     //useInternalClock = true;
-    debug = 1;
+    //debug = 1;
     disp_refresh = 1;
   } else if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
@@ -592,10 +602,11 @@ void saveConfiguration() {
     display.setCursor(20, 20);
     display.print("Save to Slot:");
     display.setTextSize(2);
-    display.setCursor(20, 29);
+    display.setCursor(30, 32);
     display.print(selectedSlot + 1);
     display.display();
     display.setTextSize(1);
+    
 
     // Check for encoder rotation to select memory slot
     newPosition = myEnc.read();
@@ -772,32 +783,6 @@ void Random_change_one(int select_ch) {
   }
 }
 
-// TODO: Idea was to have random generated patterns that are stored and can be selected
-// generate five sets of hits, offsets, and mutes and store in array
-int randomize_array[5][3][6];
-void Randomize() {
-  for (int i = 0; i < 5; i++) {
-    Random_change();
-    for (int j = 0; j < 3; j++) {
-      if (j == 0) {
-        for (int k = 0; k < 6; k++) {
-          randomize_array[i][j][k] = hits[k];
-        }
-      } else if (j == 1) {
-        for (int k = 0; k < 6; k++) {
-          randomize_array[i][j][k] = offset[k];
-        }
-      } else if (j == 2) {
-        for (int k = 0; k < 6; k++) {
-          randomize_array[i][j][k] = mute[k];
-        }
-      }
-    }
-  }
-}
-
-
-// toggle Mute in quick Menue (rotate encoder left)
 void toggleAllMutes() {
   // Check if all channels are currently muted
   bool allMuted = true;
@@ -807,12 +792,31 @@ void toggleAllMutes() {
       break;
     }
   }
+
   // Toggle mute state for all channels
   for (int i = 0; i < 6; i++) {
     mute[i] = !allMuted;
   }
-  // Optional: display other indicators if needed
-  //disp_refresh = 1;
+
+  if (!allMuted) {  // If it was not all muted before, it should be all muted now
+    display.setTextColor(BLACK, WHITE);
+  } else {
+    display.setTextColor(WHITE, BLACK);  // Back to normal
+  }
+
+  display.setCursor(0, 30);
+  display.print("M");
+  display.setCursor(0, 39);
+  display.print("U");
+  display.setCursor(0, 48);
+  display.print("T");
+  display.setCursor(0, 57);
+  display.print("E");
+
+  // full display refresh always only if needed
+  disp_refresh = 1;
+  // display the buffer on the display
+  //display.display();
 }
 
 void muteOne() {
@@ -870,11 +874,11 @@ void OLED_display() {
     display.print("S");
   } else if (select_ch == 8) {  // L for LOAD
     display.print("L");
-  } else if (select_ch == 9) {  // reset the whole sequence
-    display.print("R");
-  } else if (select_ch == 10) {  // MUTE
-    display.print("M");
-  } else if (select_ch == 11) {  // TEMPO
+  } else if (select_ch == 9) {  // reset the whole sequence RESET -> ALL
+    display.print("A");
+  } else if (select_ch == 10) {  // MUTE -> ALL
+    display.print("A");
+  } else if (select_ch == 11) {  // TEMPO / TapTempo
     display.print("T");
   } else if (select_ch == 12) {  // NEW RANDOM
     display.print("X");
@@ -882,9 +886,13 @@ void OLED_display() {
   display.setCursor(120, 9);
 
   if (select_ch != 6 && select_ch <= 6) {  // not random mode
-    display.print("H");                    // Hits
-  } else if (select_ch == 6) {             //
-    display.print("O");
+    display.print("H"); // H Menue
+  } else if (select_ch == 6) {
+    display.print("N");  // RND
+  } else if (select_ch == 9) {
+    display.print("L");  // RESET ALL
+  } else if (select_ch == 10) {
+    display.print("L");          // MUTE ALL
   } else if (select_ch == 10) {  // Mute
     display.setCursor(120, 9);
     //display.drawRect(120, 9, 8, 8, WHITE);
@@ -892,8 +900,36 @@ void OLED_display() {
   }
 
 
+
+
   display.setCursor(120, 18);
-  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes
+
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode
+    display.print("O"); // O Menue
+  }
+  if (select_ch != 6 && select_ch <= 6 && select_menu == 0) {  // not random mode
+    display.setCursor(0, 30);
+    display.print("L"); // Limit
+    display.setCursor(0, 39);
+    display.print("M"); // Mute
+    display.setCursor(0, 48);
+    display.print("R"); // RST
+    display.setCursor(0, 57);
+    display.print("X"); // RND
+  } 
+
+  display.setCursor(120, 18);
+  if (select_ch == 6) {
+    display.print("D");  // RND
+  }
+  if (select_ch == 9) {  //
+    display.print("L");  // RESET ALL
+  }
+  if (select_ch == 10) {  //
+    display.print("L");   // MUTE ALL
+  }
+
+  if (select_ch != 6 && select_ch <= 6 && select_menu >= 7) {  // not random mode and no config modes
     display.print("O");                    // Offset
     display.setCursor(0, 29);
     display.print("L");  // Loop
@@ -902,16 +938,103 @@ void OLED_display() {
     display.setCursor(0, 47);
     display.print("R");  // Reset
     display.setCursor(0, 56);
-    display.print("X");  // Advance random mode only selected channel
+    display.print("X");  // Advance random mode (current channel)
   }
 
+  // UI improvements showing more descriptive items on the left when curser is on the right side menue
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Hits
+    if (select_menu == 1) {
+    display.setCursor(0, 29);
+    display.print("H");
+    display.setCursor(0, 38);
+    display.print("I");
+    display.setCursor(0, 47);
+    display.print("T");
+    display.setCursor(0, 56);
+    display.print("S");
+    display.setCursor(120, 18);
+    display.print("O");
+        }
+  }
+
+  // UI improvement "OFFS"
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Offset
+    if (select_menu == 2) {
+    display.setCursor(0, 29);
+    display.print("O");
+    display.setCursor(0, 38);
+    display.print("F");
+    display.setCursor(0, 47);
+    display.print("F");
+    display.setCursor(0, 56);
+    display.print("S");
+    display.setCursor(120, 18);
+    display.print("O");    
+    }
+  }
+  // UI improvement "LIMIT"
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Limit / Lengths
+    if (select_menu == 3) {
+    display.setCursor(0, 29);
+    display.print("L");
+    display.setCursor(0, 38);
+    display.print("I");
+    display.setCursor(0, 47);
+    display.print("M");
+    display.setCursor(0, 56);
+    display.print("T");
+    display.setCursor(120, 18);
+    display.print("O");   
+    }
+  }
+  // UI improvement "MUTE"
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Mute
+    if (select_menu == 4) {
+    display.setCursor(0, 29);
+    display.print("M");
+    display.setCursor(0, 38);
+    display.print("U");
+    display.setCursor(0, 47);
+    display.print("T");
+    display.setCursor(0, 56);
+    display.print("E");
+    display.setCursor(120, 18);
+    display.print("O");   
+    }
+  }
+  // UI improvement "RST"
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Reset
+    if (select_menu == 5) {
+    display.setCursor(0, 38);
+    display.print("R");
+    display.setCursor(0, 47);
+    display.print("S");
+    display.setCursor(0, 56);
+    display.print("T");
+    display.setCursor(120, 18);
+    display.print("O");   
+    }
+  }
+
+    // UI improvement "RND"
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Random advance
+    if (select_menu == 6) {
+    display.setCursor(0, 38);
+    display.print("R");
+    display.setCursor(0, 47);
+    display.print("N");
+    display.setCursor(0, 56);
+    display.print("D");
+    display.setCursor(120, 18);
+    display.print("O");   
+    }
+  }
 
   //random count square
   if (select_ch == 6) {  //random mode
     display.drawRect(1, 62 - bar_max[bar_select] * 2, 6, bar_max[bar_select] * 2 + 2, WHITE);
     display.fillRect(1, 64 - bar_now * 2, 6, bar_max[bar_select] * 2, WHITE);
   }
-  // write mode text
   if (select_ch == 7) {  // save
     display.setCursor(0, 30);
     display.print("S");
@@ -968,7 +1091,7 @@ void OLED_display() {
     display.print("D");
   }
 
-  //draw select triangle
+  // draw select triangle
   if (select_menu == 0) {
     display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
   } else if (select_menu == 1) {
@@ -1075,9 +1198,9 @@ void OLED_display() {
 */
 
 
-  //write hit and offset values for H > 6 -> 9 to 16 hits
+  //write hit and offset values for H > 9 to 16 hits
   for (k = 0; k <= 5; k++) {  // Channel count
-    if (hits[k] > 6) {
+    if (hits[k] > 9) {
       int x_base = 7 + graph_x[k];
       int y_base_hit = 8 + graph_y[k];
       int y_base_offset = 17 + graph_y[k];
