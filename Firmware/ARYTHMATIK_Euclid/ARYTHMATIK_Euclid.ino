@@ -21,6 +21,7 @@
 
 // Flag for enabling debug print to serial monitoring output.
 // Note: this affects performance and locks LED 4 & 5 on HIGH.
+// ToDo. Make this actually work :)
 // #define DEBUG
 
 int debug = 0;  // 1 =on 0 =off
@@ -65,7 +66,11 @@ SimpleRotary rotary(pinA, pinB, buttonPin);
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-//rotery encoder
+// define for using module upside down in your case
+//#define UPSIDEDOWN
+
+// rotary encoder
+// ToDo: Add switch for inverting encoder direction
 Encoder myEnc(3, 2);  //use 3pin 2pin
 int oldPosition = -999;
 int newPosition = -999;
@@ -74,7 +79,7 @@ bool flr = 1;  //first loop run -> no encU wanted
 
 // additional internal clock
 // ToDo: Add internal clock running at 120BPM if no clock for 8 sec
-// Use encoder to Tap BPM or dial in Menue
+// Use encoder to Tap BPM and dial in Menue (like in cvSeq)
 // Save BPM in EEPROM
 unsigned long lastTriggerTime = 0;
 bool useInternalClock = false;
@@ -84,7 +89,7 @@ unsigned long internalClockPeriod = 60000 / internalBPM / 2;
 unsigned long lastInternalClockTime = 0;
 
 // Configuration data structure for each save state slot
-// ToDo: Add version and routine to populate default settings in EEPROM
+// ToDo: Add version and routine to populate default settings in EEPROM if nothing is in there
 struct SlotConfiguration {
   byte hits[6];
   byte offset[6];
@@ -92,14 +97,23 @@ struct SlotConfiguration {
   byte limit[6];
 };
 
-// Default patterns for five slots (factoryReset)
-// ToDO: Add more generative spatterns (sparse)
-SlotConfiguration defaultSlots[10] = {
+// Default patterns for five slots (factoryReset) test and select
+// ToDO: Add more generative spatterns?
+// Why using 10 save slots breake the thing?
+
+/*
+// Traditional music with euclid
+SlotConfiguration defaultSlots[5] = {
   { { 3, 3, 2, 3, 1, 1 }, { 0, 1, 0, 3, 0, 2 }, { true, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Bossa Nova (use clave, bass drum, snare, and hi-hat)
   { { 5, 4, 3, 4, 3, 2 }, { 0, 1, 3, 2, 1, 0 }, { true, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Son Clave (Rhythm in many Afro-Cuban music styles, often played with claves, congas, and other percussion instruments)
   { { 5, 4, 3, 4, 3, 2 }, { 0, 2, 3, 1, 1, 0 }, { true, true, true, true, true, true }, { 12, 12, 12, 12, 12, 12 } },  // Rumba Clave (Similar instruments as Son Clave but with a different rhythm)
   { { 3, 3, 2, 3, 1, 1 }, { 0, 1, 0, 3, 0, 2 }, { true, true, true, true, true, true }, { 8, 8, 8, 8, 8, 8 } },        // Tresillo (Common rhythm in Latin American music, played on a variety of percussion instruments)
-  { { 7, 6, 5, 4, 3, 2 }, { 0, 1, 3, 2, 1, 0 }, { true, true, true, true, true, true }, { 16, 16, 16, 16, 16, 16 } },  // Cumbia (steady backbeat along with syncopated rhythms typically found in Colombian music)
+  { { 7, 6, 5, 4, 3, 2 }, { 0, 1, 3, 2, 1, 0 }, { true, true, true, true, true, true }, { 16, 16, 16, 16, 16, 16 } }  // Cumbia (steady backbeat along with syncopated rhythms typically found in Colombian music)
+};
+*/
+
+// Mhh yummy electronica
+SlotConfiguration defaultSlots[5] = {
   { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { true, true, true, true, true, true }, { 16, 12, 8, 16, 12, 9 } },    // Techno (Pattern with varying lengths that evolves over time)
   { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { true, true, true, true, true, true }, { 16, 15, 16, 10, 12, 18 } },  // House (mix of steady beats and syncopated patterns to keep groove fresh)
   { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { true, true, true, true, true, true }, { 16, 14, 12, 16, 18, 16 } },  // Drum and Bass (Fast, complex drum patterns that shift against each other to create energetic grooves)
@@ -195,6 +209,10 @@ SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Array to store configuratio
 
 #define ButtonPin 12
 
+// output pins for channels and corresponding LED pins (flip Panel 2024)
+const int chPins[6] = {8, 9, 10, 5, 6, 7}; // CH1 to CH6 now mapped to pins as CH4, CH5, CH6, CH1, CH2, CH3
+const int ledPins[6] = {0, 1, 17, 14, 15, 16}; // Mapping LEDs accodringly
+
 void setup() {
 
 #ifdef DEBUG
@@ -211,8 +229,12 @@ void setup() {
   // OLED setting
   delay(1000);  // Screen needs a sec to initialize
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  // TODO: Add upside down switch
-  //display.setRotation(2);
+
+#ifdef UPSIDEDOWN
+  display.setRotation(2);  // 180 degree rotation for upside-down use
+#else
+  display.setRotation(0);  // Normal orientation
+#endif
   display.setTextSize(1);
   display.setTextColor(WHITE);
   OLED_display();
@@ -293,19 +315,21 @@ void loop() {
   }
 
 
-  if (select_ch == 11 && select_menu == 2) {  // modes only having a button
+  if (select_ch == 11 && select_menu == 1) {  // modes only having a button
     if (internalBPM >= 180) {
       internalBPM = 180;
     }
     if (internalBPM <= 60) {
       internalBPM = 60;
     }
+    // Dial in tempo with rotating the encoder or TapTempo via encoder knob
     adjustTempo();
     //disp_refresh = 1;
   }
-  if (select_ch == 12 && select_menu == 2) {  //
+  if (select_ch == 12 && select_menu == 1) {  //
+    // This need to work as before where you advance the random state by rotating the encoder
     Random_change();
-    //disp_refresh = 1;
+    disp_refresh = 1;
     //select_menu = 0;
   }
 
@@ -340,9 +364,7 @@ void loop() {
       case 0:  //select channel
                // Modes are: 0,1,2,3,4,5,6,7,8,9,10,11,12 (0-5 are channels, 6 is random, 7 is complete mute, 8 is save, 9 load, 10 settings factory reset, 11 MUTE ALL, 12 tempo adjust, 13 new random mode)
         select_ch++;
-        //if (select_ch >= 13) {
-        //            select_ch = 12;
-        //}
+        // Mode 12 + 13 are in development and testing right now
         if (select_ch >= 11) {
           select_ch = 0;
         }
@@ -355,7 +377,7 @@ void loop() {
             hits[select_ch] = 0;
           }
         }
-        // reintroduce the dial to change duration for random mode with more fine
+        // reintroduce the dial to change duration for random mode with more fine control. Defaults to 8 bars now.
         else if (select_ch == 6) {  // random mode
           bar_select++;
           if (bar_select >= 6) {
@@ -482,6 +504,44 @@ void loop() {
         playing_step[i] = 0;  // step limit is reached
       }
     }
+    #ifdef UPSIDEDOWN
+    // do stuff the other way around
+    for (k = 0; k <= 5; k++) {  //output gate signal
+      if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
+        switch (k) {
+          case 0:  //CH1
+            FastGPIO::Pin<8>::setOutput(1);
+            FastGPIO::Pin<0>::setOutput(1);
+            break;
+
+          case 1:  //CH2
+            FastGPIO::Pin<9>::setOutput(1);
+            FastGPIO::Pin<1>::setOutput(1);
+            break;
+
+          case 2:  //CH3
+            FastGPIO::Pin<10>::setOutput(1);
+            FastGPIO::Pin<17>::setOutput(1);
+            break;
+
+          case 3:  //CH4
+            FastGPIO::Pin<5>::setOutput(1);
+            FastGPIO::Pin<14>::setOutput(1);
+            break;
+
+          case 4:  //CH5
+            FastGPIO::Pin<6>::setOutput(1);
+            FastGPIO::Pin<15>::setOutput(1);
+            break;
+
+          case 5:  //CH6
+            FastGPIO::Pin<7>::setOutput(1);
+            FastGPIO::Pin<16>::setOutput(1);
+            break;
+        }
+      }
+    }
+    #else
     for (k = 0; k <= 5; k++) {  //output gate signal
       if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
         switch (k) {
@@ -517,6 +577,7 @@ void loop() {
         }
       }
     }
+    #endif
     disp_refresh = 1;  //Updates the display where the trigger was entered.If it update it all the time, the response of gate on will be worse.
 
     if (select_ch == 6) {  // random mode setting
@@ -531,7 +592,7 @@ void loop() {
       }
     }
   }
-
+#ifdef UPSIDEDOWN
   if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
 
     FastGPIO::Pin<5>::setOutput(0);
@@ -552,7 +613,28 @@ void loop() {
     FastGPIO::Pin<0>::setOutput(0);
     FastGPIO::Pin<1>::setOutput(0);
   }
+#else
+  if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
 
+    FastGPIO::Pin<8>::setOutput(0);
+    FastGPIO::Pin<9>::setOutput(0);
+    FastGPIO::Pin<10>::setOutput(0);
+    FastGPIO::Pin<5>::setOutput(0);
+    FastGPIO::Pin<6>::setOutput(0);
+    FastGPIO::Pin<7>::setOutput(0);
+  }
+
+  if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
+
+    FastGPIO::Pin<17>::setOutput(0);
+    FastGPIO::Pin<0>::setOutput(0);
+    FastGPIO::Pin<1>::setOutput(0);
+    FastGPIO::Pin<4>::setOutput(0);
+    FastGPIO::Pin<14>::setOutput(0);
+    FastGPIO::Pin<15>::setOutput(0);
+    FastGPIO::Pin<16>::setOutput(0);
+  }
+#endif
 
   if (disp_refresh == 1) {
     OLED_display();  //refresh display
@@ -606,7 +688,7 @@ void saveConfiguration() {
     display.print(selectedSlot + 1);
     display.display();
     display.setTextSize(1);
-    
+
 
     // Check for encoder rotation to select memory slot
     newPosition = myEnc.read();
@@ -886,7 +968,7 @@ void OLED_display() {
   display.setCursor(120, 9);
 
   if (select_ch != 6 && select_ch <= 6) {  // not random mode
-    display.print("H"); // H Menue
+    display.print("H");                    // H Menue
   } else if (select_ch == 6) {
     display.print("N");  // RND
   } else if (select_ch == 9) {
@@ -905,18 +987,18 @@ void OLED_display() {
   display.setCursor(120, 18);
 
   if (select_ch != 6 && select_ch <= 6) {  // not random mode
-    display.print("O"); // O Menue
+    display.print("O");                    // O Menue
   }
   if (select_ch != 6 && select_ch <= 6 && select_menu == 0) {  // not random mode
     display.setCursor(0, 30);
-    display.print("L"); // Limit
+    display.print("L");  // Limit
     display.setCursor(0, 39);
-    display.print("M"); // Mute
+    display.print("M");  // Mute
     display.setCursor(0, 48);
-    display.print("R"); // RST
+    display.print("R");  // RST
     display.setCursor(0, 57);
-    display.print("X"); // RND
-  } 
+    display.print("X");  // RND
+  }
 
   display.setCursor(120, 18);
   if (select_ch == 6) {
@@ -930,7 +1012,7 @@ void OLED_display() {
   }
 
   if (select_ch != 6 && select_ch <= 6 && select_menu >= 7) {  // not random mode and no config modes
-    display.print("O");                    // Offset
+    display.print("O");                                        // Offset
     display.setCursor(0, 29);
     display.print("L");  // Loop
     display.setCursor(0, 38);
@@ -944,89 +1026,122 @@ void OLED_display() {
   // UI improvements showing more descriptive items on the left when curser is on the right side menue
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Hits
     if (select_menu == 1) {
-    display.setCursor(0, 29);
-    display.print("H");
-    display.setCursor(0, 38);
-    display.print("I");
-    display.setCursor(0, 47);
-    display.print("T");
-    display.setCursor(0, 56);
-    display.print("S");
-    display.setCursor(120, 18);
-    display.print("O");
-        }
+      display.setCursor(0, 29);
+      display.print("H");
+      display.setCursor(0, 38);
+      display.print("I");
+      display.setCursor(0, 47);
+      display.print("T");
+      display.setCursor(0, 56);
+      display.print("S");
+      display.setCursor(120, 18);
+      display.print("O");
+    }
   }
 
   // UI improvement "OFFS"
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Offset
     if (select_menu == 2) {
-    display.setCursor(0, 29);
-    display.print("O");
-    display.setCursor(0, 38);
-    display.print("F");
-    display.setCursor(0, 47);
-    display.print("F");
-    display.setCursor(0, 56);
-    display.print("S");
-    display.setCursor(120, 18);
-    display.print("O");    
+      display.setCursor(0, 29);
+      display.print("O");
+      display.setCursor(0, 38);
+      display.print("F");
+      display.setCursor(0, 47);
+      display.print("F");
+      display.setCursor(0, 56);
+      display.print("S");
+      display.setCursor(120, 18);
+      display.print("O");
     }
   }
   // UI improvement "LIMIT"
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Limit / Lengths
     if (select_menu == 3) {
-    display.setCursor(0, 29);
-    display.print("L");
-    display.setCursor(0, 38);
-    display.print("I");
-    display.setCursor(0, 47);
-    display.print("M");
-    display.setCursor(0, 56);
-    display.print("T");
-    display.setCursor(120, 18);
-    display.print("O");   
+      display.setCursor(0, 29);
+      display.print("L");
+      display.setCursor(0, 38);
+      display.print("I");
+      display.setCursor(0, 47);
+      display.print("M");
+      display.setCursor(0, 56);
+      display.print("T");
+      display.setCursor(120, 18);
+      display.print("O");
     }
   }
   // UI improvement "MUTE"
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Mute
     if (select_menu == 4) {
-    display.setCursor(0, 29);
-    display.print("M");
-    display.setCursor(0, 38);
-    display.print("U");
-    display.setCursor(0, 47);
-    display.print("T");
-    display.setCursor(0, 56);
-    display.print("E");
-    display.setCursor(120, 18);
-    display.print("O");   
+      display.setCursor(0, 29);
+      display.print("M");
+      display.setCursor(0, 38);
+      display.print("U");
+      display.setCursor(0, 47);
+      display.print("T");
+      display.setCursor(0, 56);
+      display.print("E");
+      display.setCursor(120, 18);
+      display.print("O");
     }
   }
   // UI improvement "RST"
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Reset
     if (select_menu == 5) {
-    display.setCursor(0, 38);
-    display.print("R");
-    display.setCursor(0, 47);
-    display.print("S");
-    display.setCursor(0, 56);
-    display.print("T");
-    display.setCursor(120, 18);
-    display.print("O");   
+      display.setCursor(0, 38);
+      display.print("R");
+      display.setCursor(0, 47);
+      display.print("S");
+      display.setCursor(0, 56);
+      display.print("T");
+      display.setCursor(120, 18);
+      display.print("O");
     }
   }
 
-    // UI improvement "RND"
+  // UI improvement "RND"
   if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Random advance
     if (select_menu == 6) {
-    display.setCursor(0, 38);
-    display.print("R");
-    display.setCursor(0, 47);
-    display.print("N");
-    display.setCursor(0, 56);
-    display.print("D");
-    display.setCursor(120, 18);
-    display.print("O");   
+      display.setCursor(0, 38);
+      display.print("R");
+      display.setCursor(0, 47);
+      display.print("N");
+      display.setCursor(0, 56);
+      display.print("D");
+      display.setCursor(120, 18);
+      display.print("O");
+    }
+  }
+  // UI improvement "PROB" Placeholder / Featurecreeep ToDo:
+  // Had a go at probability before but couldnt get it working, so leaving this for the future
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Random advance
+    if (select_menu == 7) {
+      display.setCursor(0, 29);
+      display.print("P");
+      display.setCursor(0, 38);
+      display.print("R");
+      display.setCursor(0, 47);
+      display.print("O");
+      display.setCursor(0, 56);
+      display.print("B");
+      display.setCursor(120, 18);
+      display.print("O");
+    }
+  }
+
+  // UI improvement "SWNG"
+  // Would be nice to introduce some swing
+  if (select_ch != 6 && select_ch <= 6) {  // not random mode and no config modes -> Channel Edit mode Random advance
+    if (select_menu == 8) {
+      display.setCursor(0, 29);
+      display.print("S");
+      display.setCursor(0, 38);
+      display.print("W");
+      display.setCursor(0, 47);
+      display.print("N");
+      display.setCursor(0, 56);
+      display.print("G");
+      display.setCursor(120, 18);
+      display.print("O");
     }
   }
 
@@ -1110,6 +1225,7 @@ void OLED_display() {
     } else if (select_menu == 6) {
       display.drawTriangle(12, 54, 12, 60, 7, 57, WHITE);
     }
+    // ToDo: Add Probability / Swing indicator triangle
   }
 
   // draw step dot
