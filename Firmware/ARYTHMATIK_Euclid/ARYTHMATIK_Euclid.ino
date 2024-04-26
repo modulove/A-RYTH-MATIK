@@ -67,7 +67,7 @@ SimpleRotary rotary(pinA, pinB, buttonPin);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // define for using module upside down in your case
-//#define UPSIDEDOWN
+#define UPSIDEDOWN
 
 // rotary encoder
 // ToDo: Add switch for inverting encoder direction
@@ -479,15 +479,23 @@ void loop() {
   }
 
   //-----------------trigger detect, reset & output----------------------
+  #ifdef UPSIDEDOWN
+  rst_in = FastGPIO::Pin<13>::isInputHigh();  //external reset
+  #else
   rst_in = FastGPIO::Pin<11>::isInputHigh();  //external reset
+  #endif
   if (old_rst_in == 0 && rst_in == 1) {
     for (k = 0; k <= 5; k++) {
       playing_step[k] = 0;
       disp_refresh = 1;
     }
   }
-
+  #ifdef UPSIDEDOWN
+  trg_in = FastGPIO::Pin<11>::isInputHigh();
+  #else
   trg_in = FastGPIO::Pin<13>::isInputHigh();
+  #endif
+  
   // no external trigger for more than 8 sec -> internal clock (not implemented yet)
   if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
     //useInternalClock = true;
@@ -592,7 +600,7 @@ void loop() {
       }
     }
   }
-#ifdef UPSIDEDOWN
+  
   if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
 
     FastGPIO::Pin<5>::setOutput(0);
@@ -602,9 +610,7 @@ void loop() {
     FastGPIO::Pin<9>::setOutput(0);
     FastGPIO::Pin<10>::setOutput(0);
   }
-
   if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
-
     FastGPIO::Pin<4>::setOutput(0);
     FastGPIO::Pin<14>::setOutput(0);
     FastGPIO::Pin<15>::setOutput(0);
@@ -613,28 +619,6 @@ void loop() {
     FastGPIO::Pin<0>::setOutput(0);
     FastGPIO::Pin<1>::setOutput(0);
   }
-#else
-  if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
-
-    FastGPIO::Pin<8>::setOutput(0);
-    FastGPIO::Pin<9>::setOutput(0);
-    FastGPIO::Pin<10>::setOutput(0);
-    FastGPIO::Pin<5>::setOutput(0);
-    FastGPIO::Pin<6>::setOutput(0);
-    FastGPIO::Pin<7>::setOutput(0);
-  }
-
-  if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
-
-    FastGPIO::Pin<17>::setOutput(0);
-    FastGPIO::Pin<0>::setOutput(0);
-    FastGPIO::Pin<1>::setOutput(0);
-    FastGPIO::Pin<4>::setOutput(0);
-    FastGPIO::Pin<14>::setOutput(0);
-    FastGPIO::Pin<15>::setOutput(0);
-    FastGPIO::Pin<16>::setOutput(0);
-  }
-#endif
 
   if (disp_refresh == 1) {
     OLED_display();  //refresh display
