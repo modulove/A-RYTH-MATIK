@@ -13,8 +13,14 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
+// encoder & direction
+#ifdef ENCODER_REVERSED
+#define ENCODER_PIN1 3
+#define ENCODER_PIN2 2  // 2pin, 3pin is default
+#else
 #define ENCODER_PIN1 2
-#define ENCODER_PIN2  3
+#define ENCODER_PIN2 3
+#endif
 #define ENCODER_SW_PIN 12
 #define CLK_PIN 13
 #define RST_PIN 11
