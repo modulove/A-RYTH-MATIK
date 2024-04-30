@@ -72,8 +72,11 @@ SimpleRotary rotary(pinA, pinB, buttonPin);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // rotary encoder
-// ToDo: Add switch for inverting encoder direction
-Encoder myEnc(3, 2);  //use 3pin 2pin
+#ifdef ENCODER_REVERSED
+Encoder myEnc(2, 3);  // 3pin, 2pin is default
+#else
+Encoder myEnc(3, 2);                          // 3pin, 2pin is default
+#endif
 int oldPosition = -999;
 int newPosition = -999;
 int i = 0;
