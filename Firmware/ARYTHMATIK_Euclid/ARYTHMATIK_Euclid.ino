@@ -21,8 +21,10 @@
 
 // Flag for enabling debug print to serial monitoring output.
 // Note: this affects performance and locks LED 4 & 5 on HIGH.
-// ToDo. Make this actually work :)
 // #define DEBUG
+
+// Flag for reversing the encoder direction.
+// #define ENCODER_REVERSED
 
 int debug = 0;  // 1 =on 0 =off
 unsigned long startMillis;
