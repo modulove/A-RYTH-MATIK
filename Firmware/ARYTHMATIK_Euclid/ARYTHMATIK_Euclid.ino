@@ -71,9 +71,6 @@ SimpleRotary rotary(pinA, pinB, buttonPin);
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// define for using module upside down in your case
-#define UPSIDEDOWN
-
 // rotary encoder
 // ToDo: Add switch for inverting encoder direction
 Encoder myEnc(3, 2);  //use 3pin 2pin
@@ -235,7 +232,7 @@ void setup() {
   delay(1000);  // Screen needs a sec to initialize
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-#ifdef UPSIDEDOWN
+#ifdef PANEL_USD
   display.setRotation(2);  // 180 degree rotation for upside-down use
 #else
   display.setRotation(0);  // Normal orientation
@@ -484,7 +481,7 @@ void loop() {
   }
 
   //-----------------trigger detect, reset & output----------------------
-  #ifdef UPSIDEDOWN
+  #ifdef PANEL_USD
   rst_in = FastGPIO::Pin<13>::isInputHigh();  //external reset
   #else
   rst_in = FastGPIO::Pin<11>::isInputHigh();  //external reset
@@ -495,7 +492,7 @@ void loop() {
       disp_refresh = 1;
     }
   }
-  #ifdef UPSIDEDOWN
+  #ifdef PANEL_USD
   trg_in = FastGPIO::Pin<11>::isInputHigh();
   #else
   trg_in = FastGPIO::Pin<13>::isInputHigh();
@@ -517,7 +514,7 @@ void loop() {
         playing_step[i] = 0;  // step limit is reached
       }
     }
-    #ifdef UPSIDEDOWN
+    #ifdef PANEL_USD
     // do stuff the other way around
     for (k = 0; k <= 5; k++) {  //output gate signal
       if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
