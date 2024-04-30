@@ -26,6 +26,9 @@
 // Flag for reversing the encoder direction.
 // #define ENCODER_REVERSED
 
+// Flag for using the panel upside down
+// #define PANEL_USD
+
 int debug = 0;  // 1 =on 0 =off
 unsigned long startMillis;
 unsigned long currentMillis;
