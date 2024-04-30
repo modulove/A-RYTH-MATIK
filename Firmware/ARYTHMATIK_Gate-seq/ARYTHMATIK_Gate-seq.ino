@@ -226,9 +226,11 @@ void setup() {
 
  // ディスプレイの初期化
  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
- //display.setRotation(2);
- //pin mode setting
- //pinMode(11, INPUT_PULLUP); //RST
+ #ifdef PANEL_USD
+ display.setRotation(2);  // 180 degree rotation for upside-down use
+ #else
+ display.setRotation(0);  // Normal orientation
+ #endif
  pinMode(11, INPUT); //RST
  pinMode(12, INPUT_PULLUP); //BUTTON
  pinMode(5, OUTPUT); //CH1
