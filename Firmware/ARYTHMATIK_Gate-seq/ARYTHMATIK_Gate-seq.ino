@@ -52,6 +52,24 @@ long interval = 1000;
 #define  ENCODER_OPTIMIZE_INTERRUPTS //エンコーダノイズ対策
 #include <Encoder.h>
 
+// encoder & direction
+#ifdef ENCODER_REVERSED
+Encoder myEnc(2, 3);  // 2pin, 3pin is default
+#else
+Encoder myEnc(3, 2);
+#endif
+
+int oldPosition  = -999;
+int newPosition = -999;
+byte enc = 96; //選択中のエンコーダ。初回起動時はMANUAL表示
+byte enc_max = 105; //マニュアルモードではmax=99(16*6ch+option3+mute6)。AUTOでは11(MANUAL,genre,fillin,repeat,sw+mute6)
+unsigned int enc_bit = 0x00;//
+
+//ボタン設定
+byte button = 0;//0=OFF,1=ON
+byte old_button = 0;//チャタリング対策
+byte button_on = 0;//チャタリング判定後のボタン状態。0=OFF,1=ON
+
 //OLED settings
 #include<Wire.h>
 #include<Adafruit_GFX.h>
@@ -91,20 +109,6 @@ byte CH5_mute = 0 ;//0=ミュートしない、1=ミュートする
 unsigned int ch6_step = 0x0000; //テスト用
 byte CH6_output = 0 ;
 byte CH6_mute = 0 ;//0=ミュートしない、1=ミュートする
-
-
-//ロータリーエンコーダ設定
-Encoder myEnc(2, 3);//ロータリーエンコーダライブラリ用
-int oldPosition  = -999;
-int newPosition = -999;
-byte enc = 96; //選択中のエンコーダ。初回起動時はMANUAL表示
-byte enc_max = 105; //マニュアルモードではmax=99(16*6ch+option3+mute6)。AUTOでは11(MANUAL,genre,fillin,repeat,sw+mute6)
-unsigned int enc_bit = 0x00;//
-
-//ボタン設定
-byte button = 0;//0=OFF,1=ON
-byte old_button = 0;//チャタリング対策
-byte button_on = 0;//チャタリング判定後のボタン状態。0=OFF,1=ON
 
 // ディスプレイ変数の宣言
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -253,9 +257,11 @@ void setup() {
 
  // ディスプレイの初期化
  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
- //display.setRotation(2);
- //pin mode setting
- //pinMode(11, INPUT_PULLUP); //RST
+ #ifdef PANEL_USD
+ display.setRotation(2);  // 180 degree rotation for upside-down use
+ #else
+ display.setRotation(0);  // Normal orientation
+ #endif
  pinMode(11, INPUT); //RST
  pinMode(12, INPUT_PULLUP); //BUTTON
  pinMode(5, OUTPUT); //CH1

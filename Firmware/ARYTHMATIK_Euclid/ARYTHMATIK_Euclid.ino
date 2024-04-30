@@ -71,13 +71,13 @@ SimpleRotary rotary(pinA, pinB, buttonPin);
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// rotary encoder
+
 #ifdef ENCODER_REVERSED
 Encoder myEnc(2, 3);  // 3pin, 2pin is default
 #else
-Encoder myEnc(3, 2);                          // 3pin, 2pin is default
+Encoder myEnc(3, 2); 
 #endif
-int oldPosition = -999;
+int oldPosition  = -999;
 int newPosition = -999;
 int i = 0;
 bool flr = 1;  //first loop run -> no encU wanted
