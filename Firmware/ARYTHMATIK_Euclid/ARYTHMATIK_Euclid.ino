@@ -447,7 +447,7 @@ void loop() {
         }
         break;
 
-      case 3:  // there seemed to be a bug with the playing indicatior dot hiding but cant spot it now
+      case 3:  // Limit / loop
         limit[select_ch]--;
         if (limit[select_ch] <= 0) {
           limit[select_ch] = 17;
