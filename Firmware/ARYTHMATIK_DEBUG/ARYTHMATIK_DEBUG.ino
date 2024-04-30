@@ -80,14 +80,19 @@ void setup() {
 
   // OLED setting
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  #ifdef PANEL_USD
+  display.setRotation(2);  // 180 degree rotation for upside-down use
+  #else
+  display.setRotation(0);  // Normal orientation
+  #endif
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.clearDisplay();
   display.setCursor(10, 10);
   display.setTextSize(2);
-  display.setCursor(0, 14);
+  display.setCursor(20, 14);
   display.println("MODULE");
-  display.setCursor(0, 32);
+  display.setCursor(30, 32);
   display.println("LIEBE");
   display.display();
   //pin mode setting
