@@ -23,9 +23,9 @@ long interval = 1000;
 
 // encoder & direction
 #ifdef ENCODER_REVERSED
-Encoder myEnc(3, 2);  // 2pin, 3pin is default
+Encoder myEnc(2, 3);  // 2pin, 3pin is default
 #else
-Encoder myEnc(2, 3);
+Encoder myEnc(3, 2);
 #endif
 
 int oldPosition  = -999;
