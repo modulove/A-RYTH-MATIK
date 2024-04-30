@@ -1,3 +1,34 @@
+/**
+ * @file ARYTHMATIK_Gate-seq.ino
+ * @author Modulove & friends (https://github.com/modulove/)
+ * @brief 6CH Eurorack (HAGIWO) Rhythm Generator with SSD1306 0.96 OLED
+ * @version 0.1
+ * @date 2024-04-30
+ *
+ * @copyright Copyright (c) 2024
+ *
+ * Connect a clock source to the CLK input and each output will
+ * output triggers according to settings set in the UI OLED screen
+ *
+ * Encoder:
+ *      short press: Toggle between top menue options (dial with rotation)
+ *      long press: Save settings to default slot 1.
+ *
+ *
+ * RST: Trigger this input to reset the sequence.
+ *
+ */
+
+// Flag for enabling debug print to serial monitoring output.
+// Note: this affects performance and locks LED 4 & 5 on HIGH.
+// #define DEBUG
+
+// Flag for reversing the encoder direction.
+// #define ENCODER_REVERSED
+
+// Flag for using the panel upside down
+// #define PANEL_USD
+
 int debug = 0; // 1 =on 0 =off
 
 //INTERNAL CLOCK Setup
