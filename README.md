@@ -47,6 +47,8 @@ DIY Info / Links:
 
 Building the Module is simple and suited for beginners. All Kits come with SMD parts already soldered.
 
+[A-RYTH-MATIK iBOM](https://htmlpreview.github.io/?https://github.com/modulove/A-RYTH-MATIK/blob/main/BOM/ibom.html "MVMNT BOM").
+
 Assembly Instructions (Quickstart) is here: [A-RYTH-MATIK QuickStart](https://github.com/modulove/A-RYTH-MATIK/blob/main/A-Ryth-Matik_QuickStart.pdf "A-RYTH-MATIK QuickStart Guide").
 
 [Buildvideo](https://www.youtube.com/watch?v=W5n_3bvGCUo)
