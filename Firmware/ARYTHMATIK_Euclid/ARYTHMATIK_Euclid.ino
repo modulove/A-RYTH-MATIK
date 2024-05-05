@@ -31,12 +31,13 @@
 
 // Flag for reversing the encoder direction.
 // ToDo: Put this in config Menue dialog at boot ?
-// #define ENCODER_REVERSED
+// #define REVERSE_ENCODER
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
-// #define PANEL_USD
+// #define ROTATE_PANEL
 
+#include <avr/pgmspace.h>
 #include <FastGPIO.h>
 #include <EEPROM.h>
 #include <Encoder.h>
@@ -47,6 +48,10 @@
 //#define DEBUG  // Uncomment for enabling debug print to serial monitoring output. Note: this affects performance and locks LED 4 & 5 on HIGH.
 int debug = 0;  // ToDo: rework the debug feature (menue?)
 
+// For debug / UI
+#define FIRMWARE_MAGIC "EUCLIDBEAT"
+#define FIRMWARE_MAGIC_ADDRESS 0  // Store the firmware magic number at address 0
+
 // OLED
 #define OLED_ADDRESS 0x3C
 #define SCREEN_WIDTH 128
@@ -54,8 +59,8 @@ int debug = 0;  // ToDo: rework the debug feature (menue?)
 #define ENCODER_COUNT_PER_CLICK 4
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 5
-#define EEPROM_START_ADDRESS 0
+#define NUM_MEMORY_SLOTS 3
+#define EEPROM_START_ADDRESS 5
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 
 // Pins
@@ -146,12 +151,10 @@ struct SlotConfiguration {
 };
 
 // default config for presets (WIP)
-SlotConfiguration defaultSlots[5] = {
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { true, true, true, true, true, true }, { 16, 12, 8, 16, 12, 9 } },    // Techno (Pattern with varying lengths that evolves over time)
-  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { true, true, true, true, true, true }, { 16, 15, 16, 10, 12, 18 } },  // House (mix of steady beats and syncopated patterns to keep groove fresh)
-  { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { true, true, true, true, true, true }, { 16, 14, 12, 16, 18, 16 } },  // Drum and Bass (Fast, complex drum patterns that shift against each other to create energetic grooves)
-  { { 3, 4, 2, 3, 5, 4 }, { 0, 1, 2, 1, 0, 2 }, { true, true, true, true, true, true }, { 14, 12, 10, 14, 16, 12 } },  // Dubstep (halftime rhythms and syncopated snares, with different grove)
-  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { true, true, true, true, true, true }, { 24, 18, 24, 21, 16, 30 } }   // Ambient (Minimal beats)
+const SlotConfiguration defaultSlots[3] PROGMEM = {
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 } },    // Techno
+  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 } },  // House
+  { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { false, false, false, false, false, false }, { 15, 14, 12, 15, 14, 15 } }  // Drum and Bass
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Memory slots for configurations
@@ -168,11 +171,14 @@ void setup() {
   delay(1000);  // Screen needs a sec to initialize
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-#ifdef PANEL_USD
+//inidDisplay()...
+#ifdef ROTATE_PANEL
   display.setRotation(2);  // 180 degree rotation for upside-down use
 #endif
   display.setTextSize(1);
   display.setTextColor(WHITE);
+
+  checkAndInitializeSettings();
 
   // Display UI
   OLED_display();
@@ -356,7 +362,7 @@ void loop() {
         break;
 
       case 2:  // offset
-        offset[select_ch]++;
+        offset[select_ch]--;
         if (offset[select_ch] >= 16) {
           offset[select_ch] = 0;
         }
@@ -394,7 +400,7 @@ void loop() {
   }
 
 //-----------------trigger detect, reset & output----------------------
-#ifdef PANEL_USD
+#ifdef ROTATE_PANEL
   rst_in = FastGPIO::Pin<13>::isInputHigh();  //external reset
 #else
   rst_in = FastGPIO::Pin<11>::isInputHigh();  //external reset
@@ -405,7 +411,7 @@ void loop() {
       disp_refresh = 1;
     }
   }
-#ifdef PANEL_USD
+#ifdef ROTATE_PANEL
   trg_in = FastGPIO::Pin<11>::isInputHigh();
 #else
   trg_in = FastGPIO::Pin<13>::isInputHigh();
@@ -427,7 +433,7 @@ void loop() {
         playing_step[i] = 0;  // step limit is reached
       }
     }
-#ifdef PANEL_USD
+#ifdef ROTATE_PANEL
     // do stuff the other way around
     for (k = 0; k <= 5; k++) {  //output gate signal
       if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
@@ -568,30 +574,18 @@ void iniIO() {
 
 void factoryReset() {
   initializeDefaultRhythms();  // Re-initialize EEPROM with default rhythms
-  // Indicate on display or via LED that factory reset is complete
+  // Indicate on display or via LED that factory reset is complete?
 }
 
 
 void saveToEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * CONFIG_SIZE);
-
-  for (int ch = 0; ch < 6; ++ch) {
-    EEPROM.put(baseAddress + ch * sizeof(byte), memorySlots[slot].hits[ch]);        // hits
-    EEPROM.put(baseAddress + 6 + ch * sizeof(byte), memorySlots[slot].offset[ch]);  // offset, starts after 6 bytes of hits
-    EEPROM.put(baseAddress + 12 + ch * sizeof(byte), memorySlots[slot].mute[ch]);   // mute, starts after 6 bytes of offset
-    EEPROM.put(baseAddress + 18 + ch * sizeof(byte), memorySlots[slot].limit[ch]);  // limit, starts after 6 bytes of mute
-  }
+  EEPROM.put(baseAddress, memorySlots[slot]);
 }
 
 void loadFromEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * CONFIG_SIZE);
-
-  for (int ch = 0; ch < 6; ++ch) {
-    EEPROM.get(baseAddress + ch * sizeof(byte), memorySlots[slot].hits[ch]);        // hits
-    EEPROM.get(baseAddress + 6 + ch * sizeof(byte), memorySlots[slot].offset[ch]);  // offset
-    EEPROM.get(baseAddress + 12 + ch * sizeof(byte), memorySlots[slot].mute[ch]);   // mute
-    EEPROM.get(baseAddress + 18 + ch * sizeof(byte), memorySlots[slot].limit[ch]);  // limit
-  }
+  EEPROM.get(baseAddress, memorySlots[slot]);
 }
 
 void saveConfiguration() {
@@ -719,9 +713,15 @@ void displaySuccessMessage() {
 
 
 // reset the whole thing and put in traditional euclid patterns?
+// if function is in use, module will not start / init display ?
 void initializeDefaultRhythms() {
-  for (int slot = 0; slot < 5; slot++) {
-    saveDefaultsToEEPROM(slot, defaultSlots[slot]);
+  SlotConfiguration tempConfig;  // Temporary storage for configuration data
+
+  for (int slot = 0; slot < 2; slot++) {
+    // Copy each slot configuration from PROGMEM to RAM
+    memcpy_P(&tempConfig, &defaultSlots[slot], sizeof(SlotConfiguration));
+    // Now save this configuration to EEPROM
+    saveDefaultsToEEPROM(slot, tempConfig);
   }
 }
 
@@ -863,18 +863,27 @@ void drawModeMenu(int select_ch) {
   }
 }
 
-void drawSelectionIndicator(int select_menu) {
-  int x1 = 113, y1, x2 = 118, y2, y3;
-  if (select_menu == 0) {
-    y1 = 0;
-    y2 = 6;
-    y3 = 3;
-  } else {
-    y1 = 9 + (select_menu - 1) * 9;
-    y2 = y1 + 6;
-    y3 = y1 + 3;
+// Check EEPROM SETTINGS
+void checkAndInitializeSettings() {
+  int magic;
+  EEPROM.get(FIRMWARE_MAGIC_ADDRESS, magic);
+  if (magic != FIRMWARE_MAGIC) {
+    // Initialize defaults if the magic number does not match
+    initializeDefaultRhythms();
+    // Set initial settings for each slot
+    // no currentBPM, isRunnning yet
+    /*
+    for (int i = 0; i < NUM_MEMORY_SLOTS; i++) {
+      memorySlots[i].currentBPM = 120;  // Default BPM
+      memorySlots[i].isRunning = false; // Default state is not running
+      EEPROM.put(EEPROM_START_ADDRESS + i * CONFIG_SIZE, memorySlots[i]);
+    
+    }
+    */
+    
+    // Store the magic number
+    EEPROM.put(FIRMWARE_MAGIC_ADDRESS, FIRMWARE_MAGIC);
   }
-  display.drawTriangle(x1, y1, x1, y2, x2, y3, WHITE);
 }
 
 void OLED_display() {
