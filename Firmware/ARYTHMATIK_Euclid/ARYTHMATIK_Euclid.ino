@@ -37,6 +37,42 @@
 // ToDo: change to be in line with libModulove, put in config Menue dialog
 // #define ROTATE_PANEL
 
+#ifdef ROTATE_PANEL
+// Define pins for the rotated panel setup
+#define CLOCK_IN FastGPIO::Pin<13>
+#define RESET_IN FastGPIO::Pin<11>
+#define OUTPUT1 FastGPIO::Pin<8>
+#define OUTPUT2 FastGPIO::Pin<9>
+#define OUTPUT3 FastGPIO::Pin<10>
+#define OUTPUT4 FastGPIO::Pin<5>
+#define OUTPUT5 FastGPIO::Pin<6>
+#define OUTPUT6 FastGPIO::Pin<7>
+#define LED1 FastGPIO::Pin<0>
+#define LED2 FastGPIO::Pin<1>
+#define LED3 FastGPIO::Pin<17>
+#define LED4 FastGPIO::Pin<14>
+#define LED5 FastGPIO::Pin<15>
+#define LED6 FastGPIO::Pin<16>
+#define TRIGGER_IN FastGPIO::Pin<11>
+#else
+// Define pins for the normal setup
+#define CLOCK_IN FastGPIO::Pin<11>
+#define RESET_IN FastGPIO::Pin<13>
+#define OUTPUT1 FastGPIO::Pin<5>
+#define OUTPUT2 FastGPIO::Pin<6>
+#define OUTPUT3 FastGPIO::Pin<7>
+#define OUTPUT4 FastGPIO::Pin<8>
+#define OUTPUT5 FastGPIO::Pin<9>
+#define OUTPUT6 FastGPIO::Pin<10>
+#define LED1 FastGPIO::Pin<14>
+#define LED2 FastGPIO::Pin<15>
+#define LED3 FastGPIO::Pin<16>
+#define LED4 FastGPIO::Pin<0>
+#define LED5 FastGPIO::Pin<1>
+#define LED6 FastGPIO::Pin<17>
+#define TRIGGER_IN FastGPIO::Pin<13>
+#endif
+
 #include <avr/pgmspace.h>
 #include <FastGPIO.h>
 #include <EEPROM.h>
@@ -154,7 +190,7 @@ struct SlotConfiguration {
 const SlotConfiguration defaultSlots[3] PROGMEM = {
   { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 } },    // Techno
   { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 } },  // House
-  { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { false, false, false, false, false, false }, { 15, 14, 12, 15, 14, 15 } }  // Drum and Bass
+  { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { false, false, false, false, false, false }, { 15, 14, 12, 15, 14, 15 } }   // Drum and Bass
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Memory slots for configurations
@@ -399,23 +435,17 @@ void loop() {
     }
   }
 
-//-----------------trigger detect, reset & output----------------------
-#ifdef ROTATE_PANEL
-  rst_in = FastGPIO::Pin<13>::isInputHigh();  //external reset
-#else
-  rst_in = FastGPIO::Pin<11>::isInputHigh();  //external reset
-#endif
+  //-----------------trigger detect, reset & output----------------------
+  bool rst_in = RESET_IN::isInputHigh();
+  bool trg_in = TRIGGER_IN::isInputHigh();
+
   if (old_rst_in == 0 && rst_in == 1) {
     for (k = 0; k <= 5; k++) {
       playing_step[k] = 0;
-      disp_refresh = 1;
+      //disp_refresh = 1;
     }
+    disp_refresh = 1;
   }
-#ifdef ROTATE_PANEL
-  trg_in = FastGPIO::Pin<11>::isInputHigh();
-#else
-  trg_in = FastGPIO::Pin<13>::isInputHigh();
-#endif
 
   // no external trigger for more than 8 sec -> internal clock (not implemented yet)
   if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
@@ -425,7 +455,7 @@ void loop() {
   } else if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
     //useInternalClock = false;
-    FastGPIO::Pin<4>::setOutput(1);
+    FastGPIO::Pin<4>::setOutput(1);  // clock LED
     debug = 0;
     for (i = 0; i <= 5; i++) {
       playing_step[i]++;
@@ -433,80 +463,43 @@ void loop() {
         playing_step[i] = 0;  // step limit is reached
       }
     }
-#ifdef ROTATE_PANEL
-    // do stuff the other way around
+
     for (k = 0; k <= 5; k++) {  //output gate signal
       if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
         switch (k) {
           case 0:  //CH1
-            FastGPIO::Pin<8>::setOutput(1);
-            FastGPIO::Pin<0>::setOutput(1);
+            OUTPUT1::setOutput(1);
+            LED1::setOutput(1);
             break;
 
           case 1:  //CH2
-            FastGPIO::Pin<9>::setOutput(1);
-            FastGPIO::Pin<1>::setOutput(1);
+            OUTPUT2::setOutput(1);
+            LED2::setOutput(1);
             break;
 
           case 2:  //CH3
-            FastGPIO::Pin<10>::setOutput(1);
-            FastGPIO::Pin<17>::setOutput(1);
+            OUTPUT3::setOutput(1);
+            LED3::setOutput(1);
             break;
 
           case 3:  //CH4
-            FastGPIO::Pin<5>::setOutput(1);
-            FastGPIO::Pin<14>::setOutput(1);
+            OUTPUT4::setOutput(1);
+            LED4::setOutput(1);
             break;
 
           case 4:  //CH5
-            FastGPIO::Pin<6>::setOutput(1);
-            FastGPIO::Pin<15>::setOutput(1);
+            OUTPUT5::setOutput(1);
+            LED5::setOutput(1);
             break;
 
           case 5:  //CH6
-            FastGPIO::Pin<7>::setOutput(1);
-            FastGPIO::Pin<16>::setOutput(1);
+            OUTPUT6::setOutput(1);
+            LED6::setOutput(1);
             break;
         }
       }
     }
-#else
-    for (k = 0; k <= 5; k++) {  //output gate signal
-      if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
-        switch (k) {
-          case 0:  //CH1
-            FastGPIO::Pin<5>::setOutput(1);
-            FastGPIO::Pin<14>::setOutput(1);
-            break;
 
-          case 1:  //CH2
-            FastGPIO::Pin<6>::setOutput(1);
-            FastGPIO::Pin<15>::setOutput(1);
-            break;
-
-          case 2:  //CH3
-            FastGPIO::Pin<7>::setOutput(1);
-            FastGPIO::Pin<16>::setOutput(1);
-            break;
-
-          case 3:  //CH4
-            FastGPIO::Pin<8>::setOutput(1);
-            FastGPIO::Pin<0>::setOutput(1);
-            break;
-
-          case 4:  //CH5
-            FastGPIO::Pin<9>::setOutput(1);
-            FastGPIO::Pin<1>::setOutput(1);
-            break;
-
-          case 5:  //CH6
-            FastGPIO::Pin<10>::setOutput(1);
-            FastGPIO::Pin<17>::setOutput(1);
-            break;
-        }
-      }
-    }
-#endif
     disp_refresh = 1;  //Updates the display where the trigger was entered.If it update it all the time, the response of gate on will be worse.
 
     if (select_ch == 6) {  // random mode setting
@@ -524,21 +517,21 @@ void loop() {
 
   if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
 
-    FastGPIO::Pin<5>::setOutput(0);
-    FastGPIO::Pin<6>::setOutput(0);
-    FastGPIO::Pin<7>::setOutput(0);
-    FastGPIO::Pin<8>::setOutput(0);
-    FastGPIO::Pin<9>::setOutput(0);
-    FastGPIO::Pin<10>::setOutput(0);
+    OUTPUT1::setOutput(0);
+    OUTPUT2::setOutput(0);
+    OUTPUT3::setOutput(0);
+    OUTPUT4::setOutput(0);
+    OUTPUT5::setOutput(0);
+    OUTPUT6::setOutput(0);
   }
   if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
+    LED1::setOutput(0);
+    LED2::setOutput(0);
+    LED3::setOutput(0);
+    LED4::setOutput(0);
+    LED5::setOutput(0);
+    LED6::setOutput(0);
     FastGPIO::Pin<4>::setOutput(0);
-    FastGPIO::Pin<14>::setOutput(0);
-    FastGPIO::Pin<15>::setOutput(0);
-    FastGPIO::Pin<16>::setOutput(0);
-    FastGPIO::Pin<17>::setOutput(0);
-    FastGPIO::Pin<0>::setOutput(0);
-    FastGPIO::Pin<1>::setOutput(0);
   }
 
   if (disp_refresh) {
@@ -880,7 +873,7 @@ void checkAndInitializeSettings() {
     
     }
     */
-    
+
     // Store the magic number
     EEPROM.put(FIRMWARE_MAGIC_ADDRESS, FIRMWARE_MAGIC);
   }
