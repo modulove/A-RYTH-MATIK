@@ -73,8 +73,8 @@
 
 #include <avr/pgmspace.h>
 #include <FastGPIO.h>
+#include <SimpleRotary.h>
 #include <EEPROM.h>
-#include <Encoder.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -93,8 +93,8 @@ int debug = 0;  // ToDo: rework the debug feature (menue?)
 #define ENCODER_COUNT_PER_CLICK 4
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 3
-#define EEPROM_START_ADDRESS 5
+#define NUM_MEMORY_SLOTS 2
+#define EEPROM_START_ADDRESS 4
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 
 // Pins
@@ -163,9 +163,10 @@ byte step_cnt = 0;
 // Display Setup
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// Encoder
-Encoder myEnc(encoderAPin, encoderBPin);  // Setup encoder on specific pins
-bool encD = false, old_encD = false, encU = false, old_encU = false;
+// SimpleRotary
+SimpleRotary rotary(encoderBPin, encoderAPin, 12);
+
+int encD = false, old_encD = false, encU = false, old_encU = false;
 bool buttonPressed = false;  // State of the button
 bool flr = 1;                // first loop run -> no encU wanted
 int i = 0;                   // ch 1- 6
@@ -183,10 +184,9 @@ struct SlotConfiguration {
 };
 
 // default config for presets (WIP)
-const SlotConfiguration defaultSlots[3] PROGMEM = {
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 } },    // Techno
-  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 } },  // House
-  { { 5, 4, 7, 3, 4, 5 }, { 0, 2, 1, 0, 2, 3 }, { false, false, false, false, false, false }, { 15, 14, 12, 15, 14, 15 } }   // Drum and Bass
+const SlotConfiguration defaultSlots[2] PROGMEM = {
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 } },   // Techno
+  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 } }  // House
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Memory slots for configurations
@@ -226,7 +226,8 @@ void loop() {
 
   //-----------------push button----------------------
   sw = 1;
-  if ((!FastGPIO::Pin<12>::isInputHigh()) && (sw_timer + 300 <= millis())) {  //push button on ,Logic inversion , sw_timer is countermeasure of chattering
+  // Check for button press
+  if (rotary.push() && sw_timer + 300 <= millis()) {  // button pressed
     sw_timer = millis();
     sw = 0;
     disp_refresh = debug;
@@ -239,7 +240,7 @@ void loop() {
     select_menu = 0;
   }
   if (select_ch == 6 && select_menu > 1) {  // random mode
-    select_menu = 0;                        //Ruecksetzung nach weiterem Klick aus Stufe select_menu = 1 (Occurence)
+    select_menu = 0;                        //
   }
   if (select_ch != 6 && select_menu < 0) {  // not random mode
     select_menu = 5;
@@ -251,15 +252,15 @@ void loop() {
     select_menu = 0;
   }
 
-  if (select_ch == 7 && select_menu == 1) {  // save whith encoder rotation
+  if (select_ch == 7 && select_menu == 1) {  // save config menue
     saveConfiguration();
     select_menu = 0;
   }
-  if (select_ch == 8 && select_menu == 1) {  // load whith encoder rotation
+  if (select_ch == 8 && select_menu == 1) {  // load config menue
     loadConfiguration();
     select_menu = 0;
   }
-  if (select_ch == 9 && select_menu == 1) {  // reset the whole sequence
+  if (select_ch == 9 && select_menu == 1) {  // reset the whole sequencer
     resetSeq();
     select_menu = 0;
   }
@@ -278,145 +279,68 @@ void loop() {
     }
     // Dial in tempo with the encoder or TapTempo via encoder button
     adjustTempo();
-    //disp_refresh = 1;
+    disp_refresh = 1;
   }
   if (select_ch == 12 && select_menu == 1) {  //
-    // This needs to work as before where you advance the random state by rotating the encoder
+    // This needs to work as before where you advance through the random array by rotating the encoder.
+    // should make it possible to go back and forth like 5 steps and have a set of steady values
     Random_change();
     disp_refresh = 1;
-    //select_menu = 0;
   }
 
 
   //-----------------Rotary encoder read----------------------
-  newPosition = myEnc.read() / ENCODER_COUNT_PER_CLICK;
-  if (newPosition < oldPosition && enc_timer + 100 < millis()) {  //turn left
-    enc_timer = millis();
-    oldPosition = newPosition;
-    disp_refresh = debug;  //Enable while debugging.
-    encD = 1;
-  } else {
-    encD = 0;
+byte result = rotary.rotate();  // 0 for no change, 1 for CW, 2 for CCW
+int changeDirection = 0;  // 0 for no change, 1 for increment, -1 for decrement
+
+if ((result == 1 || result == 2) && enc_timer + 100 < millis()) {
+  enc_timer = millis();  // Update the timer for debouncing
+
+  if (result == 1) {  // CW
+    changeDirection = 1;
+  } else if (result == 2) {  // CCW
+    changeDirection = -1;
   }
 
-  if (newPosition > oldPosition && enc_timer + 100 < millis()) {  //turn right
-    enc_timer = millis();
-    oldPosition = newPosition;
-    disp_refresh = debug;  //Enable while debugging.
-    encU = 1;
-    if (flr == 1) {          //suppresses faulty encU in first loop run
-      disp_refresh = debug;  // only refresh whith encoder when debug mode is enabled (debug=1), else there might be jumps in the sequence while running
-      encU = 0;
-      flr = 0;
-    }
-  } else {
-    encU = 0;
+  if (flr == 1) {
+    disp_refresh = debug;
+    changeDirection = 0;
+    flr = 0;
   }
 
-  if (old_encU == 0 && encU == 1) {
+  // Handling menu interaction based on direction
+  if (changeDirection != 0) {
     switch (select_menu) {
-      case 0:  //select channel
-               // Modes are: 0,1,2,3,4,5,6,7,8,9,10,11,12 (0-5 are channels, 6 is random, 7 is complete mute, 8 is save, 9 load, 10 settings factory reset, 11 MUTE ALL, 12 tempo adjust, 13 new random mode)
-        select_ch++;
-        // Mode 12 + 13 are in development and testing right now
-        if (select_ch >= 11) {
-          select_ch = 0;
+      case 0:  // Select channel
+        select_ch += changeDirection;
+        if (select_ch >= 11) select_ch = 0;
+        else if (select_ch < 0) select_ch = 10;
+        break;
+      case 1:  // Hits
+        if (select_ch <= 6) {  // Normal channels
+          hits[select_ch] = (hits[select_ch] + changeDirection + 17) % 17;
+        } else if (select_ch == 6) {  // Random mode
+          bar_select = max(0, min(5, bar_select + changeDirection));
         }
         break;
-
-      case 1:                                    // Hits
-        if (select_ch != 6 && select_ch <= 6) {  // dial in hits
-          hits[select_ch]++;
-          if (hits[select_ch] >= 17) {
-            hits[select_ch] = 0;
-          }
-        }
-        // reintroduce the dial to change duration for random mode with more fine control. Defaults to 8 bars now.
-        else if (select_ch == 6) {  // random mode
-          bar_select++;
-          if (bar_select >= 6) {
-            bar_select = 5;
-          }
-        }
+      case 2:  // Offset
+        offset[select_ch] = max(0, min(15, offset[select_ch] + changeDirection));
         break;
-
-      case 2:  // offset
-        offset[select_ch]++;
-        if (offset[select_ch] >= 16) {
-          offset[select_ch] = 15;
-        }
+      case 3:  // Limit
+        limit[select_ch] = (limit[select_ch] + changeDirection + 17) % 17;
         break;
-
-      case 3:  // limit
-        limit[select_ch]++;
-        if (limit[select_ch] >= 17) {
-          limit[select_ch] = 0;
-        }
-        break;
-
-      case 4:  // mute
+      case 4:  // Mute
         mute[select_ch] = !mute[select_ch];
         break;
-
-      case 5:  // reset ch
+      case 5:  // Reset ch
         playing_step[select_ch] = 0;
         break;
-
-      case 6:  // random advance selected ch
+      case 6:  // Random advance selected ch with encoder
         Random_change_one(select_ch);
         break;
     }
   }
-
-  if (old_encD == 0 && encD == 1) {
-    switch (select_menu) {
-      case 0:  // select ch
-        select_ch--;
-        if (select_ch >= 0) {  // quick access menue (reset and mute)
-          select_ch = 9;
-        }
-        break;
-
-      case 1:                  // Hits
-        if (select_ch != 6) {  // not random mode
-          hits[select_ch]--;
-          if (hits[select_ch] >= 17) {  // prevent overflow
-            hits[select_ch] = 16;
-          }
-        } else if (select_ch == 6) {  // random mode
-          bar_select--;
-          if (bar_select >= 6) {  // six different change length setting
-            bar_select = 0;
-          }
-        }
-        break;
-
-      case 2:  // offset
-        offset[select_ch]--;
-        if (offset[select_ch] >= 16) {
-          offset[select_ch] = 0;
-        }
-        break;
-
-      case 3:                        // Limit
-        if (limit[select_ch] > 0) {  // Check if greater 0
-          limit[select_ch]--;
-        }
-        break;
-
-      case 4:  // mute
-        mute[select_ch] = !mute[select_ch];
-        break;
-
-      case 5:  // reset ch
-        playing_step[select_ch] = 0;
-        break;
-
-      case 6:  // random advance selected ch
-        Random_change_one(select_ch);
-        break;
-    }
-  }
+}
 
   //-----------------offset setting----------------------
   for (k = 0; k <= 5; k++) {  //k = 1~6ch
@@ -462,19 +386,19 @@ void loop() {
       OUTPUT2::setOutput(1);
       LED2::setOutput(1);
     }
-    if (offset_buf[0][playing_step[0]] == 1 && mute[0] == 0) {
+    if (offset_buf[2][playing_step[0]] == 1 && mute[0] == 0) {
       OUTPUT3::setOutput(1);
       LED3::setOutput(1);
     }
-    if (offset_buf[1][playing_step[0]] == 1 && mute[0] == 0) {
+    if (offset_buf[3][playing_step[0]] == 1 && mute[0] == 0) {
       OUTPUT4::setOutput(1);
       LED4::setOutput(1);
     }
-    if (offset_buf[0][playing_step[0]] == 1 && mute[0] == 0) {
+    if (offset_buf[4][playing_step[0]] == 1 && mute[0] == 0) {
       OUTPUT5::setOutput(1);
       LED5::setOutput(1);
     }
-    if (offset_buf[1][playing_step[0]] == 1 && mute[0] == 0) {
+    if (offset_buf[5][playing_step[0]] == 1 && mute[0] == 0) {
       OUTPUT6::setOutput(1);
       LED6::setOutput(1);
     }
@@ -505,7 +429,7 @@ void loop() {
     FastGPIO::Pin<10>::setOutput(0);
   }
   if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
-    FastGPIO::Pin<4>::setOutput(0); // CLK LED
+    FastGPIO::Pin<4>::setOutput(0);   // CLK LED
     FastGPIO::Pin<14>::setOutput(0);
     FastGPIO::Pin<15>::setOutput(0);
     FastGPIO::Pin<16>::setOutput(0);
@@ -531,27 +455,26 @@ void loop() {
 
 
 void iniIO() {
-  FastGPIO::Pin<4>::setOutputLow();   // CLK LED
+  FastGPIO::Pin<4>::setOutputLow();       // CLK LED
   FastGPIO::Pin<12>::setInputPulledUp();  // BUTTON
   FastGPIO::Pin<3>::setInputPulledUp();   // ENCODER A
   FastGPIO::Pin<2>::setInputPulledUp();   // ENCODER B
-  RESET::setInput();          // RST
-  CLK::setInput();          // CLK
-  OUTPUT1::setOutputLow();   // CH1
-  OUTPUT2::setOutputLow();   // CH2
-  OUTPUT3::setOutputLow();   // CH3
-  OUTPUT4::setOutputLow();   // CH4
-  OUTPUT5::setOutputLow();   // CH5
-  OUTPUT6::setOutputLow();  // CH6
+  RESET::setInput();                      // RST
+  CLK::setInput();                        // CLK
+  OUTPUT1::setOutputLow();                // CH1
+  OUTPUT2::setOutputLow();                // CH2
+  OUTPUT3::setOutputLow();                // CH3
+  OUTPUT4::setOutputLow();                // CH4
+  OUTPUT5::setOutputLow();                // CH5
+  OUTPUT6::setOutputLow();                // CH6
   // LED outputs
   LED1::setOutputLow();  // CH1 LED
   LED2::setOutputLow();  // CH2 LED
   LED3::setOutputLow();  // CH3 LED
   LED4::setOutputLow();  // CH6 LED
-  LED5::setOutputLow();   // CH4 LED
-  LED6::setOutputLow();   // CH5 LED
+  LED5::setOutputLow();  // CH4 LED
+  LED6::setOutputLow();  // CH5 LED
 }
-
 
 void factoryReset() {
   initializeDefaultRhythms();  // Re-initialize EEPROM with default rhythms
@@ -586,27 +509,22 @@ void saveConfiguration() {
     display.setTextSize(1);
     display.display();
 
-
     // Check for encoder rotation to select memory slot
-    newPosition = myEnc.read() / ENCODER_COUNT_PER_CLICK;
-    if (newPosition != oldPosition) {
-      if (newPosition > oldPosition) {
-        selectedSlot++;
-        if (selectedSlot >= NUM_MEMORY_SLOTS) {
-          selectedSlot = 0;
-        }
-      } else {
-        selectedSlot--;
-        if (selectedSlot < 0) {
-          selectedSlot = NUM_MEMORY_SLOTS - 1;
-        }
+    byte result = rotary.rotate();
+    if (result == 1) {  // CW
+      selectedSlot++;
+      if (selectedSlot >= NUM_MEMORY_SLOTS) {
+        selectedSlot = 0;
       }
-      oldPosition = newPosition;
+    } else if (result == 2) {  // CCW
+      selectedSlot--;
+      if (selectedSlot < 0) {
+        selectedSlot = NUM_MEMORY_SLOTS - 1;
+      }
     }
 
     // Check for button press
-    sw = digitalRead(ButtonPin) == LOW;
-    if (sw && sw_timer + 300 <= millis()) {  // button pressed
+    if (rotary.push() && sw_timer + 300 <= millis()) {  // button pressed
       sw_timer = millis();
       saving = false;
       for (int ch = 0; ch < 6; ++ch) {
@@ -620,6 +538,7 @@ void saveConfiguration() {
     }
   }
 }
+
 
 void loadConfiguration() {
   int selectedSlot = 0;
@@ -638,35 +557,31 @@ void loadConfiguration() {
     display.setTextSize(1);
     display.display();
 
-    // encoder rotation to select memory slot
-    newPosition = myEnc.read() / ENCODER_COUNT_PER_CLICK;
-    if (newPosition != oldPosition) {
-      if (newPosition > oldPosition) {
-        selectedSlot++;
-        if (selectedSlot >= NUM_MEMORY_SLOTS) {
-          selectedSlot = 0;
-        }
-      } else {
-        selectedSlot--;
-        if (selectedSlot < 0) {
-          selectedSlot = NUM_MEMORY_SLOTS - 1;
-        }
+    // Check for encoder rotation to select memory slot
+    byte result = rotary.rotate();
+    if (result == 1) {  // CW
+      selectedSlot++;
+      if (selectedSlot >= NUM_MEMORY_SLOTS) {
+        selectedSlot = 0;
       }
-      oldPosition = newPosition;
+    } else if (result == 2) {  // CCW
+      selectedSlot--;
+      if (selectedSlot < 0) {
+        selectedSlot = NUM_MEMORY_SLOTS - 1;
+      }
     }
 
     // Check for button press to load configuration
-    sw = digitalRead(ButtonPin) == LOW;
-    if (sw && sw_timer + 300 <= millis()) {  // Push button pressed
+    if (rotary.push() && sw_timer + 300 <= millis()) {
       sw_timer = millis();
-      loadFromEEPROM(selectedSlot);  // Load values from EEPROM first
+      loadFromEEPROM(selectedSlot);
 
       // Update individual arrays after loading from EEPROM
       for (int ch = 0; ch < 6; ++ch) {
         hits[ch] = memorySlots[selectedSlot].hits[ch];
         offset[ch] = memorySlots[selectedSlot].offset[ch];
         mute[ch] = memorySlots[selectedSlot].mute[ch];
-        limit[ch] = memorySlots[selectedSlot].limit[ch];  // Load limit values
+        limit[ch] = memorySlots[selectedSlot].limit[ch];
       }
 
       displaySuccessMessage();
