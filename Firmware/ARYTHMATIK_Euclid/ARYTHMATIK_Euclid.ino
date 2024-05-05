@@ -35,12 +35,12 @@
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
-// #define ROTATE_PANEL
+//#define ROTATE_PANEL
 
 #ifdef ROTATE_PANEL
-// Define pins for the rotated panel setup
-#define CLOCK_IN FastGPIO::Pin<13>
-#define RESET_IN FastGPIO::Pin<11>
+// Definitions when panel is rotated
+#define RESET FastGPIO::Pin<13>
+#define CLK FastGPIO::Pin<11>
 #define OUTPUT1 FastGPIO::Pin<8>
 #define OUTPUT2 FastGPIO::Pin<9>
 #define OUTPUT3 FastGPIO::Pin<10>
@@ -53,11 +53,10 @@
 #define LED4 FastGPIO::Pin<14>
 #define LED5 FastGPIO::Pin<15>
 #define LED6 FastGPIO::Pin<16>
-#define TRIGGER_IN FastGPIO::Pin<11>
 #else
-// Define pins for the normal setup
-#define CLOCK_IN FastGPIO::Pin<11>
-#define RESET_IN FastGPIO::Pin<13>
+// Definitions when panel is not rotated
+#define RESET FastGPIO::Pin<11>
+#define CLK FastGPIO::Pin<13>
 #define OUTPUT1 FastGPIO::Pin<5>
 #define OUTPUT2 FastGPIO::Pin<6>
 #define OUTPUT3 FastGPIO::Pin<7>
@@ -70,7 +69,6 @@
 #define LED4 FastGPIO::Pin<0>
 #define LED5 FastGPIO::Pin<1>
 #define LED6 FastGPIO::Pin<17>
-#define TRIGGER_IN FastGPIO::Pin<13>
 #endif
 
 #include <avr/pgmspace.h>
@@ -102,8 +100,6 @@ int debug = 0;  // ToDo: rework the debug feature (menue?)
 // Pins
 const int encoderAPin = 3, encoderBPin = 2, encoderButtonPin = 4, ButtonPin = 12;
 const int rstPin = 11, clkPin = 13, buttonPin = 12;
-const int chPins[6] = { 8, 9, 10, 5, 6, 7 };      // Channel output pins
-const int ledPins[6] = { 0, 1, 17, 14, 15, 16 };  // Corresponding LED pins
 
 // Timing
 unsigned long startMillis, currentMillis, lastTriggerTime, internalClockPeriod;
@@ -224,8 +220,6 @@ void setup() {
 }
 
 void loop() {
-  old_trg_in = trg_in;
-  old_rst_in = rst_in;
   old_encD = encD;
   old_encU = encU;
   oldPosition = newPosition;
@@ -436,72 +430,58 @@ void loop() {
   }
 
   //-----------------trigger detect, reset & output----------------------
-  bool rst_in = RESET_IN::isInputHigh();
-  bool trg_in = TRIGGER_IN::isInputHigh();
+  // Read inputs
+  bool rst_in = RESET::isInputHigh();  // External reset
+  bool trg_in = CLK::isInputHigh();
 
   if (old_rst_in == 0 && rst_in == 1) {
-    for (k = 0; k <= 5; k++) {
+    for (int k = 0; k <= 5; k++) {
       playing_step[k] = 0;
-      //disp_refresh = 1;
+      disp_refresh = 1;
     }
-    disp_refresh = 1;
   }
 
-  // no external trigger for more than 8 sec -> internal clock (not implemented yet)
-  if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
-    //useInternalClock = true;
-    //debug = 1;
-    disp_refresh = 1;
-  } else if (old_trg_in == 0 && trg_in == 1) {
+  // Trigger detection and response
+  if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
-    //useInternalClock = false;
-    FastGPIO::Pin<4>::setOutput(1);  // clock LED
+    FastGPIO::Pin<4>::setOutput(1);
     debug = 0;
-    for (i = 0; i <= 5; i++) {
+    for (int i = 0; i <= 5; i++) {
       playing_step[i]++;
       if (playing_step[i] >= limit[i]) {
-        playing_step[i] = 0;  // step limit is reached
+        playing_step[i] = 0;  // Step limit is reached
       }
     }
 
-    for (k = 0; k <= 5; k++) {  //output gate signal
-      if (offset_buf[k][playing_step[k]] == 1 && mute[k] == 0) {
-        switch (k) {
-          case 0:  //CH1
-            OUTPUT1::setOutput(1);
-            LED1::setOutput(1);
-            break;
-
-          case 1:  //CH2
-            OUTPUT2::setOutput(1);
-            LED2::setOutput(1);
-            break;
-
-          case 2:  //CH3
-            OUTPUT3::setOutput(1);
-            LED3::setOutput(1);
-            break;
-
-          case 3:  //CH4
-            OUTPUT4::setOutput(1);
-            LED4::setOutput(1);
-            break;
-
-          case 4:  //CH5
-            OUTPUT5::setOutput(1);
-            LED5::setOutput(1);
-            break;
-
-          case 5:  //CH6
-            OUTPUT6::setOutput(1);
-            LED6::setOutput(1);
-            break;
-        }
-      }
+    // Output gate signal
+    if (offset_buf[0][playing_step[0]] == 1 && mute[0] == 0) {
+      OUTPUT1::setOutput(1);
+      LED1::setOutput(1);
+    }
+    if (offset_buf[1][playing_step[0]] == 1 && mute[0] == 0) {
+      OUTPUT2::setOutput(1);
+      LED2::setOutput(1);
+    }
+    if (offset_buf[0][playing_step[0]] == 1 && mute[0] == 0) {
+      OUTPUT3::setOutput(1);
+      LED3::setOutput(1);
+    }
+    if (offset_buf[1][playing_step[0]] == 1 && mute[0] == 0) {
+      OUTPUT4::setOutput(1);
+      LED4::setOutput(1);
+    }
+    if (offset_buf[0][playing_step[0]] == 1 && mute[0] == 0) {
+      OUTPUT5::setOutput(1);
+      LED5::setOutput(1);
+    }
+    if (offset_buf[1][playing_step[0]] == 1 && mute[0] == 0) {
+      OUTPUT6::setOutput(1);
+      LED6::setOutput(1);
     }
 
     disp_refresh = 1;  //Updates the display where the trigger was entered.If it update it all the time, the response of gate on will be worse.
 
+    // Random advance mode (mode 6)
     if (select_ch == 6) {  // random mode setting
       step_cnt++;
       if (step_cnt >= 16) {
@@ -517,51 +497,59 @@ void loop() {
 
   if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
 
-    OUTPUT1::setOutput(0);
-    OUTPUT2::setOutput(0);
-    OUTPUT3::setOutput(0);
-    OUTPUT4::setOutput(0);
-    OUTPUT5::setOutput(0);
-    OUTPUT6::setOutput(0);
+    FastGPIO::Pin<5>::setOutput(0);
+    FastGPIO::Pin<6>::setOutput(0);
+    FastGPIO::Pin<7>::setOutput(0);
+    FastGPIO::Pin<8>::setOutput(0);
+    FastGPIO::Pin<9>::setOutput(0);
+    FastGPIO::Pin<10>::setOutput(0);
   }
   if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
-    LED1::setOutput(0);
-    LED2::setOutput(0);
-    LED3::setOutput(0);
-    LED4::setOutput(0);
-    LED5::setOutput(0);
-    LED6::setOutput(0);
-    FastGPIO::Pin<4>::setOutput(0);
+    FastGPIO::Pin<4>::setOutput(0); // CLK LED
+    FastGPIO::Pin<14>::setOutput(0);
+    FastGPIO::Pin<15>::setOutput(0);
+    FastGPIO::Pin<16>::setOutput(0);
+    FastGPIO::Pin<17>::setOutput(0);
+    FastGPIO::Pin<0>::setOutput(0);
+    FastGPIO::Pin<1>::setOutput(0);
+  }
+
+  if (old_trg_in == 0 && trg_in == 0 && gate_timer + 8000 <= millis()) {
+    //useInternalClock = true;
+    //debug = 1;
+    disp_refresh = 1;
   }
 
   if (disp_refresh) {
     OLED_display();  // refresh display
     disp_refresh = 0;
   }
+
+  old_trg_in = trg_in;
+  old_rst_in = rst_in;
 }
 
 
 void iniIO() {
-  FastGPIO::Pin<11>::setInput();          // RST
+  FastGPIO::Pin<4>::setOutputLow();   // CLK LED
   FastGPIO::Pin<12>::setInputPulledUp();  // BUTTON
-  FastGPIO::Pin<13>::setInput();          // CLK
   FastGPIO::Pin<3>::setInputPulledUp();   // ENCODER A
   FastGPIO::Pin<2>::setInputPulledUp();   // ENCODER B
-  // Outputs
-  FastGPIO::Pin<5>::setOutputLow();   // CH1
-  FastGPIO::Pin<6>::setOutputLow();   // CH2
-  FastGPIO::Pin<7>::setOutputLow();   // CH3
-  FastGPIO::Pin<8>::setOutputLow();   // CH4
-  FastGPIO::Pin<9>::setOutputLow();   // CH5
-  FastGPIO::Pin<10>::setOutputLow();  // CH6
+  RESET::setInput();          // RST
+  CLK::setInput();          // CLK
+  OUTPUT1::setOutputLow();   // CH1
+  OUTPUT2::setOutputLow();   // CH2
+  OUTPUT3::setOutputLow();   // CH3
+  OUTPUT4::setOutputLow();   // CH4
+  OUTPUT5::setOutputLow();   // CH5
+  OUTPUT6::setOutputLow();  // CH6
   // LED outputs
-  FastGPIO::Pin<14>::setOutputLow();  // CH1 LED
-  FastGPIO::Pin<15>::setOutputLow();  // CH2 LED
-  FastGPIO::Pin<16>::setOutputLow();  // CH3 LED
-  FastGPIO::Pin<17>::setOutputLow();  // CH6 LED
-  FastGPIO::Pin<0>::setOutputLow();   // CH4 LED
-  FastGPIO::Pin<1>::setOutputLow();   // CH5 LED
-  FastGPIO::Pin<4>::setOutputLow();   // CLK LED
+  LED1::setOutputLow();  // CH1 LED
+  LED2::setOutputLow();  // CH2 LED
+  LED3::setOutputLow();  // CH3 LED
+  LED4::setOutputLow();  // CH6 LED
+  LED5::setOutputLow();   // CH4 LED
+  LED6::setOutputLow();   // CH5 LED
 }
 
 
