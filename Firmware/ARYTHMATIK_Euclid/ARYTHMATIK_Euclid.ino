@@ -1,3 +1,5 @@
+#include <ArduinoTapTempo.h>
+
 /**
  * @file ARYTHMATIK_Euclid.ino
  * @author Modulove & friends
@@ -31,7 +33,7 @@
 
 // Flag for reversing the encoder direction.
 // ToDo: Put this in config Menue dialog at boot ?
-// #define ENCODER_REVERSED
+#define ENCODER_REVERSED
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
@@ -81,6 +83,7 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
+
 
 // For debug / UI
 #define FIRMWARE_MAGIC "EUCLID"
@@ -179,9 +182,9 @@ struct SlotConfiguration {
 
 // default config for presets
 const SlotConfiguration defaultSlots[3] PROGMEM = {
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 }, { 10, 10, 10, 20, 30, 40 } },     // Techno
-  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 }, { 100, 80, 60, 50, 40, 30 } },  // House
-  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 80, 60, 50, 40, 30 } }   // Ambient (Minimal beats)
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 }, { 100, 100, 100, 100, 100, 100 } },    // Techno
+  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 }, { 100, 100, 100, 100, 100, 100 } },  // House
+  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 } }   // Ambient (Minimal beats)
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Memory slots for configurations
@@ -197,6 +200,7 @@ void setup() {
   encoder.setMultiClickInterval(10);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setEncoderHandler(onEncoderRotation);
+  encoder.setRateLimit(5);
 
   initIO();
   initDisplay();
@@ -411,8 +415,12 @@ void onEncoderClicked(EncoderButton &eb) {
 
 void onEncoderRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
+  int acceleratedIncrement = increment * increment;  // Squaring the increment
   if (increment != 0) {
-    handleMenuNavigation(increment);
+    if (increment < 0) {
+      acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+    }
+    handleMenuNavigation(acceleratedIncrement);
   }
 }
 
@@ -460,8 +468,8 @@ void handleMenuNavigation(int changeDirection) {
       case 6:  // Randomize channel
         Random_change_one(select_ch);
         break;
-      case 7:                                                                                                             // Set probability
-        currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection * 5 + 105) % 101;  // Wrap-around for probability, 0-100
+      case 7:  // Set probability
+        currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection + 101) % 101;
         break;
     }
   }
@@ -866,12 +874,14 @@ void OLED_display() {
     }
   }
 
+/* 
+// fixme hackme ToDo
   //write hit and offset values for H > 9 to 16 hits if not muted and not in edit mode. better to just draw dots to where the hits will be instead of the shape and lines ?
   if (select_menu > 3 || select_menu == 0) {
     for (k = 0; k <= 5; k++) {
       if (currentConfig.hits[k] > 9 && currentConfig.mute[k] == 0) {  // show overview of channel if not muted
-        int x_base = 7 + graph_x[k];
-        int y_base_hit = 8 + graph_y[k];
+        int x_base = 10 + graph_x[k];
+        int y_base_hit = 11 + graph_y[k];
         int y_base_offset = 17 + graph_y[k];
         if (x_base < 120 && y_base_hit < 64 && y_base_offset < 64 && select_menu != 7) {
           display.setCursor(x_base, y_base_hit);
@@ -889,6 +899,7 @@ void OLED_display() {
       }
     }
   }
+  */
 
   // draw channel info in edit mode, should be helpfull while editing.
   for (int ch = 0; ch < 6; ch++) {
@@ -929,8 +940,8 @@ void OLED_display() {
           break;
         case 7:
 
-          int barWidth = 8;    // Width of the probability bar
-          int maxHeight = 18;  // Maximum height of the bar, adjust as needed
+          int barWidth = 4;    // Width of the probability bar
+          int maxHeight = 15;  // Maximum height of the bar, adjust as needed
           int margin = 2;      // Margin around the fillin
 
           int bar_x = graph_x[ch] + 12;  // X position of the bar graph
@@ -951,22 +962,24 @@ void OLED_display() {
           int text_y = outerY - 10;                    // Positioned just inside the top border
 
           // Ensure elements stay within display boundaries
-          text_x = constrain(text_x, 0, 120);  // Constrain x to OLED width
-          text_y = constrain(text_y, 0, 60);   // Constrain y to OLED height
+          text_x = constrain(text_x, 0, 128);  // Constrain x to OLED width
+          text_y = constrain(text_y, 0, 64);   // Constrain y to OLED height
 
           // Display percentage on top of the bar graph
           display.setCursor(text_x, text_y);
           display.print(currentConfig.probability[ch]);
           //display.println("%");
 
-          if (select_menu == 7 && currentConfig.probability[ch] > 0) {
+          if (select_menu == 7) {
             // Draw the outer rectangle
             display.drawRect(outerX, outerY, outerWidth, outerHeight, WHITE);
+
+            // Calculate startY to begin at the bottom of the rectangle
+            int startY = bar_y - barHeight;  // Start point for the filled bar, no bottom margin
 
             // Draw the filled bar part within the margins
             display.fillRect(bar_x, startY, barWidth, barHeight, WHITE);  // Adjust to only fill within the border
           }
-
           break;
       }
     }
