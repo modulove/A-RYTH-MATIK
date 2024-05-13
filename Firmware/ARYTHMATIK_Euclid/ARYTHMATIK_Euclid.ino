@@ -370,11 +370,43 @@ void initDisplay() {
 
 void onEncoderClicked(EncoderButton &eb) {
 
-  select_menu++;
+  if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
+    disp_refresh = debug;
+    select_menu++;
+  }
 
   if (select_menu > 7) select_menu = 0;  // Wraps around the channel individual settings menus
 
   if (select_ch > 5 && select_menu > 1) select_menu = 0;  // Wrap around the other menu items
+  // Mode-specific actions
+  if (select_ch == 7 && select_menu == 1) {
+    saveConfiguration();
+    select_menu = 0;
+  }
+  if (select_ch == 8 && select_menu == 1) {
+    loadConfiguration();
+    select_menu = 0;
+  }
+  if (select_ch == 9 && select_menu == 1) {
+    resetSeq();
+    select_menu = 0;
+  }
+  if (select_ch == 10 && select_menu == 1) {
+    toggleAllMutes();
+    select_menu = 0;
+  }
+  if (select_ch == 11 && select_menu == 1) {  // modes only having a button
+
+    // Dial in tempo with the encoder and / or TapTempo via encoder button
+    //adjustTempo();
+    select_menu = 0;
+  }
+  if (select_ch == 12 && select_menu == 1) {  //
+    // This needs to work as before where you advance through the random array by rotating the encoder.
+    // should make it possible to go back and forth like 5 steps and have a set of steady values
+    Random_change();
+    //disp_refresh = 1;
+  }
 }
 
 void onEncoderRotation(EncoderButton &eb) {
@@ -444,16 +476,15 @@ void loadDefaultConfig(SlotConfiguration *config, int index) {
 void saveToEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
   if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
-    EEPROM.put(baseAddress, memorySlots[slot]);
+    EEPROM.put(baseAddress, currentConfig);  // Changed from memorySlots[slot] to currentConfig
   } else {
     // set error flag or display message ?
   }
 }
-
 void loadFromEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
   if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
-    EEPROM.get(baseAddress, memorySlots[slot]);
+    EEPROM.get(baseAddress, currentConfig);  // Changed from memorySlots[slot] to currentConfig
   } else {
     // Handle the error
   }
@@ -476,31 +507,30 @@ void saveConfiguration() {
     display.setTextSize(1);
     display.display();
 
+
     // Check for encoder rotation to select memory slot
-    byte result = encoder.increment();
-    if (result == 1) {  // CW
-      selectedSlot++;
-      if (selectedSlot >= NUM_MEMORY_SLOTS) {
-        selectedSlot = 0;
-      }
-    } else if (result == -1) {  // CCW
-      selectedSlot--;
-      if (selectedSlot < 0) {
-        selectedSlot = NUM_MEMORY_SLOTS - 1;
+    int result = encoder.increment();
+    if (result != 0) {
+      if (result > 0) {  // CW
+        selectedSlot++;
+        if (selectedSlot >= NUM_MEMORY_SLOTS) {
+          selectedSlot = 0;
+        }
+      } else if (result < 0) {  // CCW
+        selectedSlot--;
+        if (selectedSlot < 0) {
+          selectedSlot = NUM_MEMORY_SLOTS - 1;
+        }
       }
     }
-
     // Check for button press
     if (encoder.buttonState()) {  // button pressed
       saving = false;
-      for (int ch = 0; ch < 6; ++ch) {
-        memorySlots[selectedSlot].hits[ch] = currentConfig.hits[ch];
-        memorySlots[selectedSlot].offset[ch] = currentConfig.offset[ch];
-        memorySlots[selectedSlot].mute[ch] = currentConfig.mute[ch];
-        memorySlots[selectedSlot].limit[ch] = currentConfig.limit[ch];
-      }
+      // Update all fields including the probability
+      memorySlots[selectedSlot] = currentConfig;  // This copies all fields including probability
       saveToEEPROM(selectedSlot);
     }
+    delay(300);  // slow down for debugging
   }
 }
 
@@ -521,33 +551,28 @@ void loadConfiguration() {
     display.display();
 
     // Check for encoder rotation to select memory slot
-    byte result = encoder.increment();
-    if (result == 1) {  // CW
-      selectedSlot++;
-      if (selectedSlot >= NUM_MEMORY_SLOTS) {
-        selectedSlot = 0;
-      }
-    } else if (result == -1) {  // CCW
-      selectedSlot--;
-      if (selectedSlot < 0) {
-        selectedSlot = NUM_MEMORY_SLOTS - 1;
+    int result = encoder.increment();
+    if (result != 0) {
+      if (result > 0) {  // CW
+        selectedSlot++;
+        if (selectedSlot >= NUM_MEMORY_SLOTS) {
+          selectedSlot = 0;
+        }
+      } else if (result < 0) {  // CCW
+        selectedSlot--;
+        if (selectedSlot < 0) {
+          selectedSlot = NUM_MEMORY_SLOTS - 1;
+        }
       }
     }
-
     // Check for button press to load configuration
     if (encoder.buttonState()) {
       loadFromEEPROM(selectedSlot);
 
-      // Update individual arrays after loading from EEPROM
-      for (int ch = 0; ch < 6; ++ch) {
-        currentConfig.hits[ch] = memorySlots[selectedSlot].hits[ch];
-        currentConfig.offset[ch] = memorySlots[selectedSlot].offset[ch];
-        currentConfig.mute[ch] = memorySlots[selectedSlot].mute[ch];
-        currentConfig.limit[ch] = memorySlots[selectedSlot].limit[ch];
-      }
-
+      // No need for copying fields manually if `loadFromEEPROM` sets `currentConfig` directly
       loading = false;
     }
+    delay(300);  // slow down for debugging
   }
 }
 
@@ -701,7 +726,6 @@ void drawModeMenu(byte select_ch) {
 }
 
 
-
 // Initialize EEPROM and check magic number
 void checkAndInitializeSettings() {
   unsigned int magic;  // Assuming magic number can fit in an unsigned int
@@ -711,6 +735,7 @@ void checkAndInitializeSettings() {
     EEPROM.put(FIRMWARE_MAGIC_ADDRESS, FIRMWARE_MAGIC);
   }
 }
+
 
 // Drawing random advance indicator
 void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max) {  // Change to const int*
@@ -830,7 +855,7 @@ void OLED_display() {
   }
 
   //draw play step circle
-  for (k = 0; k <= 5; k++) {           //ch count
+  for (k = 0; k <= 5; k++) {                               //ch count
     if (currentConfig.mute[k] == 0 && select_menu != 7) {  //mute on = no display circle
       if (offset_buf[k][playing_step[k]] == 0) {
         display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
