@@ -1,5 +1,3 @@
-#include <ArduinoTapTempo.h>
-
 /**
  * @file ARYTHMATIK_Euclid.ino
  * @author Modulove & friends
@@ -83,6 +81,7 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
+//#include <ArduinoTapTempo.h>
 
 
 // For debug / UI
