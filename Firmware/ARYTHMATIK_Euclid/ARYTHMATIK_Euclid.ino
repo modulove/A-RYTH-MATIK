@@ -207,7 +207,7 @@ void setup() {
   initDisplay();
 
   checkAndInitializeSettings();
-  initializeCurrentConfig();
+  //initializeCurrentConfig();
 
   OLED_display();
   lastTriggerTime = millis();
@@ -447,14 +447,14 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   }
 }
 
-void initializeCurrentConfig() {
-  // Copy the configuration from PROGMEM to RAM
-  memcpy_P(&currentConfig, &defaultSlots[1], sizeof(SlotConfiguration));
-}
-
-void loadConfigurationFromPreset(int presetIndex) {
-  if (presetIndex >= 0 && presetIndex < 3) {  // Assuming there are 3 presets
-    memcpy_P(&currentConfig, &defaultSlots[presetIndex], sizeof(SlotConfiguration));
+void initializeCurrentConfig(bool loadDefaults = false) {
+  if (loadDefaults) {
+    // Load default configuration from PROGMEM
+    memcpy_P(&currentConfig, &defaultSlots[1], sizeof(SlotConfiguration));
+  } else {
+    // Load configuration from EEPROM
+    int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
+    EEPROM.get(baseAddress, currentConfig);
   }
 }
 
@@ -504,64 +504,22 @@ void loadDefaultConfig(SlotConfiguration *config, int index) {
   memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
 }
 
+
 void saveToEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
   if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
-    EEPROM.put(baseAddress, currentConfig);  // Changed from memorySlots[slot] to currentConfig
+    EEPROM.put(baseAddress, currentConfig);
   } else {
     // set error flag or display message ?
   }
 }
+
 void loadFromEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
   if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
-    EEPROM.get(baseAddress, currentConfig);  // Changed from memorySlots[slot] to currentConfig
+    EEPROM.get(baseAddress, currentConfig);
   } else {
     // Handle the error
-  }
-}
-
-void saveConfiguration() {
-  int selectedSlot = 0;
-  bool saving = true;
-
-  while (saving) {
-    // Display selected slot
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(24, 10);
-    display.println(F("Save to Slot:"));
-    display.setCursor(60, 29);
-    display.setTextSize(2);
-    display.print(selectedSlot + 1);
-    display.setTextSize(1);
-    display.display();
-
-
-    // Check for encoder rotation to select memory slot
-    int result = encoder.increment();
-    if (result != 0) {
-      if (result > 0) {  // CW
-        selectedSlot++;
-        if (selectedSlot >= NUM_MEMORY_SLOTS) {
-          selectedSlot = 0;
-        }
-      } else if (result < 0) {  // CCW
-        selectedSlot--;
-        if (selectedSlot < 0) {
-          selectedSlot = NUM_MEMORY_SLOTS - 1;
-        }
-      }
-    }
-    // Check for button press
-    if (encoder.buttonState()) {  // button pressed
-      saving = false;
-      // Update all fields including the probability
-      memorySlots[selectedSlot] = currentConfig;  // This copies all fields including probability
-      saveToEEPROM(selectedSlot);
-    }
-    delay(300);  // slow down for debugging
   }
 }
 
@@ -607,16 +565,56 @@ void loadConfiguration() {
   }
 }
 
+void saveConfiguration() {
+  int selectedSlot = 0;
+  bool saving = true;
+
+  while (saving) {
+    // Display selected slot
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(24, 10);
+    display.println(F("Save to Slot:"));
+    display.setCursor(60, 29);
+    display.setTextSize(2);
+    display.print(selectedSlot + 1);
+    display.setTextSize(1);
+    display.display();
+
+    // Check for encoder rotation to select memory slot
+    int result = encoder.increment();
+    if (result != 0) {
+      if (result > 0) {  // CW
+        selectedSlot++;
+        if (selectedSlot >= NUM_MEMORY_SLOTS) {
+          selectedSlot = 0;
+        }
+      } else if (result < 0) {  // CCW
+        selectedSlot--;
+        if (selectedSlot < 0) {
+          selectedSlot = NUM_MEMORY_SLOTS - 1;
+        }
+      }
+    }
+    // Check for button press
+    if (encoder.buttonState()) {  // button pressed
+      saving = false;
+      memorySlots[selectedSlot] = currentConfig;  // This copies all fields including probability
+      saveToEEPROM(selectedSlot);
+    }
+    delay(300);  // slow down for debugging
+  }
+}
+
 void saveCurrentConfigToEEPROM() {
   // could save to the last selected save slot. For now default slot1
   saveToEEPROM(1);
 }
 
-// reset the whole thing and put in (lots of?) modern / traditional euclid patterns as presets ?
 void initializeDefaultRhythms() {
   for (int i = 0; i < NUM_MEMORY_SLOTS; i++) {
     SlotConfiguration config;
-    // Load the default config into RAM from PROGMEM
     memcpy_P(&config, &defaultSlots[i], sizeof(SlotConfiguration));
     EEPROM.put(EEPROM_START_ADDRESS + i * sizeof(SlotConfiguration), config);
   }
@@ -754,14 +752,19 @@ void drawModeMenu(byte select_ch) {
 
 // Initialize EEPROM and check magic number
 void checkAndInitializeSettings() {
-  unsigned int magic;  // Assuming magic number can fit in an unsigned int
+  char magic[sizeof(FIRMWARE_MAGIC)];
   EEPROM.get(FIRMWARE_MAGIC_ADDRESS, magic);
-  if (magic != FIRMWARE_MAGIC) {
+  
+  if (strncmp(magic, FIRMWARE_MAGIC, sizeof(FIRMWARE_MAGIC)) != 0) {
+    // Magic number not found, initialize EEPROM with default values
     initializeDefaultRhythms();
     EEPROM.put(FIRMWARE_MAGIC_ADDRESS, FIRMWARE_MAGIC);
+    initializeCurrentConfig(true);  // Load defaults into currentConfig
+  } else {
+    // Load the configuration from EEPROM
+    initializeCurrentConfig();
   }
 }
-
 
 // Drawing random advance indicator
 void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max) {  // Change to const int*
