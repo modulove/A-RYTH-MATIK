@@ -405,18 +405,8 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-
-  // if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
-  //   disp_refresh = debug;
-  //   select_menu++;
-  // }
-
+  // Increment selected setting.
   selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
-
-
-  // if (select_menu > 7) select_menu = 0;  // Wraps around the channel individual settings menus
-
-  if (select_ch > 5 && select_menu > 1) select_menu = 0;  // Wrap around the other menu items
 
   // Mode-specific actions
   if (select_ch == 7 && select_menu == 1) {
