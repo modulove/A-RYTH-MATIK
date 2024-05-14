@@ -111,6 +111,7 @@ byte playing_step[6] = { 0, 0, 0, 0, 0, 0 };
 byte select_menu = 0;   //0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD
 byte select_ch = 0;     //0~5 = each channel -1 , 6 = random mode
 bool disp_refresh = 0;  //0=not refresh display , 1= refresh display , countermeasure of display refresh bussy
+bool allMutedFlag = false;
 
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 };  //each chanel display offset
 //const byte graph_y[6] = { 1, 1, 1, 33, 33, 33 };    //each chanel display offset -> +1 vs. original
@@ -427,11 +428,11 @@ void onEncoderRotation(EncoderButton &eb) {
 void onEncoderPressedRotation(EncoderButton &eb) {
   // Ensure we're in the first menu stage and a valid channel is selected
   if (select_menu == 0 && select_ch < 6) {
-    int increment = encoder.increment(); // Get the incremental change (could be negative, positive, or zero)
-    int acceleratedIncrement = increment * increment; // Squaring the increment for quicker adjustments
+    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
     if (increment != 0) {
       if (increment < 0) {
-        acceleratedIncrement = -acceleratedIncrement; // Ensure that the direction of increment is preserved
+        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
       }
       // Adjust the Hits value for the selected channel
       currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + acceleratedIncrement + 17) % 17;
@@ -669,6 +670,7 @@ void toggleAllMutes() {
   for (int i = 0; i < 6; i++) {
     currentConfig.mute[i] = !allMuted;
   }
+  allMutedFlag = !allMuted;
 }
 
 
@@ -807,6 +809,20 @@ void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, c
 
 void OLED_display() {
   display.clearDisplay();
+
+  // Check if all channels are muted
+  if (allMutedFlag) {
+    // Draw "MUTE" message in the center of the screen
+    display.setTextSize(2);                                                       // Set text size to 2 for larger letters
+    display.setTextColor(WHITE);                                                  // Set text color to white
+    display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center the text
+    display.println(F("MUTE"));
+    display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
+    display.display();
+    display.setTextSize(1);  // Reset text size
+    return;                  // Exit the function early to avoid drawing other elements
+  }
+
   // OLED display for Euclidean rhythm settings
   // Draw setting menu (WIP)
   // select_ch are the channels and >5 the modes -> random advance, save, load, global mute, sequence reset, ..
