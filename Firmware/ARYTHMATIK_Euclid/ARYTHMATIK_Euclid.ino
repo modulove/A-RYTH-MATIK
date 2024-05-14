@@ -199,6 +199,7 @@ void setup() {
   encoder.setMultiClickInterval(10);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setEncoderHandler(onEncoderRotation);
+  encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler for pressed rotation
   encoder.setRateLimit(5);
 
   initIO();
@@ -413,13 +414,29 @@ void onEncoderClicked(EncoderButton &eb) {
 }
 
 void onEncoderRotation(EncoderButton &eb) {
-  int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
+  int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
   int acceleratedIncrement = increment * increment;  // Squaring the increment
   if (increment != 0) {
     if (increment < 0) {
       acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
     }
     handleMenuNavigation(acceleratedIncrement);
+  }
+}
+
+void onEncoderPressedRotation(EncoderButton &eb) {
+  // Ensure we're in the first menu stage and a valid channel is selected
+  if (select_menu == 0 && select_ch < 6) {
+    int increment = encoder.increment(); // Get the incremental change (could be negative, positive, or zero)
+    int acceleratedIncrement = increment * increment; // Squaring the increment for quicker adjustments
+    if (increment != 0) {
+      if (increment < 0) {
+        acceleratedIncrement = -acceleratedIncrement; // Ensure that the direction of increment is preserved
+      }
+      // Adjust the Hits value for the selected channel
+      currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + acceleratedIncrement + 17) % 17;
+      //disp_refresh = 1;
+    }
   }
 }
 
@@ -873,7 +890,7 @@ void OLED_display() {
     }
   }
 
-/* 
+  /* 
 // fixme hackme ToDo
   //write hit and offset values for H > 9 to 16 hits if not muted and not in edit mode. better to just draw dots to where the hits will be instead of the shape and lines ?
   if (select_menu > 3 || select_menu == 0) {
