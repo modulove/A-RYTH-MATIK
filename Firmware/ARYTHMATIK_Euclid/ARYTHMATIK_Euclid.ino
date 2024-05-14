@@ -421,7 +421,13 @@ void onEncoderRotation(EncoderButton &eb) {
     if (increment < 0) {
       acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
     }
-    handleMenuNavigation(acceleratedIncrement);
+
+    if (select_ch == 12 && select_menu == 1) {
+      // Advance random change values with encoder rotation
+      Random_change();
+    } else {
+      handleMenuNavigation(acceleratedIncrement);
+    }
   }
 }
 
@@ -621,24 +627,18 @@ void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
   EEPROM.put(address, config);
 }
 
-// Random change function for all channels
 void Random_change() {
-  unsigned long seed = analogRead(A0);
-  randomSeed(seed);
-
-  for (k = 1; k <= 5; k++) {
-
+  // Loop over the channels to randomly change values
+  for (k = 0; k < 6; k++) {  // Loop through all channels
     if (hit_occ[k] >= random(1, 100)) {
       currentConfig.hits[k] = random(hit_rng_min[k], hit_rng_max[k]);
     }
-
     if (off_occ[k] >= random(1, 100)) {
       currentConfig.offset[k] = random(0, 16);
     }
-
-    if (mute_occ[k] >= random(1, 100)) {
+    if (k > 0 && mute_occ[k] >= random(1, 100)) {  // Avoid muting channel 1
       currentConfig.mute[k] = 1;
-    } else if (mute_occ[k] < random(1, 100)) {
+    } else if (k > 0 && mute_occ[k] < random(1, 100)) {
       currentConfig.mute[k] = 0;
     }
   }
