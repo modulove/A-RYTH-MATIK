@@ -17,7 +17,7 @@
  * - Reset through dedicated input and button press (Also possible individually per channel)
  * - Random auto advance, Save / Load State
  *
- * Hardware:
+ * Hardware:ƒ
  * - Clock input (CLK) for timing triggers.
  * - Input: Clock (CLK), Reset (RST) and Rotary Encoder (with Button).
  * - Output: 6 Trigger Channels with LED indicators + CLK LED
@@ -31,7 +31,7 @@
 
 // Flag for reversing the encoder direction.
 // ToDo: Put this in config Menue dialog at boot ?
-#define ENCODER_REVERSED
+// #define ENCODER_REVERSED
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
@@ -111,7 +111,37 @@ bool useInternalClock = false;
 unsigned long lastExternalClockMillis = 0;
 
 // display Menu and UI
+enum Setting {
+  SETTING_TOP_MENU,
+  SETTING_HITS,
+  SETTING_OFFSET,
+  SETTING_LIMIT,
+  SETTING_MUTE,
+  SETTING_RESET,
+  SETTING_RANDOM,
+  SETTING_PROB,
+  SETTING_LAST,
+};
+Setting selected_setting = SETTING_TOP_MENU;
 byte select_menu = 0;   //0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD
+
+enum TopMenu {
+  MENU_CH_1,
+  MENU_CH_2,
+  MENU_CH_3,
+  MENU_CH_4,
+  MENU_CH_5,
+  MENU_CH_6,
+  MENU_RANDOM_ADVANCE,
+  MENU_SAVE,
+  MENU_LOAD,
+  MENU_ALL_RESET,
+  MENU_ALL_MUTE,
+  MENU_TEMP,
+  MENU_RAND,
+  MENU_LAST,
+};
+TopMenu selected_menu = MENU_CH_1;
 byte select_ch = 0;     //0~5 = each channel -1 , 6 = random mode
 bool disp_refresh = 0;  //0=not refresh display , 1= refresh display , countermeasure of display refresh bussy
 bool allMutedFlag = false;
@@ -376,14 +406,18 @@ void initDisplay() {
 
 void onEncoderClicked(EncoderButton &eb) {
 
-  if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
-    disp_refresh = debug;
-    select_menu++;
-  }
+  // if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
+  //   disp_refresh = debug;
+  //   select_menu++;
+  // }
 
-  if (select_menu > 7) select_menu = 0;  // Wraps around the channel individual settings menus
+  selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
+
+
+  // if (select_menu > 7) select_menu = 0;  // Wraps around the channel individual settings menus
 
   if (select_ch > 5 && select_menu > 1) select_menu = 0;  // Wrap around the other menu items
+
   // Mode-specific actions
   if (select_ch == 7 && select_menu == 1) {
     saveConfiguration();
@@ -458,42 +492,45 @@ void initializeCurrentConfig(bool loadDefaults = false) {
 }
 
 void handleMenuNavigation(int changeDirection) {
-  if (changeDirection != 0) {
+  if (changeDirection == 0) return;
 
-    switch (select_menu) {
-      case 0:                                                 // Select channel
-        select_ch = (select_ch + changeDirection + 13) % 13;  // Wrap-around for channel selection
-        break;
-      case 1:                                                                                           // Hits
-        if (select_ch != 6) {                                                                           // Handling channels 0 to 5
-          currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + changeDirection + 17) % 17;  // Ensure hits wrap properly
-        } else {                                                                                        // Handling Random Mode (select_ch == 6)
-          // Increment or decrement `bar_select` based on encoder direction
-          bar_select += changeDirection;
-          // Ensure `bar_select` stays within the range of 1 to 5
-          if (bar_select < 1) bar_select = 6;
-          if (bar_select > 6) bar_select = 1;
-        }
-        break;
-      case 2:
-        currentConfig.offset[select_ch] = (currentConfig.offset[select_ch] + changeDirection + 16) % 16;  // Wrap-around for offset
-        break;
-      case 3:                                                                                           // Limit
-        currentConfig.limit[select_ch] = (currentConfig.limit[select_ch] + changeDirection + 17) % 17;  // Wrap-around for limit
-        break;
-      case 4:                                                            // Mute
-        currentConfig.mute[select_ch] = !currentConfig.mute[select_ch];  // Toggle mute state
-        break;
-      case 5:  // Reset channel step
-        playing_step[select_ch] = 0;
-        break;
-      case 6:  // Randomize channel
-        Random_change_one(select_ch);
-        break;
-      case 7:  // Set probability
-        currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection + 101) % 101;
-        break;
-    }
+  switch (selected_setting) {
+    case SETTING_TOP_MENU:
+      // select_ch = (select_ch + changeDirection + 13) % 13;  // Wrap-around for channel selection
+      selected_menu = static_cast<TopMenu>((selected_menu + 1) % MENU_LAST);
+      break;
+
+    case SETTING_HITS:
+      if (selected_menu >= MENU_CH_1 && selected_menu <= MENU_CH_6) {          
+        select_ch = int(selected_menu);  // This should be a function to explicitly convert enum to channel index.
+        currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + changeDirection + 17) % 17;  // Ensure hits wrap properly
+      } else {                                                                                        // Handling Random Mode (select_ch == 6)
+        // Increment or decrement `bar_select` based on encoder direction
+        bar_select += changeDirection;
+        // Ensure `bar_select` stays within the range of 1 to 5
+        if (bar_select < 1) bar_select = 6;
+        if (bar_select > 6) bar_select = 1;
+      }
+      break;
+    case SETTING_OFFSET:
+      currentConfig.offset[select_ch] = (currentConfig.offset[select_ch] + changeDirection + 16) % 16;  // Wrap-around for offset
+      break;
+    case SETTING_LIMIT:                                                                                           // Limit
+      currentConfig.limit[select_ch] = (currentConfig.limit[select_ch] + changeDirection + 17) % 17;  // Wrap-around for limit
+      break;
+    case SETTING_MUTE:                                                            // Mute
+      currentConfig.mute[select_ch] = !currentConfig.mute[select_ch];  // Toggle mute state
+      break;
+    case SETTING_RESET:  // Reset channel step
+      playing_step[select_ch] = 0;
+      break;
+    case SETTING_RANDOM:
+      // Randomize channel
+      Random_change_one(select_ch);
+      break;
+    case SETTING_PROB:
+      currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection + 101) % 101;
+      break;
   }
 }
 
