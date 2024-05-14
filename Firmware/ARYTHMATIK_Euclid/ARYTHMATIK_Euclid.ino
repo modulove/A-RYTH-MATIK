@@ -83,7 +83,6 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Wire.h>
 //#include <ArduinoTapTempo.h>
 
-
 // For debug / UI
 #define FIRMWARE_MAGIC "EUCLID"
 #define FIRMWARE_MAGIC_ADDRESS 0  // Store the firmware magic number at address 0
@@ -106,6 +105,10 @@ const int rstPin = 11, clkPin = 13;
 unsigned long startMillis, currentMillis, lastTriggerTime, internalClockPeriod;
 bool trg_in = false, old_trg_in = false, rst_in = false, old_rst_in = false;
 byte playing_step[6] = { 0, 0, 0, 0, 0, 0 };
+unsigned long internalClockMillis = 0;
+unsigned long internalClockInterval = 60000 / 120;  // Default to 120 BPM
+bool useInternalClock = false;
+unsigned long lastExternalClockMillis = 0;
 
 // display Menu and UI
 byte select_menu = 0;   //0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD
@@ -207,7 +210,6 @@ void setup() {
   initDisplay();
 
   checkAndInitializeSettings();
-  //initializeCurrentConfig();
 
   OLED_display();
   lastTriggerTime = millis();
@@ -216,7 +218,6 @@ void setup() {
 void loop() {
 
   encoder.update();  // Process Encoder & button updates
-
 
   //-----------------offset setting----------------------
   for (k = 0; k <= 5; k++) {  //k = 1~6ch
@@ -410,7 +411,6 @@ void onEncoderClicked(EncoderButton &eb) {
     // This needs to work as before where you advance through the random array by rotating the encoder.
     // should make it possible to go back and forth like 5 steps and have a set of steady values
     Random_change();
-    //disp_refresh = 1;
   }
 }
 
@@ -440,9 +440,8 @@ void onEncoderPressedRotation(EncoderButton &eb) {
       if (increment < 0) {
         acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
       }
-      // Adjust the Hits value for the selected channel
+      // Adjust the Hits value for the selected channel to more quickly edit the beat / rythm
       currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + acceleratedIncrement + 17) % 17;
-      //disp_refresh = 1;
     }
   }
 }
@@ -498,12 +497,10 @@ void handleMenuNavigation(int changeDirection) {
   }
 }
 
-
 // Loading SlotConfiguration from PROGMEM
 void loadDefaultConfig(SlotConfiguration *config, int index) {
   memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
 }
-
 
 void saveToEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
@@ -528,6 +525,8 @@ void loadConfiguration() {
   bool loading = true;
 
   while (loading) {
+    encoder.update();  // Update encoder state
+
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -554,14 +553,13 @@ void loadConfiguration() {
         }
       }
     }
-    // Check for button press to load configuration
-    if (encoder.buttonState()) {
-      loadFromEEPROM(selectedSlot);
 
-      // No need for copying fields manually if `loadFromEEPROM` sets `currentConfig` directly
+    // Check for button press to load configuration
+    if (encoder.buttonState() == 1) {  // Check if the button is pressed
+      loadFromEEPROM(selectedSlot);
       loading = false;
     }
-    delay(300);  // slow down for debugging
+    delay(100);
   }
 }
 
@@ -570,6 +568,8 @@ void saveConfiguration() {
   bool saving = true;
 
   while (saving) {
+    encoder.update();  // Update encoder state
+
     // Display selected slot
     display.clearDisplay();
     display.setTextSize(1);
@@ -597,13 +597,14 @@ void saveConfiguration() {
         }
       }
     }
-    // Check for button press
-    if (encoder.buttonState()) {  // button pressed
-      saving = false;
+
+    // Check for button press to save configuration
+    if (encoder.buttonState() == 1) {             // Check if the button is pressed
       memorySlots[selectedSlot] = currentConfig;  // This copies all fields including probability
       saveToEEPROM(selectedSlot);
+      saving = false;
     }
-    delay(300);  // slow down for debugging
+    delay(100);
   }
 }
 
@@ -670,7 +671,6 @@ void toggleAllMutes() {
   }
   allMutedFlag = !allMuted;
 }
-
 
 void resetSeq() {
   for (k = 0; k <= 5; k++) {
@@ -749,12 +749,11 @@ void drawModeMenu(byte select_ch) {
   }
 }
 
-
 // Initialize EEPROM and check magic number
 void checkAndInitializeSettings() {
   char magic[sizeof(FIRMWARE_MAGIC)];
   EEPROM.get(FIRMWARE_MAGIC_ADDRESS, magic);
-  
+
   if (strncmp(magic, FIRMWARE_MAGIC, sizeof(FIRMWARE_MAGIC)) != 0) {
     // Magic number not found, initialize EEPROM with default values
     initializeDefaultRhythms();
@@ -816,14 +815,14 @@ void OLED_display() {
   // Check if all channels are muted
   if (allMutedFlag) {
     // Draw "MUTE" message in the center of the screen
-    display.setTextSize(2);                                                       // Set text size to 2 for larger letters
-    display.setTextColor(WHITE);                                                  // Set text color to white
-    display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center the text
+    display.setTextSize(2);  // large letters
+    display.setTextColor(WHITE);
+    display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
     display.println(F("MUTE"));
     display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
     display.display();
     display.setTextSize(1);  // Reset text size
-    return;                  // Exit the function early to avoid drawing other elements
+    return;                  // Exit function early to avoid drawing other elements
   }
 
   // OLED display for Euclidean rhythm settings
@@ -866,7 +865,6 @@ void OLED_display() {
         }
       }
     }
-
 
     // Draw the shape
     for (j = 0; j < buf_count - 1; j++) {
