@@ -83,6 +83,37 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Wire.h>
 //#include <ArduinoTapTempo.h>
 
+// Enum for top menu
+enum TopMenu {
+    MENU_CH_1,
+    MENU_CH_2,
+    MENU_CH_3,
+    MENU_CH_4,
+    MENU_CH_5,
+    MENU_CH_6,
+    MENU_RANDOM_ADVANCE,
+    MENU_SAVE,
+    MENU_LOAD,
+    MENU_ALL_RESET,
+    MENU_ALL_MUTE,
+    MENU_TEMP,
+    MENU_RAND,
+    MENU_LAST
+};
+
+// Enum for setting
+enum Setting {
+    SETTING_TOP_MENU,
+    SETTING_HITS,
+    SETTING_OFFSET,
+    SETTING_LIMIT,
+    SETTING_MUTE,
+    SETTING_RESET,
+    SETTING_RANDOM,
+    SETTING_PROB,
+    SETTING_LAST
+};
+
 // For debug / UI
 #define FIRMWARE_MAGIC "EUCLID"
 #define FIRMWARE_MAGIC_ADDRESS 0  // Store the firmware magic number at address 0
@@ -109,7 +140,9 @@ byte playing_step[6] = { 0 };
 // display Menu and UI
 // select_menu 0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD,7=PROBABILITY
 // select_ch 0~5 = each channel -1 , 6 = random mode, save, load, ...
-byte select_menu = 0, select_ch = 0;
+// Select menu and channel
+TopMenu selected_menu = MENU_CH_1;
+Setting selected_setting = SETTING_TOP_MENU;
 bool disp_refresh = false, allMutedFlag = false;
 
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
@@ -273,7 +306,7 @@ void loop() {
     disp_refresh = 1;  // Updates the display where the trigger was entered.
 
     // Random advance mode (mode 6)
-    if (select_ch == 6) {  // random mode setting
+    if (selected_menu == MENU_RANDOM_ADVANCE) {  // random mode setting
       step_cnt++;
       if (step_cnt >= 16) {
         bar_now++;
@@ -367,125 +400,125 @@ void initDisplay() {
 
 void onEncoderClicked(EncoderButton &eb) {
 
-  if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
-    disp_refresh = debug;
-    select_menu++;
-  }
+    if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
+        disp_refresh = debug;
+        selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
+    }
 
-  if (select_menu > 7) select_menu = 0;  // Wraps around the channel individual settings menus
+    if (selected_setting > 7) selected_setting = SETTING_TOP_MENU;  // Wraps around the channel individual settings menus
 
-  if (select_ch > 5 && select_menu > 1) select_menu = 0;  // Wrap around the other menu items
-  // Mode-specific actions
-  if (select_ch == 7 && select_menu == 1) {
-    saveConfiguration();
-    select_menu = 0;
-  }
-  if (select_ch == 8 && select_menu == 1) {
-    loadConfiguration();
-    select_menu = 0;
-  }
-  if (select_ch == 9 && select_menu == 1) {
-    resetSeq();
-    select_menu = 0;
-  }
-  if (select_ch == 10 && select_menu == 1) {
-    toggleAllMutes();
-    select_menu = 0;
-  }
-  if (select_ch == 11 && select_menu == 1) {  // modes only having a button
+    if (selected_menu > MENU_CH_6 && selected_setting > SETTING_HITS) selected_setting = SETTING_TOP_MENU;  // Wrap around the other menu items
+    // Mode-specific actions
+    if (selected_menu == MENU_SAVE && selected_setting == SETTING_HITS) {
+        saveConfiguration();
+        selected_setting = SETTING_TOP_MENU;
+    }
+    if (selected_menu == MENU_LOAD && selected_setting == SETTING_HITS) {
+        loadConfiguration();
+        selected_setting = SETTING_TOP_MENU;
+    }
+    if (selected_menu == MENU_ALL_RESET && selected_setting == SETTING_HITS) {
+        resetSeq();
+        selected_setting = SETTING_TOP_MENU;
+    }
+    if (selected_menu == MENU_ALL_MUTE && selected_setting == SETTING_HITS) {
+        toggleAllMutes();
+        selected_setting = SETTING_TOP_MENU;
+    }
+    if (selected_menu == MENU_TEMP && selected_setting == SETTING_HITS) {  // modes only having a button
 
-    // Dial in tempo with the encoder and / or TapTempo via encoder button
-    //adjustTempo();
-    select_menu = 0;
-  }
-  if (select_ch == 12 && select_menu == 1) {  //
-    // This needs to work as before where you advance through the random array by rotating the encoder.
-    // should make it possible to go back and forth like 5 steps and have a set of steady values
-    Random_change();
-  }
+        // Dial in tempo with the encoder and / or TapTempo via encoder button
+        //adjustTempo();
+        selected_setting = SETTING_TOP_MENU;
+    }
+    if (selected_menu == MENU_RAND && selected_setting == SETTING_HITS) {  //
+        // This needs to work as before where you advance through the random array by rotating the encoder.
+        // should make it possible to go back and forth like 5 steps and have a set of steady values
+        Random_change();
+    }
 }
 
 void onEncoderRotation(EncoderButton &eb) {
-  int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
-  int acceleratedIncrement = increment * increment;  // Squaring the increment
-  if (increment != 0) {
-    if (increment < 0) {
-      acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-    }
+    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+    int acceleratedIncrement = increment * increment;  // Squaring the increment
+    if (increment != 0) {
+        if (increment < 0) {
+            acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+        }
 
-    if (select_ch == 12 && select_menu == 1) {
-      // Advance random change values with encoder rotation
-      Random_change();
-    } else {
-      handleMenuNavigation(acceleratedIncrement);
+        if (selected_menu == MENU_RAND && selected_setting == SETTING_HITS) {
+            // Advance random change values with encoder rotation
+            Random_change();
+        } else {
+            handleMenuNavigation(acceleratedIncrement);
+        }
     }
-  }
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
-  // Ensure we're in the first menu stage and a valid channel is selected
-  if (select_menu == 0 && select_ch < 6) {
-    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
-    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
-    if (increment != 0) {
-      if (increment < 0) {
-        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-      }
-      // Adjust the Hits value for the selected channel to more quickly edit the beat / rythm
-      currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + acceleratedIncrement + 17) % 17;
+    // Ensure we're in the first menu stage and a valid channel is selected
+    if (selected_setting == SETTING_TOP_MENU && selected_menu < MENU_CH_6) {
+        int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+        int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+        if (increment != 0) {
+            if (increment < 0) {
+                acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+            }
+            // Adjust the Hits value for the selected channel to more quickly edit the beat / rhythm
+            currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+        }
     }
-  }
 }
 
 void initializeCurrentConfig(bool loadDefaults = false) {
-  if (loadDefaults) {
-    // Load default configuration from PROGMEM
-    memcpy_P(&currentConfig, &defaultSlots[1], sizeof(SlotConfiguration));
-  } else {
-    // Load configuration from EEPROM
-    int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
-    EEPROM.get(baseAddress, currentConfig);
-  }
+    if (loadDefaults) {
+        // Load default configuration from PROGMEM
+        memcpy_P(&currentConfig, &defaultSlots[1], sizeof(SlotConfiguration));
+    } else {
+        // Load configuration from EEPROM
+        int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
+        EEPROM.get(baseAddress, currentConfig);
+    }
 }
 
 void handleMenuNavigation(int changeDirection) {
-  if (changeDirection != 0) {
+    if (changeDirection != 0) {
 
-    switch (select_menu) {
-      case 0:                                                 // Select channel
-        select_ch = (select_ch + changeDirection + 13) % 13;  // Wrap-around for channel selection
-        break;
-      case 1:                                                                                           // Hits
-        if (select_ch != 6) {                                                                           // Handling channels 0 to 5
-          currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + changeDirection + 17) % 17;  // Ensure hits wrap properly
-        } else {                                                                                        // Handling Random Mode (select_ch == 6)
-          // Increment or decrement `bar_select` based on encoder direction
-          bar_select += changeDirection;
-          // Ensure `bar_select` stays within the range of 1 to 5
-          if (bar_select < 1) bar_select = 6;
-          if (bar_select > 6) bar_select = 1;
+        switch (selected_setting) {
+        case SETTING_TOP_MENU:                                                 // Select channel
+            selected_menu = static_cast<TopMenu>((selected_menu + changeDirection + MENU_LAST) % MENU_LAST);  // Wrap-around for channel selection
+            break;
+        case SETTING_HITS:                                                                                           // Hits
+            if (selected_menu != MENU_RANDOM_ADVANCE) {                                                                           // Handling channels 0 to 5
+                currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + 17) % 17;  // Ensure hits wrap properly
+            } else {                                                                                        // Handling Random Mode (select_ch == 6)
+                // Increment or decrement `bar_select` based on encoder direction
+                bar_select += changeDirection;
+                // Ensure `bar_select` stays within the range of 1 to 5
+                if (bar_select < 1) bar_select = 6;
+                if (bar_select > 6) bar_select = 1;
+            }
+            break;
+        case SETTING_OFFSET:
+            currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] + changeDirection + 16) % 16;  // Wrap-around for offset
+            break;
+        case SETTING_LIMIT:                                                                                           // Limit
+            currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + 17) % 17;  // Wrap-around for limit
+            break;
+        case SETTING_MUTE:                                                            // Mute
+            currentConfig.mute[selected_menu] = !currentConfig.mute[selected_menu];  // Toggle mute state
+            break;
+        case SETTING_RESET:  // Reset channel step
+            playing_step[selected_menu] = 0;
+            break;
+        case SETTING_RANDOM:  // Randomize channel
+            Random_change_one(selected_menu);
+            break;
+        case SETTING_PROB:  // Set probability
+            currentConfig.probability[selected_menu] = (currentConfig.probability[selected_menu] + changeDirection + 101) % 101;
+            break;
         }
-        break;
-      case 2:
-        currentConfig.offset[select_ch] = (currentConfig.offset[select_ch] + changeDirection + 16) % 16;  // Wrap-around for offset
-        break;
-      case 3:                                                                                           // Limit
-        currentConfig.limit[select_ch] = (currentConfig.limit[select_ch] + changeDirection + 17) % 17;  // Wrap-around for limit
-        break;
-      case 4:                                                            // Mute
-        currentConfig.mute[select_ch] = !currentConfig.mute[select_ch];  // Toggle mute state
-        break;
-      case 5:  // Reset channel step
-        playing_step[select_ch] = 0;
-        break;
-      case 6:  // Randomize channel
-        Random_change_one(select_ch);
-        break;
-      case 7:  // Set probability
-        currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection + 101) % 101;
-        break;
     }
-  }
 }
 
 // Loading SlotConfiguration from PROGMEM
@@ -697,47 +730,47 @@ void rightMenu(char c1, char c2, char c3, char c4) {
   display.print(c4);
 }
 
-void setMenuCharacters(byte select_ch, char &c1, char &c2, char &c3, char &c4) {
-  if (select_ch < 6) {         // Display numbers 1-6 (not random mode)
-    c1 = select_ch + 1 + '0';  // Convert number to character
-  } else {
-    switch (select_ch) {
-      case 6: c1 = 'R', c2 = 'N', c3 = 'D', c4 = ' '; break;   // RANDOM auto mode
-      case 7: c1 = 'S', c2 = ' ', c3 = ' ', c4 = ' '; break;   // SAVE
-      case 8: c1 = 'L', c2 = ' ', c3 = ' ', c4 = ' '; break;   // LOAD
-      case 9: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;   // ALL for RESET
-      case 10: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;  // ALL for MUTE
-      case 11: c1 = 'T', c2 = ' ', c3 = ' ', c4 = ' '; break;  // TEMPO
-      case 12: c1 = 'X', c2 = ' ', c3 = ' ', c4 = ' '; break;  // NEW RANDOM
-      default: c1 = ' ', c2 = ' ', c3 = ' ', c4 = ' ';         // Default blank
+void setMenuCharacters(TopMenu select_ch, char &c1, char &c2, char &c3, char &c4) {
+    if (select_ch < MENU_RANDOM_ADVANCE) {         // Display numbers 1-6 (not random mode)
+        c1 = select_ch + 1 + '0';  // Convert number to character
+    } else {
+        switch (select_ch) {
+        case MENU_RANDOM_ADVANCE: c1 = 'R', c2 = 'N', c3 = 'D', c4 = ' '; break;   // RANDOM auto mode
+        case MENU_SAVE: c1 = 'S', c2 = ' ', c3 = ' ', c4 = ' '; break;   // SAVE
+        case MENU_LOAD: c1 = 'L', c2 = ' ', c3 = ' ', c4 = ' '; break;   // LOAD
+        case MENU_ALL_RESET: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;   // ALL for RESET
+        case MENU_ALL_MUTE: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;   // ALL for MUTE
+        case MENU_TEMP: c1 = 'T', c2 = ' ', c3 = ' ', c4 = ' '; break;  // TEMPO
+        case MENU_RAND: c1 = 'X', c2 = ' ', c3 = ' ', c4 = ' '; break;  // NEW RANDOM
+        default: c1 = ' ', c2 = ' ', c3 = ' ', c4 = ' ';         // Default blank
+        }
     }
-  }
 }
 
 // right side menue
-void drawChannelEditMenu(byte select_ch, int select_menu) {
-  // Avoid drawing left menu for random advance mode
-  if (select_ch == 6 || select_ch > 6) return;  // Handle only valid channel edit modes and avoid random mode
+void drawChannelEditMenu(TopMenu select_ch, Setting select_menu) {
+    // Avoid drawing left menu for random advance mode
+    if (select_ch == MENU_RANDOM_ADVANCE || select_ch > MENU_RANDOM_ADVANCE) return;  // Handle only valid channel edit modes and avoid random mode
 
-  const char *labels[] = { "", "HITS", "OFFS", "LIMIT", "MUTE", "REST", "RAND", "PROB" };
-  if (select_menu >= 1 && select_menu < 8) {
-    leftMenu(labels[select_menu][0], labels[select_menu][1], labels[select_menu][2], labels[select_menu][3]);
-  }
+    const char *labels[] = { "", "HITS", "OFFS", "LIMIT", "MUTE", "REST", "RAND", "PROB" };
+    if (select_menu >= SETTING_HITS && select_menu < SETTING_LAST) {
+        leftMenu(labels[select_menu][0], labels[select_menu][1], labels[select_menu][2], labels[select_menu][3]);
+    }
 }
 
 // left side menue
-void drawModeMenu(byte select_ch) {
-  if (select_ch < 7) return;  // Only for special (added) modes
+void drawModeMenu(TopMenu select_ch) {
+    if (select_ch < MENU_RANDOM_ADVANCE) return;  // Only for special (added) modes
 
-  switch (select_ch) {
-    case 7: leftMenu('S', 'A', 'V', 'E'); break;   // SAVE
-    case 8: leftMenu('L', 'O', 'A', 'D'); break;   // LOAD
-    case 9: leftMenu('R', 'E', 'S', 'T'); break;   // REST
-    case 10: leftMenu('M', 'U', 'T', 'E'); break;  // MUTE
-    case 11: leftMenu('T', 'E', 'M', 'P'); break;  // TEMPO
-    case 12: leftMenu('R', 'A', 'N', 'D'); break;  // NEW RANDOM SEQUENCE SELECT MODE
+    switch (select_ch) {
+    case MENU_SAVE: leftMenu('S', 'A', 'V', 'E'); break;   // SAVE
+    case MENU_LOAD: leftMenu('L', 'O', 'A', 'D'); break;   // LOAD
+    case MENU_ALL_RESET: leftMenu('R', 'E', 'S', 'T'); break;   // REST
+    case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;  // MUTE
+    case MENU_TEMP: leftMenu('T', 'E', 'M', 'P'); break;  // TEMPO
+    case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;  // NEW RANDOM SEQUENCE SELECT MODE
     default: break;
-  }
+    }
 }
 
 // Initialize EEPROM and check magic number
@@ -764,249 +797,249 @@ void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max
   }
 }
 
-void drawSelectionIndicator(int select_menu) {
-  if (select_menu == 0) {
-    display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
-  } else if (select_menu == 1) {
-    display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
-  }
-
-  if (select_ch != 6 && select_ch <= 6) {
-    if (select_menu == 2) {
-      display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
-    } else if (select_menu == 3) {
-      display.drawTriangle(12, 34, 12, 41, 7, 39, WHITE);
-    } else if (select_menu == 4) {
-      display.drawTriangle(12, 34, 12, 41, 7, 39, WHITE);
-    } else if (select_menu == 5) {
-      display.drawTriangle(12, 42, 12, 51, 7, 48, WHITE);
-    } else if (select_menu == 6) {
-      display.drawTriangle(12, 50, 12, 61, 7, 57, WHITE);
-    } else if (select_menu == 7) {
-      display.drawTriangle(12, 50, 12, 61, 7, 57, WHITE);
+void drawSelectionIndicator(Setting select_menu) {
+    if (select_menu == SETTING_TOP_MENU) {
+        display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
+    } else if (select_menu == SETTING_HITS) {
+        display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
     }
-  }
+
+    if (selected_menu != MENU_RANDOM_ADVANCE && selected_menu <= MENU_RANDOM_ADVANCE) {
+        if (select_menu == SETTING_OFFSET) {
+            display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
+        } else if (select_menu == SETTING_LIMIT) {
+            display.drawTriangle(12, 34, 12, 41, 7, 39, WHITE);
+        } else if (select_menu == SETTING_MUTE) {
+            display.drawTriangle(12, 34, 12, 41, 7, 39, WHITE);
+        } else if (select_menu == SETTING_RESET) {
+            display.drawTriangle(12, 42, 12, 51, 7, 48, WHITE);
+        } else if (select_menu == SETTING_RANDOM) {
+            display.drawTriangle(12, 50, 12, 61, 7, 57, WHITE);
+        } else if (select_menu == SETTING_PROB) {
+            display.drawTriangle(12, 50, 12, 61, 7, 57, WHITE);
+        }
+    }
 }
 
 void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, const byte *graph_y) {
-  for (int k = 0; k <= 5; k++) {
-    for (int j = 0; j < currentConfig.limit[k]; j++) {
-      int x_pos = x16[j % 16] + graph_x[k];
-      int y_pos = y16[j % 16] + graph_y[k];
-      if (x_pos < 128 && y_pos < 64 && currentConfig.mute[k] == 0 && select_menu != 7) {
-        display.drawPixel(x_pos, y_pos, WHITE);
-      }
+    for (int k = 0; k <= 5; k++) {
+        for (int j = 0; j < currentConfig.limit[k]; j++) {
+            int x_pos = x16[j % 16] + graph_x[k];
+            int y_pos = y16[j % 16] + graph_y[k];
+            if (x_pos < 128 && y_pos < 64 && currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {
+                display.drawPixel(x_pos, y_pos, WHITE);
+            }
+        }
     }
-  }
 }
 
 void OLED_display() {
-  display.clearDisplay();
+    display.clearDisplay();
 
-  // Check if all channels are muted
-  if (allMutedFlag) {
-    // Draw "MUTE" message in the center of the screen
-    display.setTextSize(2);  // large letters
-    display.setTextColor(WHITE);
-    display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
-    display.println(F("MUTE"));
-    display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
-    display.display();
-    display.setTextSize(1);  // Reset text size
-    return;                  // Exit function early to avoid drawing other elements
-  }
+    // Check if all channels are muted
+    if (allMutedFlag) {
+        // Draw "MUTE" message in the center of the screen
+        display.setTextSize(2);  // large letters
+        display.setTextColor(WHITE);
+        display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
+        display.println(F("MUTE"));
+        display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
+        display.display();
+        display.setTextSize(1);  // Reset text size
+        return;                  // Exit function early to avoid drawing other elements
+    }
 
-  // OLED display for Euclidean rhythm settings
-  // Draw setting menu (WIP)
-  // select_ch are the channels and >5 the modes -> random advance, save, load, global mute, sequence reset, ..
-  // select_menu are parameters and functions for each single channel (hits,offs,limit,mute,rest,random,probability)
+    // OLED display for Euclidean rhythm settings
+    // Draw setting menu (WIP)
+    // select_ch are the channels and >5 the modes -> random advance, save, load, global mute, sequence reset, ..
+    // select_menu are parameters and functions for each single channel (hits,offs,limit,mute,rest,random,probability)
 
-  // Characters to be displayed in right side Menu
-  char c1 = ' ', c2 = 'H', c3 = 'O', c4 = ' ';
-  setMenuCharacters(select_ch, c1, c2, c3, c4);
-  rightMenu(c1, c2, c3, c4);  // Called once per update only
+    // Characters to be displayed in right side Menu
+    char c1 = ' ', c2 = 'H', c3 = 'O', c4 = ' ';
+    setMenuCharacters(selected_menu, c1, c2, c3, c4);
+    rightMenu(c1, c2, c3, c4);  // Called once per update only
 
-  // draw left side Menue
-  drawChannelEditMenu(select_ch, select_menu);
-  drawModeMenu(select_ch);
+    // draw left side Menue
+    drawChannelEditMenu(selected_menu, selected_setting);
+    drawModeMenu(selected_menu);
 
-  // Random mode advance menu count square
-  if (select_ch == 6) {
-    drawRandomModeAdvanceSquare(bar_select, bar_now, bar_max);
-  }
+    // Random mode advance menu count square
+    if (selected_menu == MENU_RANDOM_ADVANCE) {
+        drawRandomModeAdvanceSquare(bar_select, bar_now, bar_max);
+    }
 
-  // Selection Indicator and Step Dots
-  drawSelectionIndicator(select_menu);
-  // Draw step dots within display bounds
-  drawStepDots(currentConfig, graph_x, graph_y);
+    // Selection Indicator and Step Dots
+    drawSelectionIndicator(selected_setting);
+    // Draw step dots within display bounds
+    drawStepDots(currentConfig, graph_x, graph_y);
 
 
-  //draw hits line : 2~16hits if not muted
-  for (k = 0; k <= 5; k++) {  // Iterate over each channel
-    buf_count = 0;
-    // Collect the hit points
-    for (m = 0; m < 16; m++) {
-      if (currentConfig.mute[k] == 0 && offset_buf[k][m] == 1) {
-        int x_pos = x16[m] + graph_x[k];
-        int y_pos = y16[m] + graph_y[k];
-        if (x_pos < 128 && y_pos < 64 && select_menu != 7) {
-          line_xbuf[buf_count] = x_pos;
-          line_ybuf[buf_count] = y_pos;
-          buf_count++;
+    //draw hits line : 2~16hits if not muted
+    for (k = 0; k <= 5; k++) {  // Iterate over each channel
+        buf_count = 0;
+        // Collect the hit points
+        for (m = 0; m < 16; m++) {
+            if (currentConfig.mute[k] == 0 && offset_buf[k][m] == 1) {
+                int x_pos = x16[m] + graph_x[k];
+                int y_pos = y16[m] + graph_y[k];
+                if (x_pos < 128 && y_pos < 64 && selected_setting != SETTING_PROB) {
+                    line_xbuf[buf_count] = x_pos;
+                    line_ybuf[buf_count] = y_pos;
+                    buf_count++;
+                }
+            }
         }
-      }
-    }
 
-    // Draw the shape
-    for (j = 0; j < buf_count - 1; j++) {
-      display.drawLine(line_xbuf[j], line_ybuf[j], line_xbuf[j + 1], line_ybuf[j + 1], WHITE);
-    }
-    if (buf_count > 0) {
-      display.drawLine(line_xbuf[0], line_ybuf[0], line_xbuf[buf_count - 1], line_ybuf[buf_count - 1], WHITE);
-    }
-  }
-
-  for (j = 0; j < 16; j++) {  //line_buf reset
-    line_xbuf[j] = 0;
-    line_ybuf[j] = 0;
-  }
-
-  // draw hits line : 1hits if not muted
-  for (k = 0; k <= 5; k++) {                               // Channel count
-    if (currentConfig.mute[k] == 0 && select_menu != 7) {  // dont draw when muted or when editing probability
-      if (currentConfig.hits[k] == 1) {
-        int x1 = 15 + graph_x[k];
-        int y1 = 15 + graph_y[k];
-        int x2 = x16[currentConfig.offset[k]] + graph_x[k];
-        int y2 = y16[currentConfig.offset[k]] + graph_y[k];
-        if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
-          display.drawLine(x1, y1, x2, y2, WHITE);
+        // Draw the shape
+        for (j = 0; j < buf_count - 1; j++) {
+            display.drawLine(line_xbuf[j], line_ybuf[j], line_xbuf[j + 1], line_ybuf[j + 1], WHITE);
         }
-      }
+        if (buf_count > 0) {
+            display.drawLine(line_xbuf[0], line_ybuf[0], line_xbuf[buf_count - 1], line_ybuf[buf_count - 1], WHITE);
+        }
     }
-  }
 
-  //draw play step circle
-  for (k = 0; k <= 5; k++) {                               //ch count
-    if (currentConfig.mute[k] == 0 && select_menu != 7) {  //mute on = no display circle
-      if (offset_buf[k][playing_step[k]] == 0) {
-        display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
-      }
-      if (offset_buf[k][playing_step[k]] == 1) {
-        display.fillCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 3, WHITE);
-      }
+    for (j = 0; j < 16; j++) {  //line_buf reset
+        line_xbuf[j] = 0;
+        line_ybuf[j] = 0;
     }
-  }
 
-  /* 
+    // draw hits line : 1hits if not muted
+    for (k = 0; k <= 5; k++) {                               // Channel count
+        if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  // don't draw when muted or when editing probability
+            if (currentConfig.hits[k] == 1) {
+                int x1 = 15 + graph_x[k];
+                int y1 = 15 + graph_y[k];
+                int x2 = x16[currentConfig.offset[k]] + graph_x[k];
+                int y2 = y16[currentConfig.offset[k]] + graph_y[k];
+                if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
+                    display.drawLine(x1, y1, x2, y2, WHITE);
+                }
+            }
+        }
+    }
+
+    //draw play step circle
+    for (k = 0; k <= 5; k++) {                               //ch count
+        if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  //mute on = no display circle
+            if (offset_buf[k][playing_step[k]] == 0) {
+                display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
+            }
+            if (offset_buf[k][playing_step[k]] == 1) {
+                display.fillCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 3, WHITE);
+            }
+        }
+    }
+
+    /* 
 // fixme hackme ToDo
-  //write hit and offset values for H > 9 to 16 hits if not muted and not in edit mode. better to just draw dots to where the hits will be instead of the shape and lines ?
-  if (select_menu > 3 || select_menu == 0) {
-    for (k = 0; k <= 5; k++) {
-      if (currentConfig.hits[k] > 9 && currentConfig.mute[k] == 0) {  // show overview of channel if not muted
-        int x_base = 10 + graph_x[k];
-        int y_base_hit = 11 + graph_y[k];
-        int y_base_offset = 17 + graph_y[k];
-        if (x_base < 120 && y_base_hit < 64 && y_base_offset < 64 && select_menu != 7) {
-          display.setCursor(x_base, y_base_hit);
-          display.println(F("H"));
-          display.print(currentConfig.hits[k]);
+    //write hit and offset values for H > 9 to 16 hits if not muted and not in edit mode. better to just draw dots to where the hits will be instead of the shape and lines ?
+    if (select_menu > 3 || select_menu == 0) {
+        for (k = 0; k <= 5; k++) {
+            if (currentConfig.hits[k] > 9 && currentConfig.mute[k] == 0) {  // show overview of channel if not muted
+                int x_base = 10 + graph_x[k];
+                int y_base_hit = 11 + graph_y[k];
+                int y_base_offset = 17 + graph_y[k];
+                if (x_base < 120 && y_base_hit < 64 && y_base_offset < 64 && select_menu != 7) {
+                    display.setCursor(x_base, y_base_hit);
+                    display.println(F("H"));
+                    display.print(currentConfig.hits[k]);
 
-          display.setCursor(x_base, y_base_offset);
-          display.println(F("L"));
-          if (currentConfig.limit[k] == 0) {
-            display.print(currentConfig.limit[k]);
-          } else {
-            display.print(16 - currentConfig.limit[k]);
-          }
+                    display.setCursor(x_base, y_base_offset);
+                    display.println(F("L"));
+                    if (currentConfig.limit[k] == 0) {
+                        display.print(currentConfig.limit[k]);
+                    } else {
+                        display.print(16 - currentConfig.limit[k]);
+                    }
+                }
+            }
         }
-      }
     }
-  }
-  */
+    */
 
-  // draw channel info in edit mode, should be helpfull while editing.
-  for (int ch = 0; ch < 6; ch++) {
-    int x_base = graph_x[ch];
-    int y_base = graph_y[ch] + 8;
+    // draw channel info in edit mode, should be helpful while editing.
+    for (int ch = 0; ch < 6; ch++) {
+        int x_base = graph_x[ch];
+        int y_base = graph_y[ch] + 8;
 
-    // draw selected parameter UI for currently active channel when editing
-    if (select_menu != 0) {
-      switch (select_menu) {
-        case 1:                              // Hits
-          if (currentConfig.hits[ch] > 6) {  // Display only if there is space in the UI
-            if (x_base + 10 < 120 && y_base < 56) {
+        // draw selected parameter UI for currently active channel when editing
+        if (selected_setting != SETTING_TOP_MENU) {
+            switch (selected_setting) {
+            case SETTING_HITS:                              // Hits
+                if (currentConfig.hits[ch] > 6) {  // Display only if there is space in the UI
+                    if (x_base + 10 < 120 && y_base < 56) {
 
-              display.setCursor(x_base + 10, y_base);  // Adjust position
-              display.print(currentConfig.hits[ch]);
+                        display.setCursor(x_base + 10, y_base);  // Adjust position
+                        display.print(currentConfig.hits[ch]);
+                    }
+                }
+                break;
+            case SETTING_OFFSET:
+                break;
+            case SETTING_LIMIT:  // Limit prevents from running draw L in to shape
+                if (currentConfig.limit[ch] == 0 && currentConfig.hits[ch] > 3) {
+                    display.setCursor(x_base + 12, y_base + 4);
+                    if (x_base + 10 < 128 && y_base < 64) {
+                        display.println(F("L"));
+                    }
+                }
+                if (currentConfig.limit[ch] > 0 && currentConfig.hits[ch] > 6) {
+                    // draw line indicator from center to limit point
+                    int x1 = 15 + graph_x[ch];
+                    int y1 = 15 + graph_y[ch];
+                    int x2 = x16[currentConfig.limit[ch] % 16] + graph_x[ch];
+                    int y2 = y16[currentConfig.limit[ch] % 16] + graph_y[ch];
+                    if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
+                        display.drawLine(x1, y1, x2, y2, WHITE);
+                    }
+                }
+                break;
+            case SETTING_PROB:
+
+                int barWidth = 4;    // Width of the probability bar
+                int maxHeight = 15;  // Maximum height of the bar, adjust as needed
+                int margin = 2;      // Margin around the fillin
+
+                int bar_x = graph_x[ch] + 12;  // X position of the bar graph
+                int bar_y = graph_y[ch] + 30;  // Y position of the bar graph, adjust for bar to start from the bottom up
+
+                // Calculate the height of the bar based on probability
+                int barHeight = map(currentConfig.probability[ch], 0, 100, 0, maxHeight);  // Map probability to bar height
+                int startY = bar_y - barHeight;                                            // Calculate the top starting point of the filled bar
+
+                // Calculate the outer rectangle dimensions
+                int outerWidth = barWidth + 2 * margin;
+                int outerHeight = maxHeight + 2 * margin;
+                int outerX = bar_x - margin;
+                int outerY = bar_y - maxHeight - margin;
+
+                // Position the percentage text directly on top of the rectangle border
+                int text_x = outerX + (outerWidth / 2) - 6;  // Centered over the border
+                int text_y = outerY - 10;                    // Positioned just inside the top border
+
+                // Ensure elements stay within display boundaries
+                text_x = constrain(text_x, 0, 128);  // Constrain x to OLED width
+                text_y = constrain(text_y, 0, 64);   // Constrain y to OLED height
+
+                // Display percentage on top of the bar graph
+                display.setCursor(text_x, text_y);
+                display.print(currentConfig.probability[ch]);
+                //display.println("%");
+
+                if (selected_setting == SETTING_PROB) {
+                    // Draw the outer rectangle
+                    display.drawRect(outerX, outerY, outerWidth, outerHeight, WHITE);
+
+                    // Calculate startY to begin at the bottom of the rectangle
+                    int startY = bar_y - barHeight;  // Start point for the filled bar, no bottom margin
+
+                    // Draw the filled bar part within the margins
+                    display.fillRect(bar_x, startY, barWidth, barHeight, WHITE);  // Adjust to only fill within the border
+                }
+                break;
             }
-          }
-          break;
-        case 2:
-          break;
-        case 3:  // Limit prevents from running draw L in to shape
-          if (currentConfig.limit[ch] == 0 && currentConfig.hits[ch] > 3) {
-            display.setCursor(x_base + 12, y_base + 4);
-            if (x_base + 10 < 128 && y_base < 64) {
-              display.println(F("L"));
-            }
-          }
-          if (currentConfig.limit[ch] > 0 && currentConfig.hits[ch] > 6) {
-            // draw line indicator from center to limit point
-            int x1 = 15 + graph_x[ch];
-            int y1 = 15 + graph_y[ch];
-            int x2 = x16[currentConfig.limit[ch] % 16] + graph_x[ch];
-            int y2 = y16[currentConfig.limit[ch] % 16] + graph_y[ch];
-            if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
-              display.drawLine(x1, y1, x2, y2, WHITE);
-            }
-          }
-          break;
-        case 7:
-
-          int barWidth = 4;    // Width of the probability bar
-          int maxHeight = 15;  // Maximum height of the bar, adjust as needed
-          int margin = 2;      // Margin around the fillin
-
-          int bar_x = graph_x[ch] + 12;  // X position of the bar graph
-          int bar_y = graph_y[ch] + 30;  // Y position of the bar graph, adjust for bar to start from the bottom up
-
-          // Calculate the height of the bar based on probability
-          int barHeight = map(currentConfig.probability[ch], 0, 100, 0, maxHeight);  // Map probability to bar height
-          int startY = bar_y - barHeight;                                            // Calculate the top starting point of the filled bar
-
-          // Calculate the outer rectangle dimensions
-          int outerWidth = barWidth + 2 * margin;
-          int outerHeight = maxHeight + 2 * margin;
-          int outerX = bar_x - margin;
-          int outerY = bar_y - maxHeight - margin;
-
-          // Position the percentage text directly on top of the rectangle border
-          int text_x = outerX + (outerWidth / 2) - 6;  // Centered over the border
-          int text_y = outerY - 10;                    // Positioned just inside the top border
-
-          // Ensure elements stay within display boundaries
-          text_x = constrain(text_x, 0, 128);  // Constrain x to OLED width
-          text_y = constrain(text_y, 0, 64);   // Constrain y to OLED height
-
-          // Display percentage on top of the bar graph
-          display.setCursor(text_x, text_y);
-          display.print(currentConfig.probability[ch]);
-          //display.println("%");
-
-          if (select_menu == 7) {
-            // Draw the outer rectangle
-            display.drawRect(outerX, outerY, outerWidth, outerHeight, WHITE);
-
-            // Calculate startY to begin at the bottom of the rectangle
-            int startY = bar_y - barHeight;  // Start point for the filled bar, no bottom margin
-
-            // Draw the filled bar part within the margins
-            display.fillRect(bar_x, startY, barWidth, barHeight, WHITE);  // Adjust to only fill within the border
-          }
-          break;
-      }
+        }
     }
-  }
-  display.display();
+    display.display();
 }
