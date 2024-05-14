@@ -17,7 +17,7 @@
  * - Reset through dedicated input and button press (Also possible individually per channel)
  * - Random auto advance, Save / Load State
  *
- * Hardware:ƒ
+ * Hardware:
  * - Clock input (CLK) for timing triggers.
  * - Input: Clock (CLK), Reset (RST) and Rotary Encoder (with Button).
  * - Output: 6 Trigger Channels with LED indicators + CLK LED
@@ -31,7 +31,7 @@
 
 // Flag for reversing the encoder direction.
 // ToDo: Put this in config Menue dialog at boot ?
-// #define ENCODER_REVERSED
+//#define ENCODER_REVERSED
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
@@ -102,59 +102,22 @@ const int ENCODER_PIN1 = 2, ENCODER_PIN2 = 3, ENCODER_SW_PIN = 12;
 const int rstPin = 11, clkPin = 13;
 
 // Timing
-unsigned long startMillis, currentMillis, lastTriggerTime, internalClockPeriod;
+unsigned long startMillis, currentMillis, lastTriggerTime;
 bool trg_in = false, old_trg_in = false, rst_in = false, old_rst_in = false;
-byte playing_step[6] = { 0, 0, 0, 0, 0, 0 };
-unsigned long internalClockMillis = 0;
-unsigned long internalClockInterval = 60000 / 120;  // Default to 120 BPM
-bool useInternalClock = false;
-unsigned long lastExternalClockMillis = 0;
+byte playing_step[6] = { 0 };
 
 // display Menu and UI
-enum Setting {
-  SETTING_TOP_MENU,
-  SETTING_HITS,
-  SETTING_OFFSET,
-  SETTING_LIMIT,
-  SETTING_MUTE,
-  SETTING_RESET,
-  SETTING_RANDOM,
-  SETTING_PROB,
-  SETTING_LAST,
-};
-Setting selected_setting = SETTING_TOP_MENU;
-byte select_menu = 0;   //0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD
+// select_menu 0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD,7=PROBABILITY
+// select_ch 0~5 = each channel -1 , 6 = random mode, save, load, ...
+byte select_menu = 0, select_ch = 0;
+bool disp_refresh = false, allMutedFlag = false;
 
-enum TopMenu {
-  MENU_CH_1,
-  MENU_CH_2,
-  MENU_CH_3,
-  MENU_CH_4,
-  MENU_CH_5,
-  MENU_CH_6,
-  MENU_RANDOM_ADVANCE,
-  MENU_SAVE,
-  MENU_LOAD,
-  MENU_ALL_RESET,
-  MENU_ALL_MUTE,
-  MENU_TEMP,
-  MENU_RAND,
-  MENU_LAST,
-};
-TopMenu selected_menu = MENU_CH_1;
-byte select_ch = 0;     //0~5 = each channel -1 , 6 = random mode
-bool disp_refresh = 0;  //0=not refresh display , 1= refresh display , countermeasure of display refresh bussy
-bool allMutedFlag = false;
-
-const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 };  //each chanel display offset
-//const byte graph_y[6] = { 1, 1, 1, 33, 33, 33 };    //each chanel display offset -> +1 vs. original
-const byte graph_y[6] = { 0, 0, 0, 32, 32, 32 };  //each chanel display offset -> +1 vs. original
+const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
 
 byte line_xbuf[17];
 byte line_ybuf[17];
 
-const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 };
-const byte y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
+const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 
 //Sequence variables
 byte j = 0, k = 0, m = 0, buf_count = 0;
@@ -198,9 +161,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // reverse encoder
 #ifdef ENCODER_REVERSED
-EncoderButton encoder(ENCODER_PIN2, ENCODER_PIN1, ENCODER_SW_PIN);
-#else
 EncoderButton encoder(ENCODER_PIN1, ENCODER_PIN2, ENCODER_SW_PIN);
+#else
+EncoderButton encoder(ENCODER_PIN2, ENCODER_PIN1, ENCODER_SW_PIN);
 #endif
 
 int i = 0;  // ch 1- 6
@@ -220,9 +183,7 @@ const SlotConfiguration defaultSlots[3] PROGMEM = {
   { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 } }   // Ambient (Minimal beats)
 };
 
-SlotConfiguration memorySlots[NUM_MEMORY_SLOTS];  // Memory slots for configurations
-
-SlotConfiguration currentConfig;
+SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
 
 void setup() {
 #ifdef DEBUG
@@ -261,8 +222,8 @@ void loop() {
   }
 
   //-----------------trigger detect, reset & output----------------------
-  bool rst_in = RESET::isInputHigh();  // External reset
-  bool trg_in = CLK::isInputHigh();
+  bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
+
 
   if (old_rst_in == 0 && rst_in == 1) {
     for (int k = 0; k <= 5; k++) {
@@ -405,9 +366,15 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  // Increment selected setting.
-  selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
 
+  if (encoder.buttonState()) {  // button pressed without debounce (handled by library)
+    disp_refresh = debug;
+    select_menu++;
+  }
+
+  if (select_menu > 7) select_menu = 0;  // Wraps around the channel individual settings menus
+
+  if (select_ch > 5 && select_menu > 1) select_menu = 0;  // Wrap around the other menu items
   // Mode-specific actions
   if (select_ch == 7 && select_menu == 1) {
     saveConfiguration();
@@ -482,45 +449,42 @@ void initializeCurrentConfig(bool loadDefaults = false) {
 }
 
 void handleMenuNavigation(int changeDirection) {
-  if (changeDirection == 0) return;
+  if (changeDirection != 0) {
 
-  switch (selected_setting) {
-    case SETTING_TOP_MENU:
-      // select_ch = (select_ch + changeDirection + 13) % 13;  // Wrap-around for channel selection
-      selected_menu = static_cast<TopMenu>((selected_menu + 1) % MENU_LAST);
-      break;
-
-    case SETTING_HITS:
-      if (selected_menu >= MENU_CH_1 && selected_menu <= MENU_CH_6) {          
-        select_ch = int(selected_menu);  // This should be a function to explicitly convert enum to channel index.
-        currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + changeDirection + 17) % 17;  // Ensure hits wrap properly
-      } else {                                                                                        // Handling Random Mode (select_ch == 6)
-        // Increment or decrement `bar_select` based on encoder direction
-        bar_select += changeDirection;
-        // Ensure `bar_select` stays within the range of 1 to 5
-        if (bar_select < 1) bar_select = 6;
-        if (bar_select > 6) bar_select = 1;
-      }
-      break;
-    case SETTING_OFFSET:
-      currentConfig.offset[select_ch] = (currentConfig.offset[select_ch] + changeDirection + 16) % 16;  // Wrap-around for offset
-      break;
-    case SETTING_LIMIT:                                                                                           // Limit
-      currentConfig.limit[select_ch] = (currentConfig.limit[select_ch] + changeDirection + 17) % 17;  // Wrap-around for limit
-      break;
-    case SETTING_MUTE:                                                            // Mute
-      currentConfig.mute[select_ch] = !currentConfig.mute[select_ch];  // Toggle mute state
-      break;
-    case SETTING_RESET:  // Reset channel step
-      playing_step[select_ch] = 0;
-      break;
-    case SETTING_RANDOM:
-      // Randomize channel
-      Random_change_one(select_ch);
-      break;
-    case SETTING_PROB:
-      currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection + 101) % 101;
-      break;
+    switch (select_menu) {
+      case 0:                                                 // Select channel
+        select_ch = (select_ch + changeDirection + 13) % 13;  // Wrap-around for channel selection
+        break;
+      case 1:                                                                                           // Hits
+        if (select_ch != 6) {                                                                           // Handling channels 0 to 5
+          currentConfig.hits[select_ch] = (currentConfig.hits[select_ch] + changeDirection + 17) % 17;  // Ensure hits wrap properly
+        } else {                                                                                        // Handling Random Mode (select_ch == 6)
+          // Increment or decrement `bar_select` based on encoder direction
+          bar_select += changeDirection;
+          // Ensure `bar_select` stays within the range of 1 to 5
+          if (bar_select < 1) bar_select = 6;
+          if (bar_select > 6) bar_select = 1;
+        }
+        break;
+      case 2:
+        currentConfig.offset[select_ch] = (currentConfig.offset[select_ch] + changeDirection + 16) % 16;  // Wrap-around for offset
+        break;
+      case 3:                                                                                           // Limit
+        currentConfig.limit[select_ch] = (currentConfig.limit[select_ch] + changeDirection + 17) % 17;  // Wrap-around for limit
+        break;
+      case 4:                                                            // Mute
+        currentConfig.mute[select_ch] = !currentConfig.mute[select_ch];  // Toggle mute state
+        break;
+      case 5:  // Reset channel step
+        playing_step[select_ch] = 0;
+        break;
+      case 6:  // Randomize channel
+        Random_change_one(select_ch);
+        break;
+      case 7:  // Set probability
+        currentConfig.probability[select_ch] = (currentConfig.probability[select_ch] + changeDirection + 101) % 101;
+        break;
+    }
   }
 }
 
@@ -908,8 +872,8 @@ void OLED_display() {
   }
 
   // draw hits line : 1hits if not muted
-  for (k = 0; k <= 5; k++) {  // Channel count
-    if (currentConfig.mute[k] == 0) {
+  for (k = 0; k <= 5; k++) {                               // Channel count
+    if (currentConfig.mute[k] == 0 && select_menu != 7) {  // dont draw when muted or when editing probability
       if (currentConfig.hits[k] == 1) {
         int x1 = 15 + graph_x[k];
         int y1 = 15 + graph_y[k];
