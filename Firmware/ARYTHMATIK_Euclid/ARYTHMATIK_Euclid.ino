@@ -838,7 +838,7 @@ void drawChannelEditMenu(TopMenu select_ch, Setting select_menu) {
     // Avoid drawing left menu for random advance mode
     if (select_ch == MENU_RANDOM_ADVANCE || select_ch > MENU_RANDOM_ADVANCE) return;  // Handle only valid channel edit modes and avoid random mode
 
-    const char *labels[] = { "", "HITS", "OFFS", "LIMIT", "MUTE", "REST", "RAND", "PROB" };
+    const char *labels[] = { "", "HITS", "OFFS", "LIMIT", "MUTE", "RSET", "RAND", "PROB" };
     if (select_menu >= SETTING_HITS && select_menu < SETTING_LAST) {
         leftMenu(labels[select_menu][0], labels[select_menu][1], labels[select_menu][2], labels[select_menu][3]);
     }
