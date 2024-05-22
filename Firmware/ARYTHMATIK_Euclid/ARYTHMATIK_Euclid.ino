@@ -344,12 +344,11 @@ void loop() {
   bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
 
 
-  if (old_rst_in == 0 && rst_in == 1) {
-    for (int k = 0; k <= 5; k++) {
-      playing_step[k] = 0;
+// Handle reset input
+    if (!old_rst_in && rst_in) {
+        memset(playing_step, 0, sizeof(playing_step));
+        disp_refresh = true;
     }
-    disp_refresh = 1;
-  }
 
   // Trigger detection and response
   if (old_trg_in == 0 && trg_in == 1) {
@@ -412,6 +411,7 @@ void loop() {
     OUTPUT4::setOutput(0);
     OUTPUT5::setOutput(0);
     OUTPUT6::setOutput(0);
+    FastGPIO::Pin<4>::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
   }
  if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
     LED1::setOutput(0);
