@@ -315,9 +315,9 @@ void setup() {
   initIO();
   initDisplay();
 
-  drawAnimation();
+  drawAnimation(); // play boot animation
     
-  delay(3000);
+  delay(3000); // delay after boot logo
 
   checkAndInitializeSettings();
 
