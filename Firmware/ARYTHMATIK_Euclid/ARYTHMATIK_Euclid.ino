@@ -586,7 +586,7 @@ void handleMenuNavigation(int changeDirection) {
             }
             break;
         case SETTING_OFFSET:
-            currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] + changeDirection + 16) % 16;  // Wrap-around for offset
+            currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] - changeDirection + 16) % 16;  // Wrap-around for offset (reversed the logic of offset so it rotates in the right direction)
             break;
         case SETTING_LIMIT:                                                                                           // Limit
             currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + 17) % 17;  // Wrap-around for limit
@@ -851,7 +851,7 @@ void drawModeMenu(TopMenu select_ch) {
     switch (select_ch) {
     case MENU_SAVE: leftMenu('S', 'A', 'V', 'E'); break;   // SAVE
     case MENU_LOAD: leftMenu('L', 'O', 'A', 'D'); break;   // LOAD
-    case MENU_ALL_RESET: leftMenu('R', 'E', 'S', 'T'); break;   // REST
+    case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;   // RSET changed from REST to RSET
     case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;  // MUTE
     case MENU_TEMP: leftMenu('T', 'E', 'M', 'P'); break;  // TEMPO
     case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;  // NEW RANDOM SEQUENCE SELECT MODE
