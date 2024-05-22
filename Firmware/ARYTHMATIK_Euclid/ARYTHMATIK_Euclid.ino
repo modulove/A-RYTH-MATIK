@@ -288,14 +288,12 @@ const unsigned char Modulove_Logo[] PROGMEM = {
 
 //(Total bytes used to store images in PROGMEM = 1040)
 
-const int width = 128;
-const int height = 64;
 
 void drawAnimation() {
-  for (int x = 0; x <= width; x += 10) {  //change the last number here to change the speed of the wipe on effect of the logo ;)
+  for (int x = 0; x <= SCREEN_WIDTH; x += 10) {  //change the last number here to change the speed of the wipe on effect of the logo ;)
     display.clearDisplay();
-    display.drawBitmap(0, 0, Modulove_Logo, width, height, WHITE);
-    display.fillRect(x, 0, width - x, height, BLACK);
+    display.drawBitmap(0, 0, Modulove_Logo, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
+    display.fillRect(x, 0, SCREEN_WIDTH - x, SCREEN_HEIGHT, BLACK);
     display.display();
   }
 }
@@ -322,6 +320,9 @@ void setup() {
   checkAndInitializeSettings();
 
   OLED_display();
+
+  unsigned long seed = analogRead(A0);
+  randomSeed(seed);  // random seed once during setup
   lastTriggerTime = millis();
 }
 
@@ -344,11 +345,11 @@ void loop() {
   bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
 
 
-// Handle reset input
-    if (!old_rst_in && rst_in) {
-        memset(playing_step, 0, sizeof(playing_step));
-        disp_refresh = true;
-    }
+  // Handle reset input
+  if (!old_rst_in && rst_in) {
+    memset(playing_step, 0, sizeof(playing_step));
+    disp_refresh = true;
+  }
 
   // Trigger detection and response
   if (old_trg_in == 0 && trg_in == 1) {
@@ -399,6 +400,7 @@ void loop() {
         if (bar_now > bar_max[bar_select]) {
           bar_now = 1;
           Random_change();
+          randomSeed(analogRead(A0));  // Reinitialize random seed
         }
       }
     }
@@ -413,7 +415,7 @@ void loop() {
     OUTPUT6::setOutput(0);
     FastGPIO::Pin<4>::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
   }
- if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
+  if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
     LED1::setOutput(0);
     LED2::setOutput(0);
     LED3::setOutput(0);
@@ -484,33 +486,33 @@ void initDisplay() {
 
 void onEncoderClicked(EncoderButton &eb) {
 
- // Channel-specific actions
-    if (selected_menu <= MENU_CH_6) {
-        // Click should only advance selected setting when a channel top menu is selected.
-        selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
-        return;
-    }
+  // Channel-specific actions
+  if (selected_menu <= MENU_CH_6) {
+    // Click should only advance selected setting when a channel top menu is selected.
+    selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
+    return;
+  }
   // Mode-specific actions
-   if (selected_menu == MENU_SAVE) {
-        saveConfiguration();
-    }
-    if (selected_menu == MENU_LOAD) {
-        loadConfiguration();
-    }
-    if (selected_menu == MENU_ALL_RESET) {
-        resetSeq();
-    }
-    if (selected_menu == MENU_ALL_MUTE) {
-        toggleAllMutes();
-    }
-    if (selected_menu == MENU_TEMP) {  // modes only having a button
-        // Dial in tempo with the encoder and / or TapTempo via encoder button
-        //adjustTempo();
-    }
-    if (selected_menu == MENU_RAND) {  //
-        // This needs to work as before where you advance through the random array by rotating the encoder.
-        // should make it possible to go back and forth like 5 steps and have a set of steady values
-        Random_change();
+  if (selected_menu == MENU_SAVE) {
+    saveConfiguration();
+  }
+  if (selected_menu == MENU_LOAD) {
+    loadConfiguration();
+  }
+  if (selected_menu == MENU_ALL_RESET) {
+    resetSeq();
+  }
+  if (selected_menu == MENU_ALL_MUTE) {
+    toggleAllMutes();
+  }
+  if (selected_menu == MENU_TEMP) {  // modes only having a button
+                                     // Dial in tempo with the encoder and / or TapTempo via encoder button
+                                     //adjustTempo();
+  }
+  if (selected_menu == MENU_RAND) {  //
+    // This needs to work as before where you advance through the random array by rotating the encoder.
+    // should make it possible to go back and forth like 5 steps and have a set of steady values
+    Random_change();
   }
 }
 
@@ -746,9 +748,6 @@ void Random_change() {
 // random change function for one channel (no mute))
 void Random_change_one(byte select_ch) {
 
-  unsigned long seed = analogRead(A0);
-  randomSeed(seed);
-
   if (random(100) < hit_occ[select_ch]) {
     currentConfig.hits[select_ch] = random(hit_rng_min[select_ch], hit_rng_max[select_ch] + 1);
   }
@@ -874,28 +873,31 @@ void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max
 }
 
 void drawSelectionIndicator(Setting select_menu) {
+  // Right side indicators
   if (select_menu == SETTING_TOP_MENU) {
     display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
   } else if (select_menu == SETTING_HITS) {
     display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
+  } else if (select_menu == SETTING_OFFSET) {
+    display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
   }
 
+  // Left side indicators
   if (selected_menu != MENU_RANDOM_ADVANCE && selected_menu <= MENU_RANDOM_ADVANCE) {
-    if (select_menu == SETTING_OFFSET) {
-      display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
-    } else if (select_menu == SETTING_LIMIT) {
-      display.drawTriangle(12, 34, 12, 41, 7, 39, WHITE);
+    if (select_menu == SETTING_LIMIT) {
+      display.drawTriangle(12, 34, 12, 41, 7, 37, WHITE);
     } else if (select_menu == SETTING_MUTE) {
-      display.drawTriangle(12, 34, 12, 41, 7, 39, WHITE);
+      display.drawTriangle(12, 42, 12, 49, 7, 45, WHITE);
     } else if (select_menu == SETTING_RESET) {
-      display.drawTriangle(12, 42, 12, 51, 7, 48, WHITE);
+      display.drawTriangle(12, 50, 12, 57, 7, 53, WHITE);
     } else if (select_menu == SETTING_RANDOM) {
-      display.drawTriangle(12, 50, 12, 61, 7, 57, WHITE);
+      display.drawTriangle(12, 58, 12, 65, 7, 61, WHITE);
     } else if (select_menu == SETTING_PROB) {
-      display.drawTriangle(12, 50, 12, 61, 7, 57, WHITE);
+      display.drawTriangle(12, 66, 12, 73, 7, 69, WHITE);
     }
   }
 }
+
 
 void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, const byte *graph_y) {
   for (int k = 0; k <= 5; k++) {
@@ -1034,6 +1036,19 @@ void OLED_display() {
     }
     */
 
+  // Draw big 'M' for muted channels 
+  for (k = 0; k <= 5; k++) {
+    if (currentConfig.mute[k] && selected_setting == SETTING_TOP_MENU) {
+      int centerX = graph_x[k] + 12;  // Center of the channel's area
+      int centerY = graph_y[k] + 12;
+      display.setCursor(centerX - 3, centerY - 4);  // Adjust cursor to center the 'M'
+      display.setTextSize(2);
+      display.setTextColor(WHITE);
+      display.print(F("M"));
+      display.setTextSize(1);
+    }
+  }
+
   // draw channel info in edit mode, should be helpful while editing.
   for (int ch = 0; ch < 6; ch++) {
     int x_base = graph_x[ch];
@@ -1043,11 +1058,13 @@ void OLED_display() {
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
         case SETTING_HITS:                   // Hits
-          if (currentConfig.hits[ch] > 6) {  // Display only if there is space in the UI
+          if (currentConfig.hits[ch] > 9) {  // Display only if there is space in the UI
             if (x_base + 10 < 120 && y_base < 56) {
 
               display.setCursor(x_base + 10, y_base);  // Adjust position
               display.print(currentConfig.hits[ch]);
+              display.setCursor(x_base + 13, y_base + 8);
+              display.println("H");
             }
           }
           break;
