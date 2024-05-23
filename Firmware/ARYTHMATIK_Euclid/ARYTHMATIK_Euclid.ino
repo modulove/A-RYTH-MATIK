@@ -81,7 +81,6 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
-#include <ArduinoTapTempo.h>
 
 // Enum for top menu
 enum TopMenu {
@@ -124,7 +123,7 @@ enum Setting {
 #define SCREEN_HEIGHT 64
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 2  // Why does it freeze when loading slot 3?
+#define NUM_MEMORY_SLOTS 2  // Works with more than 2 slots now. Expand after release. WIP
 #define EEPROM_START_ADDRESS 7
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 
@@ -135,23 +134,22 @@ const int rstPin = 11, clkPin = 13;
 // Timing
 unsigned long startMillis, currentMillis, lastTriggerTime;
 bool trg_in = false, old_trg_in = false, rst_in = false, old_rst_in = false;
-//ArduinoTapTempo tapTempo;
 
 byte playing_step[6] = { 0 };
 
 // display Menu and UI
-// select_menu 0=CH,1=HIT,2=OFFSET,3=LIMIT,4=MUTE,5=RESET,6=RANDOM MOD,7=PROBABILITY
-// select_ch 0~5 = each channel -1 , 6 = random mode, save, load, ...
-// Select menu and channel
+// Select settings menu and channel menu
 TopMenu selected_menu = MENU_CH_1;
 Setting selected_setting = SETTING_TOP_MENU;
 bool disp_refresh = false, allMutedFlag = false;
 
+//const byte graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
 
 byte line_xbuf[17];
 byte line_ybuf[17];
 
+//const byte x16[16] PROGMEM = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] PROGMEM = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 
 //Sequence variables
@@ -180,12 +178,12 @@ const static byte euc16[17][16] PROGMEM = {  //euclidian rythm
 bool offset_buf[6][16];  //offset buffer , Stores the offset result
 
 // random assign
-byte hit_occ[6] = { 5, 1, 20, 20, 40, 80 };   //random change rate of occurrence
-byte off_occ[6] = { 1, 3, 20, 30, 40, 20 };   //random change rate of occurrence
-byte mute_occ[6] = { 0, 2, 20, 20, 20, 20 };  //random change rate of occurrence
-byte hit_rng_max[6] = { 6, 5, 8, 4, 4, 6 };   //random change range of max
-byte hit_rng_min[6] = { 3, 2, 2, 1, 1, 1 };   //random change range of min
-const int bar_max[6] = { 2, 4, 6, 8, 12, 16 };  // control 
+const byte hit_occ[6] PROGMEM = { 5, 1, 20, 20, 40, 80 };   // random change rate of occurrence
+const byte off_occ[6] PROGMEM = { 1, 3, 20, 30, 40, 20 };   // random change rate of occurrence
+const byte mute_occ[6] PROGMEM = { 0, 2, 20, 20, 20, 20 };  // random change rate of occurrence
+const byte hit_rng_max[6] PROGMEM = { 6, 5, 8, 4, 4, 6 };   // random change range of max
+const byte hit_rng_min[6] PROGMEM = { 3, 2, 2, 1, 1, 1 };   // random change range of min
+const int bar_max[6] PROGMEM = { 2, 4, 6, 8, 12, 16 };      // control
 
 byte bar_now = 1;
 byte bar_select = 1;                            // ToDo: selected bar needs to be saved as well!
@@ -201,6 +199,7 @@ EncoderButton encoder(ENCODER_PIN1, ENCODER_PIN2, ENCODER_SW_PIN);
 EncoderButton encoder(ENCODER_PIN2, ENCODER_PIN1, ENCODER_SW_PIN);
 #endif
 
+
 int i = 0;  // ch 1- 6
 
 // configuration for a channel
@@ -208,7 +207,7 @@ struct SlotConfiguration {
   byte hits[6], offset[6];
   bool mute[6];
   byte limit[6];
-  byte probability[6];  // New: probability
+  byte probability[6];
 };
 
 // default config for presets
@@ -291,6 +290,17 @@ const unsigned char Modulove_Logo[] PROGMEM = {
 //(Total bytes used to store images in PROGMEM = 1040)
 
 
+// debug using OLED
+void printDebugMessage(const char* message) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.println(message);
+  display.display();
+  delay(100);
+}
+
 void drawAnimation() {
   for (int x = 0; x <= SCREEN_WIDTH; x += 10) {  //change the last number here to change the speed of the wipe on effect of the logo ;)
     display.clearDisplay();
@@ -301,11 +311,7 @@ void drawAnimation() {
 }
 
 void setup() {
-#ifdef DEBUG
-  Serial.begin(115200);
-#endif
-
-  encoder.setDebounceInterval(3);
+  encoder.setDebounceInterval(5); // Increase debounce interval
   encoder.setMultiClickInterval(10);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setEncoderHandler(onEncoderRotation);
@@ -315,9 +321,9 @@ void setup() {
   initIO();  // includes delay for OLED init!
   initDisplay();
 
-  drawAnimation();  // play boot animation
+  //drawAnimation();  // play boot animation
 
-  delay(1500);  // short delay after boot logo
+  //delay(1500);  // short delay after boot logo
 
   checkAndInitializeSettings();
 
@@ -329,7 +335,6 @@ void setup() {
 }
 
 void loop() {
-
   encoder.update();  // Process Encoder & button updates
 
   //-----------------offset setting----------------------
@@ -345,7 +350,6 @@ void loop() {
 
   //-----------------trigger detect, reset & output----------------------
   bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
-
 
   // Handle reset input
   if (!old_rst_in && rst_in) {
@@ -399,10 +403,10 @@ void loop() {
       if (step_cnt >= 16) {
         bar_now++;
         step_cnt = 0;
-        if (bar_now > bar_max[bar_select]) {
+        if (bar_now > pgm_read_word(&bar_max[bar_select])) {
           bar_now = 1;
           Random_change();
-          randomSeed(analogRead(A0));  // Reinitialize random seed
+          //randomSeed(analogRead(A0));  // Reinitialize random seed
         }
       }
     }
@@ -487,6 +491,7 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
+  //printDebugMessage("Click");
 
   // Channel-specific actions
   if (selected_menu <= MENU_CH_6) {
@@ -495,25 +500,17 @@ void onEncoderClicked(EncoderButton &eb) {
     return;
   }
   // Mode-specific actions
-  if (selected_menu == MENU_SAVE) {
-    saveConfiguration();
-  }
-  if (selected_menu == MENU_LOAD) {
-    loadConfiguration();
-  }
   if (selected_menu == MENU_ALL_RESET) {
     resetSeq();
   }
   if (selected_menu == MENU_ALL_MUTE) {
     toggleAllMutes();
   }
-  if (selected_menu == MENU_TEMP) {  // modes only having a button
+  if (selected_menu == MENU_TEMP) {  // mode only has a Tap button
                                      // Dial in tempo with the encoder and / or TapTempo via encoder button
                                      //adjustTempo();
   }
   if (selected_menu == MENU_RAND) {  //
-    // This needs to work as before where you advance through the random array by rotating the encoder.
-    // should make it possible to go back and forth like 5 steps and have a set of steady values
     Random_change();
   }
 }
@@ -536,44 +533,56 @@ void onEncoderRotation(EncoderButton &eb) {
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
-  // Ensure we're in the first menu stage and a valid channel is selected
-  if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
-    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
-    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
-    if (increment != 0) {
-      if (increment < 0) {
-        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-      }
-      // Adjust the Hits value for the selected channel to more quickly edit the beat / rhythm
-      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+  int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+  int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+
+  if (increment != 0) {
+    if (increment < 0) {
+      acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
     }
-  }
-  // Dial in Random X mode
-  if (selected_menu == MENU_RAND) {
-    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
-    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
-    if (increment != 0) {
-      if (increment < 0) {
-        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+
+    if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
+      // EEPROM slot selection for saving or loading
+      static int selectedSlot = 0;
+      selectedSlot = (selectedSlot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
+
+      // Display selected slot
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      display.setCursor(24, 10);
+      display.println(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
+      display.setCursor(60, 29);
+      display.setTextSize(2);
+      display.print(selectedSlot + 1);
+      display.setTextSize(1);
+      display.display();
+
+      // Check for button press to confirm saving or loading
+      if (encoder.buttonState() == 0) {  // Button released
+        if (selected_menu == MENU_SAVE) {
+          saveToEEPROM(selectedSlot);
+        } else if (selected_menu == MENU_LOAD) {
+          loadFromEEPROM(selectedSlot);
+        }
       }
+
+      delay(100);  // Small delay to debounce button and reduce flicker
+      return;
+    }
+
+    if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
+      // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
+      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+    } else if (selected_menu == MENU_RAND) {
       // Random X mode here
       Random_change();
-    }
-  }
-  // Random advance interval
-    // Dial in Random 
-  if (selected_menu == MENU_RANDOM_ADVANCE) {
-    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
-    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
-    if (increment != 0) {
-      if (increment < 0) {
-        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-      }
+    } else if (selected_menu == MENU_RANDOM_ADVANCE) {
       // Increment or decrement `bar_select` based on encoder direction
-          bar_select += acceleratedIncrement;
-          // Ensure `bar_select` stays within the range of 1 to 5
-          if (bar_select < 1) bar_select = 6;
-          if (bar_select > 6) bar_select = 1;
+      bar_select += acceleratedIncrement;
+      // Ensure `bar_select` stays within the range of 1 to 5
+      if (bar_select < 1) bar_select = 6;
+      if (bar_select > 6) bar_select = 1;
     }
   }
 }
@@ -591,15 +600,14 @@ void initializeCurrentConfig(bool loadDefaults = false) {
 
 void handleMenuNavigation(int changeDirection) {
   if (changeDirection != 0) {
-
     switch (selected_setting) {
-      case SETTING_TOP_MENU:                                                                              // Select channel
+      case SETTING_TOP_MENU:  // Select channel
         selected_menu = static_cast<TopMenu>((selected_menu + changeDirection + MENU_LAST) % MENU_LAST);  // Wrap-around for channel selection
         break;
-      case SETTING_HITS:                                                                                        // Hits
-        if (selected_menu != MENU_RANDOM_ADVANCE) {                                                             // Handling channels 0 to 5
+      case SETTING_HITS:  // Hits
+        if (selected_menu != MENU_RANDOM_ADVANCE) {  // Handling channels 0 to 5
           currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + 17) % 17;  // Ensure hits wrap properly
-        } else {                                                                                                // Handling Random Mode (select_ch == 6)
+        } else {  // Handling Random Mode (select_ch == 6)
           // Increment or decrement `bar_select` based on encoder direction
           bar_select += changeDirection;
           // Ensure `bar_select` stays within the range of 1 to 5
@@ -610,10 +618,10 @@ void handleMenuNavigation(int changeDirection) {
       case SETTING_OFFSET:
         currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] - changeDirection + 16) % 16;  // Wrap-around for offset (reversed the logic of offset so it rotates in the right direction)
         break;
-      case SETTING_LIMIT:                                                                                       // Limit
+      case SETTING_LIMIT:  // Limit
         currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + 17) % 17;  // Wrap-around for limit
         break;
-      case SETTING_MUTE:                                                         // Mute
+      case SETTING_MUTE:  // Mute
         currentConfig.mute[selected_menu] = !currentConfig.mute[selected_menu];  // Toggle mute state
         break;
       case SETTING_RESET:  // Reset channel step
@@ -640,6 +648,7 @@ void saveToEEPROM(int slot) {
     EEPROM.put(baseAddress, currentConfig);
   } else {
     // set error flag or display message ?
+    printDebugMessage("EEPROM Save Error");
   }
 }
 
@@ -649,100 +658,8 @@ void loadFromEEPROM(int slot) {
     EEPROM.get(baseAddress, currentConfig);
   } else {
     // Handle the error
+    printDebugMessage("EEPROM Load Error");
   }
-}
-
-void loadConfiguration() {
-  int selectedSlot = 0;
-  bool loading = true;
-
-  while (loading) {
-    encoder.update();  // Update encoder state
-
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(24, 10);
-    display.println(F("Load from Slot:"));
-    display.setCursor(60, 29);
-    display.setTextSize(2);
-    display.print(selectedSlot + 1);
-    display.setTextSize(1);
-    display.display();
-
-    // Check for encoder rotation to select memory slot
-    int result = encoder.increment();
-    if (result != 0) {
-      if (result > 0) {  // CW
-        selectedSlot++;
-        if (selectedSlot >= NUM_MEMORY_SLOTS) {
-          selectedSlot = 0;
-        }
-      } else if (result < 0) {  // CCW
-        selectedSlot--;
-        if (selectedSlot < 0) {
-          selectedSlot = NUM_MEMORY_SLOTS - 1;
-        }
-      }
-    }
-
-    // Check for button press to load configuration
-    if (encoder.buttonState() == 1) {  // Check if the button is pressed
-      loadFromEEPROM(selectedSlot);
-      loading = false;
-    }
-    delay(100);
-  }
-}
-
-void saveConfiguration() {
-  int selectedSlot = 0;
-  bool saving = true;
-
-  while (saving) {
-    encoder.update();  // Update encoder state
-
-    // Display selected slot
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(24, 10);
-    display.println(F("Save to Slot:"));
-    display.setCursor(60, 29);
-    display.setTextSize(2);
-    display.print(selectedSlot + 1);
-    display.setTextSize(1);
-    display.display();
-
-    // Check for encoder rotation to select memory slot
-    int result = encoder.increment();
-    if (result != 0) {
-      if (result > 0) {  // CW
-        selectedSlot++;
-        if (selectedSlot >= NUM_MEMORY_SLOTS) {
-          selectedSlot = 0;
-        }
-      } else if (result < 0) {  // CCW
-        selectedSlot--;
-        if (selectedSlot < 0) {
-          selectedSlot = NUM_MEMORY_SLOTS - 1;
-        }
-      }
-    }
-
-    // Check for button press to save configuration
-    if (encoder.buttonState() == 1) {             // Check if the button is pressed
-      memorySlots[selectedSlot] = currentConfig;  // This copies all fields including probability
-      saveToEEPROM(selectedSlot);
-      saving = false;
-    }
-    delay(100);
-  }
-}
-
-void saveCurrentConfigToEEPROM() {
-  // could save to the last selected save slot. For now default slot1
-  saveToEEPROM(1);
 }
 
 void initializeDefaultRhythms() {
@@ -761,27 +678,26 @@ void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
 void Random_change() {
   // Loop over the channels to randomly change values
   for (k = 0; k < 6; k++) {  // Loop through all channels
-    if (hit_occ[k] >= random(1, 100)) {
-      currentConfig.hits[k] = random(hit_rng_min[k], hit_rng_max[k]);
+    if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
+      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]));
     }
-    if (off_occ[k] >= random(1, 100)) {
+    if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
       currentConfig.offset[k] = random(0, 16);
     }
-    if (k > 0 && mute_occ[k] >= random(1, 100)) {  // Avoid muting channel 1
+    if (k > 0 && pgm_read_byte(&mute_occ[k]) >= random(1, 100)) {  // Avoid muting channel 1
       currentConfig.mute[k] = 1;
-    } else if (k > 0 && mute_occ[k] < random(1, 100)) {
+    } else if (k > 0 && pgm_read_byte(&mute_occ[k]) < random(1, 100)) {
       currentConfig.mute[k] = 0;
     }
   }
 }
 
-// random change function for one channel (no mute))
+// random change function for one channel (no mute)
 void Random_change_one(byte select_ch) {
-
-  if (random(100) < hit_occ[select_ch]) {
-    currentConfig.hits[select_ch] = random(hit_rng_min[select_ch], hit_rng_max[select_ch] + 1);
+  if (random(100) < pgm_read_byte(&hit_occ[select_ch])) {
+    currentConfig.hits[select_ch] = random(pgm_read_byte(&hit_rng_min[select_ch]), pgm_read_byte(&hit_rng_max[select_ch]) + 1);
   }
-  if (off_occ[select_ch] >= random(1, 100)) {
+  if (pgm_read_byte(&off_occ[select_ch]) >= random(1, 100)) {
     currentConfig.offset[select_ch] = random(0, 16);
   }
 }
@@ -896,8 +812,8 @@ void checkAndInitializeSettings() {
 
 // Drawing random advance indicator
 void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max) {  // Change to const int*
-  if (62 - bar_max[bar_select] * 2 >= 0 && 64 - bar_now * 2 >= 0) {
-    display.drawRect(1, 62 - bar_max[bar_select] * 2, 6, bar_max[bar_select] * 2 + 2, WHITE);
+  if (62 - pgm_read_word(&bar_max[bar_select]) * 2 >= 0 && 64 - bar_now * 2 >= 0) {
+    display.drawRect(1, 62 - pgm_read_word(&bar_max[bar_select]) * 2, 6, pgm_read_word(&bar_max[bar_select]) * 2 + 2, WHITE);
     display.fillRect(1, 64 - bar_now * 2, 6, bar_now * 2, WHITE);
   }
 }
@@ -927,7 +843,6 @@ void drawSelectionIndicator(Setting select_menu) {
     }
   }
 }
-
 
 void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, const byte *graph_y) {
   for (int k = 0; k <= 5; k++) {
@@ -981,8 +896,7 @@ void OLED_display() {
   // Draw step dots within display bounds
   drawStepDots(currentConfig, graph_x, graph_y);
 
-
-  //draw hits line : 2~16hits if not muted
+  // draw hits line : 2~16hits if not muted
   for (k = 0; k <= 5; k++) {  // Iterate over each channel
     buf_count = 0;
     // Collect the hit points
@@ -1028,7 +942,7 @@ void OLED_display() {
   }
 
   //draw play step circle
-  for (k = 0; k <= 5; k++) {                                               //ch count
+  for (k = 0; k <= 5; k++) {  //ch count
     if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  //mute on = no display circle
       if (offset_buf[k][playing_step[k]] == 0) {
         display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
@@ -1039,8 +953,6 @@ void OLED_display() {
     }
   }
 
-
-
   // Draw big 'M' for muted channels 
   for (k = 0; k <= 5; k++) {
     if (currentConfig.mute[k] && selected_setting == SETTING_TOP_MENU) {
@@ -1050,7 +962,6 @@ void OLED_display() {
       display.setTextSize(1);
       display.setTextColor(WHITE);
       display.print(F("M"));
-
     }
   }
 
@@ -1062,14 +973,13 @@ void OLED_display() {
     // draw selected parameter UI for currently active channel when editing
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
-        case SETTING_HITS:                   // Hits
+        case SETTING_HITS:  // Hits
           if (currentConfig.hits[ch] > 9) {  // Display only if there is space in the UI
             if (x_base + 10 < 120 && y_base < 56) {
-
               display.setCursor(x_base + 10, y_base);  // Adjust position
               display.print(currentConfig.hits[ch]);
               display.setCursor(x_base + 13, y_base + 8);
-              display.println("H");
+              display.println(F("H"));
             }
           }
           break;
@@ -1094,7 +1004,6 @@ void OLED_display() {
           }
           break;
         case SETTING_PROB:
-
           int barWidth = 4;    // Width of the probability bar
           int maxHeight = 15;  // Maximum height of the bar, adjust as needed
           int margin = 2;      // Margin around the fillin
@@ -1123,7 +1032,6 @@ void OLED_display() {
           // Display percentage on top of the bar graph
           display.setCursor(text_x, text_y);
           display.print(currentConfig.probability[ch]);
-          //display.println("%");
 
           if (selected_setting == SETTING_PROB) {
             // Draw the outer rectangle
