@@ -180,12 +180,12 @@ const static byte euc16[17][16] PROGMEM = {  //euclidian rythm
 bool offset_buf[6][16];  //offset buffer , Stores the offset result
 
 // random assign
-const byte hit_occ[6] PROGMEM = { 5, 1, 20, 20, 40, 80 };
-const byte off_occ[6] PROGMEM = { 1, 3, 20, 30, 40, 20 };
-const byte mute_occ[6] PROGMEM = { 0, 2, 20, 20, 20, 20 };
-const byte hit_rng_max[6] PROGMEM = { 6, 5, 8, 4, 4, 6 };
-const byte hit_rng_min[6] PROGMEM = { 3, 2, 2, 1, 1, 1 };
-const int bar_max[6] PROGMEM = { 2, 4, 6, 8, 12, 16 };
+byte hit_occ[6] = { 5, 1, 20, 20, 40, 80 };   //random change rate of occurrence
+byte off_occ[6] = { 1, 3, 20, 30, 40, 20 };   //random change rate of occurrence
+byte mute_occ[6] = { 0, 2, 20, 20, 20, 20 };  //random change rate of occurrence
+byte hit_rng_max[6] = { 6, 5, 8, 4, 4, 6 };   //random change range of max
+byte hit_rng_min[6] = { 3, 2, 2, 1, 1, 1 };   //random change range of min
+const int bar_max[6] = { 2, 4, 6, 8, 12, 16 };  // control 
 
 byte bar_now = 1;
 byte bar_select = 1;                            // ToDo: selected bar needs to be saved as well!
@@ -546,6 +546,34 @@ void onEncoderPressedRotation(EncoderButton &eb) {
       }
       // Adjust the Hits value for the selected channel to more quickly edit the beat / rhythm
       currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+    }
+  }
+  // Dial in Random X mode
+  if (selected_menu == MENU_RAND) {
+    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+    if (increment != 0) {
+      if (increment < 0) {
+        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+      }
+      // Random X mode here
+      Random_change();
+    }
+  }
+  // Random advance interval
+    // Dial in Random 
+  if (selected_menu == MENU_RANDOM_ADVANCE) {
+    int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+    int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+    if (increment != 0) {
+      if (increment < 0) {
+        acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+      }
+      // Increment or decrement `bar_select` based on encoder direction
+          bar_select += acceleratedIncrement;
+          // Ensure `bar_select` stays within the range of 1 to 5
+          if (bar_select < 1) bar_select = 6;
+          if (bar_select > 6) bar_select = 1;
     }
   }
 }
