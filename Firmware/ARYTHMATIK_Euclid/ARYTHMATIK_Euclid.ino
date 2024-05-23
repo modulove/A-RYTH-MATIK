@@ -81,7 +81,7 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
-//#include <ArduinoTapTempo.h>
+#include <ArduinoTapTempo.h>
 
 // Enum for top menu
 enum TopMenu {
@@ -135,6 +135,8 @@ const int rstPin = 11, clkPin = 13;
 // Timing
 unsigned long startMillis, currentMillis, lastTriggerTime;
 bool trg_in = false, old_trg_in = false, rst_in = false, old_rst_in = false;
+//ArduinoTapTempo tapTempo;
+
 byte playing_step[6] = { 0 };
 
 // display Menu and UI
@@ -178,14 +180,14 @@ const static byte euc16[17][16] PROGMEM = {  //euclidian rythm
 bool offset_buf[6][16];  //offset buffer , Stores the offset result
 
 // random assign
-byte hit_occ[6] = { 5, 1, 20, 20, 40, 80 };   //random change rate of occurrence
-byte off_occ[6] = { 1, 3, 20, 30, 40, 20 };   //random change rate of occurrence
-byte mute_occ[6] = { 0, 2, 20, 20, 20, 20 };  //random change rate of occurrence
-byte hit_rng_max[6] = { 6, 5, 8, 4, 4, 6 };   //random change range of max
-byte hit_rng_min[6] = { 3, 2, 2, 1, 1, 1 };   //random change range of min
+const byte hit_occ[6] PROGMEM = { 5, 1, 20, 20, 40, 80 };
+const byte off_occ[6] PROGMEM = { 1, 3, 20, 30, 40, 20 };
+const byte mute_occ[6] PROGMEM = { 0, 2, 20, 20, 20, 20 };
+const byte hit_rng_max[6] PROGMEM = { 6, 5, 8, 4, 4, 6 };
+const byte hit_rng_min[6] PROGMEM = { 3, 2, 2, 1, 1, 1 };
+const int bar_max[6] PROGMEM = { 2, 4, 6, 8, 12, 16 };
 
 byte bar_now = 1;
-const int bar_max[6] = { 2, 4, 6, 8, 12, 16 };  // control Random advance mode 6
 byte bar_select = 1;                            // ToDo: selected bar needs to be saved as well!
 byte step_cnt = 0;
 
@@ -535,7 +537,7 @@ void onEncoderRotation(EncoderButton &eb) {
 
 void onEncoderPressedRotation(EncoderButton &eb) {
   // Ensure we're in the first menu stage and a valid channel is selected
-  if (selected_setting == SETTING_TOP_MENU && selected_menu < MENU_CH_6) {
+  if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
     int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
     int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
     if (increment != 0) {
@@ -1009,43 +1011,18 @@ void OLED_display() {
     }
   }
 
-  /* 
-// fixme hackme ToDo
-    //write hit and offset values for H > 9 to 16 hits if not muted and not in edit mode. better to just draw dots to where the hits will be instead of the shape and lines ?
-    if (select_menu > 3 || select_menu == 0) {
-        for (k = 0; k <= 5; k++) {
-            if (currentConfig.hits[k] > 9 && currentConfig.mute[k] == 0) {  // show overview of channel if not muted
-                int x_base = 10 + graph_x[k];
-                int y_base_hit = 11 + graph_y[k];
-                int y_base_offset = 17 + graph_y[k];
-                if (x_base < 120 && y_base_hit < 64 && y_base_offset < 64 && select_menu != 7) {
-                    display.setCursor(x_base, y_base_hit);
-                    display.println(F("H"));
-                    display.print(currentConfig.hits[k]);
 
-                    display.setCursor(x_base, y_base_offset);
-                    display.println(F("L"));
-                    if (currentConfig.limit[k] == 0) {
-                        display.print(currentConfig.limit[k]);
-                    } else {
-                        display.print(16 - currentConfig.limit[k]);
-                    }
-                }
-            }
-        }
-    }
-    */
 
   // Draw big 'M' for muted channels 
   for (k = 0; k <= 5; k++) {
     if (currentConfig.mute[k] && selected_setting == SETTING_TOP_MENU) {
-      int centerX = graph_x[k] + 12;  // Center of the channel's area
-      int centerY = graph_y[k] + 12;
+      int centerX = graph_x[k] + 15;  // Center of the channel's area
+      int centerY = graph_y[k] + 15;
       display.setCursor(centerX - 3, centerY - 4);  // Adjust cursor to center the 'M'
-      display.setTextSize(2);
+      display.setTextSize(1);
       display.setTextColor(WHITE);
       display.print(F("M"));
-      display.setTextSize(1);
+
     }
   }
 
