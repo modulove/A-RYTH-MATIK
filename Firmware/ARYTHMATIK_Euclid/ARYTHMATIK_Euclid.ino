@@ -186,7 +186,7 @@ const byte hit_rng_min[6] PROGMEM = { 3, 2, 2, 1, 1, 1 };   // random change ran
 const int bar_max[6] PROGMEM = { 2, 4, 6, 8, 12, 16 };      // control
 
 byte bar_now = 1;
-byte bar_select = 1;                            // ToDo: selected bar needs to be saved as well!
+byte bar_select = 1;  // ToDo: selected bar needs to be saved as well!
 byte step_cnt = 0;
 
 // Display Setup
@@ -291,7 +291,7 @@ const unsigned char Modulove_Logo[] PROGMEM = {
 
 
 // debug using OLED
-void printDebugMessage(const char* message) {
+void printDebugMessage(const char *message) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -311,7 +311,7 @@ void drawAnimation() {
 }
 
 void setup() {
-  encoder.setDebounceInterval(5); // Increase debounce interval
+  encoder.setDebounceInterval(5);  // Increase debounce interval
   encoder.setMultiClickInterval(10);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setEncoderHandler(onEncoderRotation);
@@ -541,6 +541,17 @@ void onEncoderPressedRotation(EncoderButton &eb) {
       acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
     }
 
+    // Handle channel switching only when in specific modes
+    if (selected_setting == SETTING_HITS || selected_setting == SETTING_OFFSET || selected_setting == SETTING_LIMIT || selected_setting == SETTING_MUTE || selected_setting == SETTING_RESET || selected_setting == SETTING_RANDOM || selected_setting == SETTING_PROB) {
+
+      selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
+      // Ensure the selected_menu is within the range of channels
+      if (selected_menu > MENU_CH_6) {
+        selected_menu = MENU_CH_1;
+      }
+      return;
+    }
+
     if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
       // EEPROM slot selection for saving or loading
       static int selectedSlot = 0;
@@ -587,6 +598,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   }
 }
 
+
 void initializeCurrentConfig(bool loadDefaults = false) {
   if (loadDefaults) {
     // Load default configuration from PROGMEM
@@ -601,13 +613,13 @@ void initializeCurrentConfig(bool loadDefaults = false) {
 void handleMenuNavigation(int changeDirection) {
   if (changeDirection != 0) {
     switch (selected_setting) {
-      case SETTING_TOP_MENU:  // Select channel
+      case SETTING_TOP_MENU:                                                                              // Select channel
         selected_menu = static_cast<TopMenu>((selected_menu + changeDirection + MENU_LAST) % MENU_LAST);  // Wrap-around for channel selection
         break;
-      case SETTING_HITS:  // Hits
-        if (selected_menu != MENU_RANDOM_ADVANCE) {  // Handling channels 0 to 5
+      case SETTING_HITS:                                                                                        // Hits
+        if (selected_menu != MENU_RANDOM_ADVANCE) {                                                             // Handling channels 0 to 5
           currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + 17) % 17;  // Ensure hits wrap properly
-        } else {  // Handling Random Mode (select_ch == 6)
+        } else {                                                                                                // Handling Random Mode (select_ch == 6)
           // Increment or decrement `bar_select` based on encoder direction
           bar_select += changeDirection;
           // Ensure `bar_select` stays within the range of 1 to 5
@@ -618,10 +630,10 @@ void handleMenuNavigation(int changeDirection) {
       case SETTING_OFFSET:
         currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] - changeDirection + 16) % 16;  // Wrap-around for offset (reversed the logic of offset so it rotates in the right direction)
         break;
-      case SETTING_LIMIT:  // Limit
+      case SETTING_LIMIT:                                                                                       // Limit
         currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + 17) % 17;  // Wrap-around for limit
         break;
-      case SETTING_MUTE:  // Mute
+      case SETTING_MUTE:                                                         // Mute
         currentConfig.mute[selected_menu] = !currentConfig.mute[selected_menu];  // Toggle mute state
         break;
       case SETTING_RESET:  // Reset channel step
@@ -942,7 +954,7 @@ void OLED_display() {
   }
 
   //draw play step circle
-  for (k = 0; k <= 5; k++) {  //ch count
+  for (k = 0; k <= 5; k++) {                                               //ch count
     if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  //mute on = no display circle
       if (offset_buf[k][playing_step[k]] == 0) {
         display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
@@ -953,7 +965,7 @@ void OLED_display() {
     }
   }
 
-  // Draw big 'M' for muted channels 
+  // Draw big 'M' for muted channels
   for (k = 0; k <= 5; k++) {
     if (currentConfig.mute[k] && selected_setting == SETTING_TOP_MENU) {
       int centerX = graph_x[k] + 15;  // Center of the channel's area
@@ -973,7 +985,7 @@ void OLED_display() {
     // draw selected parameter UI for currently active channel when editing
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
-        case SETTING_HITS:  // Hits
+        case SETTING_HITS:                   // Hits
           if (currentConfig.hits[ch] > 9) {  // Display only if there is space in the UI
             if (x_base + 10 < 120 && y_base < 56) {
               display.setCursor(x_base + 10, y_base);  // Adjust position
