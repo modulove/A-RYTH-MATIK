@@ -82,7 +82,7 @@ int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 
-// Enum for top menu
+// Add a new menu for preset selection
 enum TopMenu {
   MENU_CH_1,
   MENU_CH_2,
@@ -95,7 +95,7 @@ enum TopMenu {
   MENU_LOAD,
   MENU_ALL_RESET,
   MENU_ALL_MUTE,
-  MENU_TEMP,
+  MENU_PRESET,  // New menu for preset selection
   MENU_RAND,
   MENU_LAST
 };
@@ -208,13 +208,36 @@ struct SlotConfiguration {
   bool mute[6];
   byte limit[6];
   byte probability[6];
+  char name[10];  // Add a name field with a fixed size
 };
 
-// default config for presets
-const SlotConfiguration defaultSlots[3] PROGMEM = {
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 }, { 100, 100, 100, 100, 100, 100 } },    // Techno
-  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 }, { 100, 100, 100, 100, 100, 100 } },  // House
-  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 } }   // Ambient (Minimal beats)
+// Updated default (preset) config for presets with names
+const SlotConfiguration defaultSlots[] PROGMEM = {
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 }, { 100, 100, 100, 100, 100, 100 }, "Techno" },
+  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 }, { 100, 100, 100, 100, 100, 100 }, "House" },
+  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Ambient" },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" }, // Brazilian
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" }, // Swing Jazz
+  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "BossaNova" }, // Bossa Nova
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Reggae" }, // Reggae
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "HipHop" }, // Hip Hop
+  { { 6, 4, 6, 4, 6, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Breakbeat" }, // Breakbeat
+  { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DnB" }, // Drum n Bass
+  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat" }, // Afrobeat
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk" }, // Funk
+  { { 3, 3, 4, 4, 3, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 10, 12, 10, 12, 10, 12 }, { 100, 100, 100, 100, 100, 100 }, "Cumbia" }, // Cumbia
+  { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Tango" }, // Tango
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz" }, // Waltz
+  { { 7, 5, 7, 5, 7, 5 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Salsa" }, // Salsa
+  { { 6, 4, 6, 4, 6, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Mambo" }, // Mambo
+  { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ChaCha" }, // Cha Cha
+  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Rumba" }, // Rumba
+  { { 5, 4, 5, 4, 5, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dhol" }, // Indian Dhol
+  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Baladi" }, // Middle Eastern
+  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Gamelan" }, // Indonesian Gamelan
+  { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dub" }, // Dub
+  { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Experimental" }, // Experimental
+  { { 4, 4, 4, 4, 4, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Minimal" }, // Minimal
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
@@ -491,27 +514,33 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  //printDebugMessage("Click");
+  if (selected_menu == MENU_PRESET) {
+    // Do nothing, handled in the rotation handler
+  } else {
+    //printDebugMessage("Click");
 
-  // Channel-specific actions
-  if (selected_menu <= MENU_CH_6) {
-    // Click should only advance selected setting when a channel top menu is selected.
-    selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
-    return;
-  }
-  // Mode-specific actions
-  if (selected_menu == MENU_ALL_RESET) {
-    resetSeq();
-  }
-  if (selected_menu == MENU_ALL_MUTE) {
-    toggleAllMutes();
-  }
-  if (selected_menu == MENU_TEMP) {  // mode only has a Tap button
-                                     // Dial in tempo with the encoder and / or TapTempo via encoder button
-                                     //adjustTempo();
-  }
-  if (selected_menu == MENU_RAND) {  //
-    Random_change();
+    // Channel-specific actions
+    if (selected_menu <= MENU_CH_6) {
+      // Click should only advance selected setting when a channel top menu is selected.
+      selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
+      return;
+    }
+    // Mode-specific actions
+    if (selected_menu == MENU_ALL_RESET) {
+      resetSeq();
+    }
+    if (selected_menu == MENU_ALL_MUTE) {
+      toggleAllMutes();
+    }
+    /*
+    if (selected_menu == MENU_TEMP) {  // mode only has a Tap button // seems resources are to sparse for TapTempo library
+                                       // Dial in tempo with the encoder and / or TapTempo via encoder button
+                                       //adjustTempo();
+    }
+    */
+    if (selected_menu == MENU_RAND) {  //
+      Random_change();
+    }
   }
 }
 
@@ -539,6 +568,35 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   if (increment != 0) {
     if (increment < 0) {
       acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+    }
+
+    if (selected_setting == SETTING_TOP_MENU && selected_menu == MENU_PRESET) {
+      // Handle preset selection
+      static int selectedPreset = 0;
+      selectedPreset = (selectedPreset + acceleratedIncrement + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
+
+      // Display selected preset name
+      char presetName[10];
+      memcpy_P(&presetName, &defaultSlots[selectedPreset].name, sizeof(presetName));
+
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      display.setCursor(24, 10);
+      display.println(F("Select Preset:"));
+      display.setCursor(24, 29);
+      //display.setTextSize(2);
+      display.print(presetName);
+      //display.setTextSize(1);
+      display.display();
+
+      // Check for button press to confirm loading the preset
+      if (encoder.buttonState() == 0) {  // Button released
+        loadDefaultConfig(&currentConfig, selectedPreset);
+      }
+
+      delay(100);  // Small delay to debounce button and reduce flicker
+      return;
     }
 
     // Handle channel switching only when in specific modes
@@ -602,7 +660,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 void initializeCurrentConfig(bool loadDefaults = false) {
   if (loadDefaults) {
     // Load default configuration from PROGMEM
-    memcpy_P(&currentConfig, &defaultSlots[1], sizeof(SlotConfiguration));
+    memcpy_P(&currentConfig, &defaultSlots[0], sizeof(SlotConfiguration)); // Load the first default slot as the initial configuration
   } else {
     // Load configuration from EEPROM
     int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
@@ -659,7 +717,7 @@ void saveToEEPROM(int slot) {
   if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
     EEPROM.put(baseAddress, currentConfig);
   } else {
-    // set error flag or display message ?
+    // Handle error
     printDebugMessage("EEPROM Save Error");
   }
 }
@@ -773,7 +831,7 @@ void setMenuCharacters(TopMenu select_ch, char &c1, char &c2, char &c3, char &c4
       case MENU_LOAD: c1 = 'L', c2 = ' ', c3 = ' ', c4 = ' '; break;            // LOAD
       case MENU_ALL_RESET: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;       // ALL for RESET
       case MENU_ALL_MUTE: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;        // ALL for MUTE
-      case MENU_TEMP: c1 = 'T', c2 = ' ', c3 = ' ', c4 = ' '; break;            // TEMPO
+      //case MENU_TEMP: c1 = 'T', c2 = ' ', c3 = ' ', c4 = ' '; break;            // TEMPO
       case MENU_RAND: c1 = 'X', c2 = ' ', c3 = ' ', c4 = ' '; break;            // NEW RANDOM
       default: c1 = ' ', c2 = ' ', c3 = ' ', c4 = ' ';                          // Default blank
     }
@@ -798,15 +856,15 @@ void drawModeMenu(TopMenu select_ch) {
   switch (select_ch) {
     case MENU_SAVE: leftMenu('S', 'A', 'V', 'E'); break;       // SAVE
     case MENU_LOAD: leftMenu('L', 'O', 'A', 'D'); break;       // LOAD
-    case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;  // RSET changed from REST to RSET
+    case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;  // RESET
     case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;   // MUTE
-    case MENU_TEMP: leftMenu('T', 'E', 'M', 'P'); break;       // TEMPO
+    case MENU_PRESET: leftMenu('P', 'R', 'S', 'T'); break;     // PRESET
     case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;       // NEW RANDOM SEQUENCE SELECT MODE
     default: break;
   }
 }
 
-// Initialize EEPROM and check magic number
+// In setup() or appropriate initialization function
 void checkAndInitializeSettings() {
   char magic[sizeof(FIRMWARE_MAGIC)];
   EEPROM.get(FIRMWARE_MAGIC_ADDRESS, magic);
