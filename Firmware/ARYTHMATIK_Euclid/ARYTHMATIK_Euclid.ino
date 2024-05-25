@@ -31,7 +31,7 @@
 
 // Flag for reversing the encoder direction.
 // ToDo: Put this in config Menue dialog at boot ?
-//#define ENCODER_REVERSED
+#define ENCODER_REVERSED
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
@@ -70,6 +70,7 @@
 #define LED5 FastGPIO::Pin<1>
 #define LED6 FastGPIO::Pin<17>
 #endif
+#define CLK_LED FastGPIO::Pin<4>
 
 //#define DEBUG  // Uncomment for enabling debug print to serial monitoring output. Note: this affects performance and locks LED 4 & 5 on HIGH.
 int debug = 0;  // ToDo: rework the debug feature (enable in menue?)
@@ -153,10 +154,13 @@ byte line_ybuf[17];
 const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 
 //Sequence variables
+const byte MAX_CHANNELS = 6;
+const byte MAX_STEPS = 16;
+const byte MAX_PATTERNS = 17;
 byte j = 0, k = 0, m = 0, buf_count = 0;
 unsigned long gate_timer = 0;
 
-const static byte euc16[17][16] PROGMEM = {  //euclidian rythm
+const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
   { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
   { 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 },
@@ -175,15 +179,15 @@ const static byte euc16[17][16] PROGMEM = {  //euclidian rythm
   { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0 },
   { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 };
-bool offset_buf[6][16];  //offset buffer , Stores the offset result
+bool offset_buf[MAX_CHANNELS][MAX_STEPS];  //offset buffer , Stores the offset result
 
 // random assign
-const byte hit_occ[6] PROGMEM = { 5, 1, 20, 20, 40, 80 };   // random change rate of occurrence
-const byte off_occ[6] PROGMEM = { 1, 3, 20, 30, 40, 20 };   // random change rate of occurrence
-const byte mute_occ[6] PROGMEM = { 0, 2, 20, 20, 20, 20 };  // random change rate of occurrence
-const byte hit_rng_max[6] PROGMEM = { 6, 5, 8, 4, 4, 6 };   // random change range of max
-const byte hit_rng_min[6] PROGMEM = { 3, 2, 2, 1, 1, 1 };   // random change range of min
-const int bar_max[6] PROGMEM = { 2, 4, 6, 8, 12, 16 };      // control
+const byte hit_occ[MAX_CHANNELS] PROGMEM = { 5, 1, 20, 20, 40, 80 };   // random change rate of occurrence
+const byte off_occ[MAX_CHANNELS] PROGMEM = { 1, 3, 20, 30, 40, 20 };   // random change rate of occurrence
+const byte mute_occ[MAX_CHANNELS] PROGMEM = { 0, 2, 20, 20, 20, 20 };  // random change rate of occurrence
+const byte hit_rng_max[MAX_CHANNELS] PROGMEM = { 6, 5, 8, 4, 4, 6 };   // random change range of max
+const byte hit_rng_min[MAX_CHANNELS] PROGMEM = { 3, 2, 2, 1, 1, 1 };   // random change range of min
+const int bar_max[MAX_CHANNELS] PROGMEM = { 2, 4, 6, 8, 12, 16 };      // control
 
 byte bar_now = 1;
 byte bar_select = 1;  // ToDo: selected bar needs to be saved as well!
@@ -204,10 +208,11 @@ int i = 0;  // ch 1- 6
 
 // configuration for a channel
 struct SlotConfiguration {
-  byte hits[6], offset[6];
-  bool mute[6];
-  byte limit[6];
-  byte probability[6];
+  byte hits[MAX_CHANNELS];
+  byte offset[MAX_CHANNELS];
+  bool mute[MAX_CHANNELS];
+  byte limit[MAX_CHANNELS];
+  byte probability[MAX_CHANNELS];
   char name[10];  // Add a name field with a fixed size
 };
 
@@ -236,7 +241,8 @@ const SlotConfiguration defaultSlots[] PROGMEM = {
   { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Baladi" }, // Middle Eastern
   { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Gamelan" }, // Indonesian Gamelan
   { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dub" }, // Dub
-  { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Experimental" }, // Experimental
+  // { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Experimental" }, // Experimental
+  { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Expermntl" }, // Fit above in 10 char limit
   { { 4, 4, 4, 4, 4, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Minimal" }, // Minimal
 };
 
@@ -367,7 +373,7 @@ void loop() {
     }
 
     for (i = 0; i < currentConfig.offset[k]; i++) {
-      offset_buf[k][16 - currentConfig.offset[k] + i] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
+      offset_buf[k][MAX_STEPS - currentConfig.offset[k] + i] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
     }
   }
 
@@ -383,9 +389,9 @@ void loop() {
   // Trigger detection and response
   if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
-    FastGPIO::Pin<4>::setOutput(1);
+    CLK_LED::setOutput(1);
     debug = 0;
-    for (int i = 0; i <= 5; i++) {
+    for (int i = 0; i < MAX_CHANNELS; i++) {
       playing_step[i]++;
       if (playing_step[i] >= currentConfig.limit[i]) {
         playing_step[i] = 0;  // Step limit is reached
@@ -442,7 +448,7 @@ void loop() {
     OUTPUT4::setOutput(0);
     OUTPUT5::setOutput(0);
     OUTPUT6::setOutput(0);
-    FastGPIO::Pin<4>::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
+    CLK_LED::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
   }
   if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
     LED1::setOutput(0);
@@ -469,10 +475,6 @@ void loop() {
 }
 
 void initIO() {
-  FastGPIO::Pin<4>::setOutputLow();  // CLK LED
-  //FastGPIO::Pin<12>::setInputPulledUp();  // BUTTON
-  //FastGPIO::Pin<3>::setInputPulledUp();   // ENCODER A
-  //FastGPIO::Pin<2>::setInputPulledUp();   // ENCODER B
   RESET::setInput();        // RST
   CLK::setInput();          // CLK
   OUTPUT1::setOutputLow();  // CH1
@@ -488,6 +490,7 @@ void initIO() {
   LED4::setOutputLow();  // CH6 LED
   LED5::setOutputLow();  // CH4 LED
   LED6::setOutputLow();  // CH5 LED
+  CLK_LED::setOutputLow();  // CLK LED
 }
 
 void initDisplay() {
@@ -545,117 +548,117 @@ void onEncoderClicked(EncoderButton &eb) {
 }
 
 void onEncoderRotation(EncoderButton &eb) {
-  int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
-  int acceleratedIncrement = increment * increment;  // Squaring the increment
-  if (increment != 0) {
-    if (increment < 0) {
-      acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-    }
+  int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
+  if (increment == 0) {
+    return;
+  }
 
-    if (selected_menu == MENU_RAND && selected_setting == SETTING_HITS) {
-      // Advance random change values with encoder rotation
-      Random_change();
-    } else {
-      handleMenuNavigation(acceleratedIncrement);
-    }
+  int acceleratedIncrement = increment * increment;  // Squaring the increment
+  if (increment < 0) {
+    acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+  }
+
+  if (selected_menu == MENU_RAND) {
+    // Advance random change values with encoder rotation
+    Random_change();
+  }
+  else {
+    handleSettingNavigation(acceleratedIncrement);
   }
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
   int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+  if (increment == 0) return;
+
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+  if (increment < 0) {
+    acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+  }
 
-  if (increment != 0) {
-    if (increment < 0) {
-      acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
+  if (selected_setting == SETTING_TOP_MENU && selected_menu == MENU_PRESET) {
+    // Handle preset selection
+    static int selectedPreset = 0;
+    selectedPreset = (selectedPreset + acceleratedIncrement + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
+
+    // Display selected preset name
+    char presetName[10];
+    memcpy_P(&presetName, &defaultSlots[selectedPreset].name, sizeof(presetName));
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(24, 10);
+    display.println(F("Select Preset:"));
+    display.setCursor(24, 29);
+    //display.setTextSize(2);
+    display.print(presetName);
+    //display.setTextSize(1);
+    display.display();
+
+    // Check for button press to confirm loading the preset
+    if (encoder.buttonState() == 0) {  // Button released
+      loadDefaultConfig(&currentConfig, selectedPreset);
     }
 
-    if (selected_setting == SETTING_TOP_MENU && selected_menu == MENU_PRESET) {
-      // Handle preset selection
-      static int selectedPreset = 0;
-      selectedPreset = (selectedPreset + acceleratedIncrement + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
+    delay(100);  // Small delay to debounce button and reduce flicker
+    return;
+  }
 
-      // Display selected preset name
-      char presetName[10];
-      memcpy_P(&presetName, &defaultSlots[selectedPreset].name, sizeof(presetName));
+  // Handle channel switching only when in specific modes
+  if (selected_setting == SETTING_HITS || selected_setting == SETTING_OFFSET || selected_setting == SETTING_LIMIT || selected_setting == SETTING_MUTE || selected_setting == SETTING_RESET || selected_setting == SETTING_RANDOM || selected_setting == SETTING_PROB) {
 
-      display.clearDisplay();
-      display.setTextSize(1);
-      display.setTextColor(WHITE);
-      display.setCursor(24, 10);
-      display.println(F("Select Preset:"));
-      display.setCursor(24, 29);
-      //display.setTextSize(2);
-      display.print(presetName);
-      //display.setTextSize(1);
-      display.display();
+    selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
+    // Ensure the selected_menu is within the range of channels
+    if (selected_menu > MENU_CH_6) {
+      selected_menu = MENU_CH_1;
+    }
+    return;
+  }
 
-      // Check for button press to confirm loading the preset
-      if (encoder.buttonState() == 0) {  // Button released
-        loadDefaultConfig(&currentConfig, selectedPreset);
+  if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
+    // EEPROM slot selection for saving or loading
+    static int selectedSlot = 0;
+    selectedSlot = (selectedSlot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
+
+    // Display selected slot
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(24, 10);
+    display.println(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
+    display.setCursor(60, 29);
+    display.setTextSize(2);
+    display.print(selectedSlot + 1);
+    display.setTextSize(1);
+    display.display();
+
+    // Check for button press to confirm saving or loading
+    if (encoder.buttonState() == 0) {  // Button released
+      if (selected_menu == MENU_SAVE) {
+        saveToEEPROM(selectedSlot);
+      } else if (selected_menu == MENU_LOAD) {
+        loadFromEEPROM(selectedSlot);
       }
-
-      delay(100);  // Small delay to debounce button and reduce flicker
-      return;
     }
 
-    // Handle channel switching only when in specific modes
-    if (selected_setting == SETTING_HITS || selected_setting == SETTING_OFFSET || selected_setting == SETTING_LIMIT || selected_setting == SETTING_MUTE || selected_setting == SETTING_RESET || selected_setting == SETTING_RANDOM || selected_setting == SETTING_PROB) {
+    delay(100);  // Small delay to debounce button and reduce flicker
+    return;
+  }
 
-      selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
-      // Ensure the selected_menu is within the range of channels
-      if (selected_menu > MENU_CH_6) {
-        selected_menu = MENU_CH_1;
-      }
-      return;
-    }
-
-    if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
-      // EEPROM slot selection for saving or loading
-      static int selectedSlot = 0;
-      selectedSlot = (selectedSlot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
-
-      // Display selected slot
-      display.clearDisplay();
-      display.setTextSize(1);
-      display.setTextColor(WHITE);
-      display.setCursor(24, 10);
-      display.println(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
-      display.setCursor(60, 29);
-      display.setTextSize(2);
-      display.print(selectedSlot + 1);
-      display.setTextSize(1);
-      display.display();
-
-      // Check for button press to confirm saving or loading
-      if (encoder.buttonState() == 0) {  // Button released
-        if (selected_menu == MENU_SAVE) {
-          saveToEEPROM(selectedSlot);
-        } else if (selected_menu == MENU_LOAD) {
-          loadFromEEPROM(selectedSlot);
-        }
-      }
-
-      delay(100);  // Small delay to debounce button and reduce flicker
-      return;
-    }
-
-    if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
-      // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
-      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
-    } else if (selected_menu == MENU_RAND) {
-      // Random X mode here
-      Random_change();
-    } else if (selected_menu == MENU_RANDOM_ADVANCE) {
-      // Increment or decrement `bar_select` based on encoder direction
-      bar_select += acceleratedIncrement;
-      // Ensure `bar_select` stays within the range of 1 to 5
+  if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
+    // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
+    currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+  } else if (selected_menu == MENU_RAND) {
+    // Random X mode here
+    Random_change();
+  } else if (selected_menu == MENU_RANDOM_ADVANCE) {
+    // Ensure `bar_select` stays within the range of 1 to 5
+    bar_select += increment;
       if (bar_select < 1) bar_select = 6;
       if (bar_select > 6) bar_select = 1;
-    }
   }
 }
-
 
 void initializeCurrentConfig(bool loadDefaults = false) {
   if (loadDefaults) {
@@ -668,42 +671,32 @@ void initializeCurrentConfig(bool loadDefaults = false) {
   }
 }
 
-void handleMenuNavigation(int changeDirection) {
-  if (changeDirection != 0) {
-    switch (selected_setting) {
-      case SETTING_TOP_MENU:                                                                              // Select channel
-        selected_menu = static_cast<TopMenu>((selected_menu + changeDirection + MENU_LAST) % MENU_LAST);  // Wrap-around for channel selection
-        break;
-      case SETTING_HITS:                                                                                        // Hits
-        if (selected_menu != MENU_RANDOM_ADVANCE) {                                                             // Handling channels 0 to 5
-          currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + 17) % 17;  // Ensure hits wrap properly
-        } else {                                                                                                // Handling Random Mode (select_ch == 6)
-          // Increment or decrement `bar_select` based on encoder direction
-          bar_select += changeDirection;
-          // Ensure `bar_select` stays within the range of 1 to 5
-          if (bar_select < 1) bar_select = 6;
-          if (bar_select > 6) bar_select = 1;
-        }
-        break;
-      case SETTING_OFFSET:
-        currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] - changeDirection + 16) % 16;  // Wrap-around for offset (reversed the logic of offset so it rotates in the right direction)
-        break;
-      case SETTING_LIMIT:                                                                                       // Limit
-        currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + 17) % 17;  // Wrap-around for limit
-        break;
-      case SETTING_MUTE:                                                         // Mute
-        currentConfig.mute[selected_menu] = !currentConfig.mute[selected_menu];  // Toggle mute state
-        break;
-      case SETTING_RESET:  // Reset channel step
-        playing_step[selected_menu] = 0;
-        break;
-      case SETTING_RANDOM:  // Randomize channel
-        Random_change_one(selected_menu);
-        break;
-      case SETTING_PROB:  // Set probability
-        currentConfig.probability[selected_menu] = (currentConfig.probability[selected_menu] + changeDirection + 101) % 101;
-        break;
-    }
+void handleSettingNavigation(int changeDirection) {
+  switch (selected_setting) {
+    case SETTING_TOP_MENU:                                                                              // Select channel
+      selected_menu = static_cast<TopMenu>((selected_menu + changeDirection + MENU_LAST) % MENU_LAST);  // Wrap-around for channel selection
+      break;
+    case SETTING_HITS:                                                                                        // Hits
+        currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + MAX_PATTERNS) % MAX_PATTERNS;  // Ensure hits wrap properly
+      break;
+    case SETTING_OFFSET:
+      currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] - changeDirection + MAX_STEPS) % MAX_STEPS;  // Wrap-around for offset (reversed the logic of offset so it rotates in the right direction)
+      break;
+    case SETTING_LIMIT:                                                                                       // Limit
+      currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + MAX_PATTERNS) % MAX_PATTERNS;  // Wrap-around for limit
+      break;
+    case SETTING_MUTE:                                                         // Mute
+      currentConfig.mute[selected_menu] = !currentConfig.mute[selected_menu];  // Toggle mute state
+      break;
+    case SETTING_RESET:  // Reset channel step
+      playing_step[selected_menu] = 0;
+      break;
+    case SETTING_RANDOM:  // Randomize channel
+      Random_change_one(selected_menu);
+      break;
+    case SETTING_PROB:  // Set probability
+      currentConfig.probability[selected_menu] = (currentConfig.probability[selected_menu] + changeDirection + 101) % 101;
+      break;
   }
 }
 
