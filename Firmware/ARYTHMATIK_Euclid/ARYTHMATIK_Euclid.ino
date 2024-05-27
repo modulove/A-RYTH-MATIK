@@ -368,7 +368,7 @@ void loop() {
 
   //-----------------offset setting----------------------
   for (int k = 0; k < MAX_CHANNELS; k++) {  //k = 1~6ch
-    for (int i = currentConfig.offset[k]; i <= 15; i++) {
+    for (int i = currentConfig.offset[k]; i < MAX_STEPS; i++) {
       offset_buf[k][i - currentConfig.offset[k]] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
     }
 
@@ -403,23 +403,23 @@ void loop() {
       OUTPUT1::setOutput(1);
       LED1::setOutput(1);
     }
-    if (offset_buf[1][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[1]) {
+    if (offset_buf[1][playing_step[1]] == 1 && currentConfig.mute[1] == 0 && random(100) < currentConfig.probability[1]) {
       OUTPUT2::setOutput(1);
       LED2::setOutput(1);
     }
-    if (offset_buf[2][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[2]) {
+    if (offset_buf[2][playing_step[2]] == 1 && currentConfig.mute[2] == 0 && random(100) < currentConfig.probability[2]) {
       OUTPUT3::setOutput(1);
       LED3::setOutput(1);
     }
-    if (offset_buf[3][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[3]) {
+    if (offset_buf[3][playing_step[3]] == 1 && currentConfig.mute[3] == 0 && random(100) < currentConfig.probability[3]) {
       OUTPUT4::setOutput(1);
       LED4::setOutput(1);
     }
-    if (offset_buf[4][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[4]) {
+    if (offset_buf[4][playing_step[4]] == 1 && currentConfig.mute[4] == 0 && random(100) < currentConfig.probability[4]) {
       OUTPUT5::setOutput(1);
       LED5::setOutput(1);
     }
-    if (offset_buf[5][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[5]) {
+    if (offset_buf[5][playing_step[5]] == 1 && currentConfig.mute[5] == 0 && random(100) < currentConfig.probability[5]) {
       OUTPUT6::setOutput(1);
       LED6::setOutput(1);
     }
