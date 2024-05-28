@@ -39,7 +39,7 @@
 
 // Flag for reversing the encoder direction.
 // ToDo: Put this in config Menue dialog at boot ?
-#define ENCODER_REVERSED
+// #define ENCODER_REVERSED
 
 // Flag for using the panel upside down
 // ToDo: change to be in line with libModulove, put in config Menue dialog
@@ -144,7 +144,7 @@ TopMenu selected_menu = MENU_CH_1;
 Setting selected_setting = SETTING_TOP_MENU;
 byte selected_preset = 0;
 byte selected_slot = 0;
-bool disp_refresh = false, allMutedFlag = false;
+bool disp_refresh = true, allMutedFlag = false;
 
 //const byte graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
@@ -160,6 +160,7 @@ const byte MAX_CHANNELS = 6;
 const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
 unsigned long gate_timer = 0;
+const int CLOCK_STOP_DURATION = 1000;  // After this duration since last clock input, the module has stopped running. 1000ms == half note at 120bpm.
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -367,7 +368,7 @@ void loop() {
 
   //-----------------offset setting----------------------
   for (int k = 0; k < MAX_CHANNELS; k++) {  //k = 1~6ch
-    for (int i = currentConfig.offset[k]; i <= 15; i++) {
+    for (int i = currentConfig.offset[k]; i < MAX_STEPS; i++) {
       offset_buf[k][i - currentConfig.offset[k]] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
     }
 
@@ -402,23 +403,23 @@ void loop() {
       OUTPUT1::setOutput(1);
       LED1::setOutput(1);
     }
-    if (offset_buf[1][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[1]) {
+    if (offset_buf[1][playing_step[1]] == 1 && currentConfig.mute[1] == 0 && random(100) < currentConfig.probability[1]) {
       OUTPUT2::setOutput(1);
       LED2::setOutput(1);
     }
-    if (offset_buf[2][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[2]) {
+    if (offset_buf[2][playing_step[2]] == 1 && currentConfig.mute[2] == 0 && random(100) < currentConfig.probability[2]) {
       OUTPUT3::setOutput(1);
       LED3::setOutput(1);
     }
-    if (offset_buf[3][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[3]) {
+    if (offset_buf[3][playing_step[3]] == 1 && currentConfig.mute[3] == 0 && random(100) < currentConfig.probability[3]) {
       OUTPUT4::setOutput(1);
       LED4::setOutput(1);
     }
-    if (offset_buf[4][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[4]) {
+    if (offset_buf[4][playing_step[4]] == 1 && currentConfig.mute[4] == 0 && random(100) < currentConfig.probability[4]) {
       OUTPUT5::setOutput(1);
       LED5::setOutput(1);
     }
-    if (offset_buf[5][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[5]) {
+    if (offset_buf[5][playing_step[5]] == 1 && currentConfig.mute[5] == 0 && random(100) < currentConfig.probability[5]) {
       OUTPUT6::setOutput(1);
       LED6::setOutput(1);
     }
@@ -458,10 +459,12 @@ void loop() {
     LED6::setOutput(0);
   }
 
-  if (disp_refresh) {
-    OLED_display();  // refresh display
-    disp_refresh = false;
+  // If no gate has been detected for a given duration, then allow the non-running state to constantly update the UI.
+  if (old_trg_in == 0 && trg_in == 0 &&  millis() > gate_timer + CLOCK_STOP_DURATION) {
+    disp_refresh = true;
   }
+
+  OLED_display();  // refresh display
 
   old_trg_in = trg_in;
   old_rst_in = rst_in;
@@ -510,20 +513,20 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  disp_refresh = true;
-
   // Channel-specific actions
   if (selected_menu <= MENU_CH_6) {
     // Click should only advance selected setting when a channel top menu is selected.
     selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
-    return;
+    disp_refresh = true;
   }
   // Mode-specific actions
-  if (selected_menu == MENU_ALL_RESET) {
+  else if (selected_menu == MENU_ALL_RESET) {
     resetSeq();
+    disp_refresh = true;
   }
-  if (selected_menu == MENU_ALL_MUTE) {
+  else if (selected_menu == MENU_ALL_MUTE) {
     toggleAllMutes();
+    disp_refresh = true;
   }
   /*
   if (selected_menu == MENU_TEMP) {  // mode only has a Tap button // seems resources are to sparse for TapTempo library
@@ -531,14 +534,13 @@ void onEncoderClicked(EncoderButton &eb) {
                                       //adjustTempo();
   }
   */
-  if (selected_menu == MENU_RAND) {  //
+  else if (selected_menu == MENU_RAND) {  //
     Random_change();
+    disp_refresh = true;
   }
 }
 
 void onEncoderRotation(EncoderButton &eb) {
-  disp_refresh = true;
-
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) {
     return;
@@ -558,8 +560,6 @@ void onPress(EncoderButton &eb) {
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
-  disp_refresh = true;
-
   int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
 
@@ -604,17 +604,18 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 }
 
 void onEncoderReleased(EncoderButton &eb) {
-  disp_refresh = true;
-
   switch (selected_menu) {
     case MENU_PRESET:
       loadDefaultConfig(&currentConfig, selected_preset);
+      disp_refresh = true;
       break;
     case MENU_SAVE:
       saveToEEPROM(selected_slot);
+      disp_refresh = true;
       break;
     case MENU_LOAD:
       loadFromEEPROM(selected_slot);
+      disp_refresh = true;
       break;
   }
 }
@@ -881,6 +882,10 @@ void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, c
 }
 
 void OLED_display() {
+  // Ensure the OLED display does not redraw when state unchanged.
+  if (!disp_refresh) return;
+  disp_refresh = false;
+
   display.clearDisplay();
 
   // Check if all channels are muted
