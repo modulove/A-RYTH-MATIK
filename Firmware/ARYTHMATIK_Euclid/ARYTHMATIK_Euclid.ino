@@ -132,6 +132,7 @@ enum Setting {
 #define NUM_MEMORY_SLOTS 2  // Works with more than 2 slots now. Expand after release. WIP
 #define EEPROM_START_ADDRESS 7
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
+#define LAST_USED_SLOT_ADDRESS (EEPROM_START_ADDRESS + NUM_MEMORY_SLOTS * CONFIG_SIZE)
 
 // Timing
 bool trg_in = false, old_trg_in = false, rst_in = false, old_rst_in = false;
@@ -205,47 +206,227 @@ EncoderButton encoder(ENCODER_PIN1, ENCODER_PIN2, ENCODER_SW_PIN);
 EncoderButton encoder(ENCODER_PIN2, ENCODER_PIN1, ENCODER_SW_PIN);
 #endif
 
-// configuration for a channel
+// Euclidean Sequencer Configuration with Rhythm Patterns
+// This configuration defines parameters for different rhythm presets typical of various music genres.
+// Each preset includes settings for hits, offsets, mute, step limit, probability, and genre names.
+
 struct SlotConfiguration {
-  byte hits[MAX_CHANNELS];
-  byte offset[MAX_CHANNELS];
-  bool mute[MAX_CHANNELS];
-  byte limit[MAX_CHANNELS];
-  byte probability[MAX_CHANNELS];
-  char name[10];  // Add a name field with a fixed size
+  byte hits[MAX_CHANNELS];         // Number of hits per pattern in each channel
+  byte offset[MAX_CHANNELS];       // Step offset for each channel
+  bool mute[MAX_CHANNELS];         // Mute status for each channel
+  byte limit[MAX_CHANNELS];        // Step limit (length) of the pattern for each channel
+  byte probability[MAX_CHANNELS];  // Probability of triggering each hit (0-100%)
+  char name[10];                   // Name of the preset with a fixed size
 };
 
-// Updated default (preset) config for presets with names
+// Updated default (preset) configuration with names and rhythm patterns
 const SlotConfiguration defaultSlots[] PROGMEM = {
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 13, 12, 8, 14, 12, 9 }, { 100, 100, 100, 100, 100, 100 }, "Techno" },
-  { { 4, 3, 5, 3, 2, 4 }, { 0, 1, 2, 3, 0, 2 }, { false, false, false, false, false, false }, { 15, 15, 15, 10, 12, 14 }, { 100, 100, 100, 100, 100, 100 }, "House" },
-  { { 2, 3, 2, 3, 4, 2 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Ambient" },
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" }, // Brazilian
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" }, // Swing Jazz
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "BossaNova" }, // Bossa Nova
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Reggae" }, // Reggae
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "HipHop" }, // Hip Hop
-  { { 6, 4, 6, 4, 6, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Breakbeat" }, // Breakbeat
-  { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DnB" }, // Drum n Bass
-  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat" }, // Afrobeat
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk" }, // Funk
-  { { 3, 3, 4, 4, 3, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 10, 12, 10, 12, 10, 12 }, { 100, 100, 100, 100, 100, 100 }, "Cumbia" }, // Cumbia
-  { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Tango" }, // Tango
-  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz" }, // Waltz
-  { { 7, 5, 7, 5, 7, 5 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Salsa" }, // Salsa
-  { { 6, 4, 6, 4, 6, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Mambo" }, // Mambo
-  { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ChaCha" }, // Cha Cha
-  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Rumba" }, // Rumba
-  { { 5, 4, 5, 4, 5, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dhol" }, // Indian Dhol
-  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Baladi" }, // Middle Eastern
-  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Gamelan" }, // Indonesian Gamelan
-  { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dub" }, // Dub
-  // { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Experimental" }, // Experimental
-  { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Expermntl" }, // Fit above in 10 char limit
-  { { 4, 4, 4, 4, 4, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Minimal" }, // Minimal
+  // Techno preset: Characterized by repetitive beats with variations in hits and offsets
+  // Song structure phases: Intro, Rise, Break, Drop
+  // Techno Variant 1: Intro
+  { { 4, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechIntro" },
+
+  // Techno Variant 2: Rise
+  { { 5, 3, 4, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechRise" },
+
+  // Techno Variant 3: Break
+  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechBreak" },
+
+  // Techno Variant 4: Drop
+  { { 6, 4, 5, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechDrop" },
+
+  // Techno Variant 5: Outro
+  { { 3, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechOutro" },
+
+  // House preset: A steady beat with a slightly different rhythm structure
+  // Song structure phases: Intro, Rise, Break, Drop
+  // House Variant 1: Intro
+  { { 3, 2, 4, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseIntro" },
+
+  // House Variant 2: Rise
+  { { 4, 3, 5, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseRise" },
+
+  // House Variant 3: Break
+  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseBreak" },
+
+  // House Variant 4: Drop
+  { { 5, 4, 6, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseDrop" },
+
+  // House Variant 5: Outro
+  { { 3, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseOutro" },
+
+  // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
+  // Song structure phases: Intro, Rise, Break, Drop (with subtle variations)
+  // Generative Variant 1: Intro
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenIntro" },
+
+  // Generative Variant 2: Rise
+  { { 3, 3, 4, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenRise" },
+
+  // Generative Variant 3: Break
+  { { 1, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "GenBreak" },
+
+  // Generative Variant 4: Drop
+  { { 4, 4, 5, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenDrop" },
+
+  // Generative Variant 5: Outro
+  { { 2, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenOutro" },
+
+  // Samba preset: Traditional Brazilian rhythm with alternating offsets
+  // Song structure phases: Intro, Verse, Chorus, Outro
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" },
+
+  // Swing preset: Syncopated rhythm typical in swing jazz
+  // Song structure phases: Intro, Verse, Chorus, Solo, Outro
+  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" },
+
+  // Bossa Nova preset: Smooth, syncopated rhythm with consistent hits
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "BossaNova" },
+
+  // Reggae preset: Emphasis on the off-beat
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Reggae" },
+
+  // Hip Hop preset: Consistent beat with subtle variations
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "HipHop" },
+
+  // Breakbeat preset: Fast-paced rhythm with alternating hits and offsets
+  // Song structure phases: Intro, Rise, Break, Drop
+  { { 6, 4, 6, 4, 6, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Breakbeat" },
+
+  // Drum and Bass preset: High energy with rapid hits
+  // Song structure phases: Intro, Rise, Break, Drop
+  { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DnB" },
+
+  // Afrobeat preset: Polyrhythmic structure with consistent hits
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat" },
+
+  // Funk preset: Tight, groovy rhythm with steady hits
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk" },
+
+  // Cumbia preset: Latin rhythm with alternating hits and offsets
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 3, 3, 4, 4, 3, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 10, 12, 10, 12, 10, 12 }, { 100, 100, 100, 100, 100, 100 }, "Cumbia" },
+
+  // Tango preset: Rhythmic hits with a distinct offset pattern
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Tango" },
+
+  // Waltz preset: Triple meter rhythm with regular hits
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz" },
+
+  // Salsa preset: Lively, syncopated rhythm with alternating hits
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 7, 5, 7, 5, 7, 5 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Salsa" },
+
+  // Mambo preset: Energetic rhythm with consistent hits and offsets
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 6, 4, 6, 4, 6, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Mambo" },
+
+  // Cha Cha preset: Syncopated hits with regular offsets
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ChaCha" },
+
+  // Rumba preset: Smooth rhythm with a distinctive offset pattern
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Rumba" },
+
+  // Indian Dhol preset: Fast-paced rhythm with regular hits and offsets
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 5, 4, 5, 4, 5, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dhol" },
+
+  // Middle Eastern preset: Complex rhythm with a unique offset pattern
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Baladi" },
+
+  // Indonesian Gamelan preset: Rhythmic structure with repetitive hits
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Gamelan" },
+
+  // Dub preset: Slow rhythm with heavy emphasis on beats
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  // Dub Variant 1: Intro
+  { { 3, 1, 2, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubIntro" },
+
+  // Dub Variant 2: Rise
+  { { 4, 2, 3, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubRise" },
+
+  // Dub Variant 3: Break
+  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubBreak" },
+
+  // Dub Variant 4: Drop
+  { { 5, 3, 4, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubDrop" },
+
+  // Dub Variant 5: Outro
+  { { 3, 1, 2, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubOutro" },
+
+  // Experimental preset: Randomized rhythm with varying probabilities
+  // Song structure phases: Intro, Rise, Break, Drop
+  { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 80, 70, 90, 60, 85, 75 }, "Experimtl" },
+
+  // Minimal preset: Simplistic rhythm with regular hits and offsets
+  // Song structure phases: Intro, Rise, Break, Drop
+  { { 4, 4, 4, 4, 4, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Minimal" },
+
+  // Blues preset: Traditional blues rhythm with swing feel
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Blues" },
+
+  // Rock preset: Steady rock rhythm with emphasis on kick and snare
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Rock" },
+
+  // Electro preset: Heavy beats with a distinct rhythm
+  // Song structure phases: Intro, Verse, Break, Drop
+  // Electro Variant 1: Intro
+  { { 3, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectIn" },
+
+  // Electro Variant 2: Rise
+  { { 4, 3, 4, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectRise" },
+
+  // Electro Variant 3: Break
+  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectBreak" },
+
+  // Electro Variant 4: Drop
+  { { 5, 4, 5, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectDrop" },
+
+  // Electro Variant 5: Outro
+  { { 3, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectOut" },
+
+  // Dubstep preset: Heavy bass with complex rhythms
+  // Song structure phases: Intro, Verse, Drop, Break
+  { { 6, 4, 6, 4, 6, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dubstep" },
+
+  // Psytrance preset: Fast-paced, hypnotic beats
+  // Song structure phases: Intro, Build, Peak, Break
+  { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Psytrance" },
+
+  // Offbeat preset: Off-kilter rhythms typical of certain electronic styles
+  // Song structure phases: Intro, Verse, Break, Drop
+  { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Offbeat" },
+
+  // Progressive preset: Gradual build-ups with evolving rhythms
+  // Song structure phases: Intro, Build, Peak, Break
+  { { 6, 5, 6, 5, 6, 5 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Progressv" },
+
+  // Halfstep preset: Sparse beats typical of certain electronic subgenres
+  // Song structure phases: Intro, Verse, Break, Drop
+  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Halfstep" },
+
+  // Random Jam preset: Completely random rhythm for fun and experimentation
+  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam" }
 };
+
+
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
+byte lastUsedSlot = 0;
 
 // 'Modulove_Logo', 128x64px Boot logo ;)
 const unsigned char Modulove_Logo[] PROGMEM = {
@@ -357,6 +538,13 @@ void setup() {
 
   checkAndInitializeSettings();
 
+  // Load the last used slot from EEPROM
+  EEPROM.get(LAST_USED_SLOT_ADDRESS, lastUsedSlot);
+  if (lastUsedSlot >= NUM_MEMORY_SLOTS) {
+    lastUsedSlot = 0;
+  }
+  loadFromEEPROM(lastUsedSlot);
+
   OLED_display();
 
   unsigned long seed = analogRead(A0);
@@ -460,7 +648,7 @@ void loop() {
   }
 
   // If no gate has been detected for a given duration, then allow the non-running state to constantly update the UI.
-  if (old_trg_in == 0 && trg_in == 0 &&  millis() > gate_timer + CLOCK_STOP_DURATION) {
+  if (old_trg_in == 0 && trg_in == 0 && millis() > gate_timer + CLOCK_STOP_DURATION) {
     disp_refresh = true;
   }
 
@@ -480,12 +668,12 @@ void initIO() {
   OUTPUT5::setOutputLow();  // CH5
   OUTPUT6::setOutputLow();  // CH6
   // LED outputs
-  LED1::setOutputLow();  // CH1 LED
-  LED2::setOutputLow();  // CH2 LED
-  LED3::setOutputLow();  // CH3 LED
-  LED4::setOutputLow();  // CH6 LED
-  LED5::setOutputLow();  // CH4 LED
-  LED6::setOutputLow();  // CH5 LED
+  LED1::setOutputLow();     // CH1 LED
+  LED2::setOutputLow();     // CH2 LED
+  LED3::setOutputLow();     // CH3 LED
+  LED4::setOutputLow();     // CH6 LED
+  LED5::setOutputLow();     // CH4 LED
+  LED6::setOutputLow();     // CH5 LED
   CLK_LED::setOutputLow();  // CLK LED
 }
 
@@ -523,8 +711,7 @@ void onEncoderClicked(EncoderButton &eb) {
   else if (selected_menu == MENU_ALL_RESET) {
     resetSeq();
     disp_refresh = true;
-  }
-  else if (selected_menu == MENU_ALL_MUTE) {
+  } else if (selected_menu == MENU_ALL_MUTE) {
     toggleAllMutes();
     disp_refresh = true;
   }
@@ -560,7 +747,7 @@ void onPress(EncoderButton &eb) {
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
-  int increment = encoder.increment();               // Get the incremental change (could be negative, positive, or zero)
+  int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
@@ -623,7 +810,7 @@ void onEncoderReleased(EncoderButton &eb) {
 void initializeCurrentConfig(bool loadDefaults = false) {
   if (loadDefaults) {
     // Load default configuration from PROGMEM
-    memcpy_P(&currentConfig, &defaultSlots[0], sizeof(SlotConfiguration)); // Load the first default slot as the initial configuration
+    memcpy_P(&currentConfig, &defaultSlots[0], sizeof(SlotConfiguration));  // Load the first default slot as the initial configuration
   } else {
     // Load configuration from EEPROM
     int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
@@ -636,13 +823,13 @@ void handleSettingNavigation(int changeDirection) {
     case SETTING_TOP_MENU:                                                                              // Select channel
       selected_menu = static_cast<TopMenu>((selected_menu + changeDirection + MENU_LAST) % MENU_LAST);  // Wrap-around for channel selection
       break;
-    case SETTING_HITS:                                                                                        // Hits
-        currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + MAX_PATTERNS) % MAX_PATTERNS;  // Ensure hits wrap properly
+    case SETTING_HITS:                                                                                                          // Hits
+      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + changeDirection + MAX_PATTERNS) % MAX_PATTERNS;  // Ensure hits wrap properly
       break;
     case SETTING_OFFSET:
       currentConfig.offset[selected_menu] = (currentConfig.offset[selected_menu] - changeDirection + MAX_STEPS) % MAX_STEPS;  // Wrap-around for offset (reversed the logic of offset so it rotates in the right direction)
       break;
-    case SETTING_LIMIT:                                                                                       // Limit
+    case SETTING_LIMIT:                                                                                                           // Limit
       currentConfig.limit[selected_menu] = (currentConfig.limit[selected_menu] + changeDirection + MAX_PATTERNS) % MAX_PATTERNS;  // Wrap-around for limit
       break;
     case SETTING_MUTE:                                                         // Mute
@@ -669,6 +856,8 @@ void saveToEEPROM(int slot) {
   int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
   if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
     EEPROM.put(baseAddress, currentConfig);
+    // Save the last used slot
+    EEPROM.put(LAST_USED_SLOT_ADDRESS, slot);
   } else {
     // Handle error
     printDebugMessage("EEPROM Save Error");
@@ -788,10 +977,12 @@ void setMenuCharacters(TopMenu select_ch, char &c1, char &c2, char &c3, char &c4
     case MENU_SAVE: c1 = 'S', c2 = ' ', c3 = ' ', c4 = ' '; break;            // SAVE
     case MENU_LOAD: c1 = 'L', c2 = ' ', c3 = ' ', c4 = ' '; break;            // LOAD
     case MENU_ALL_RESET: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;       // ALL for RESET
-    case MENU_ALL_MUTE: c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' '; break;        // ALL for MUTE
+    case MENU_ALL_MUTE:
+      c1 = 'A', c2 = 'L', c3 = 'L', c4 = ' ';
+      break;  // ALL for MUTE
     //case MENU_TEMP: c1 = 'T', c2 = ' ', c3 = ' ', c4 = ' '; break;            // TEMPO
-    case MENU_RAND: c1 = 'X', c2 = ' ', c3 = ' ', c4 = ' '; break;            // NEW RANDOM
-    default: c1 = ' ', c2 = ' ', c3 = ' ', c4 = ' ';                          // Default blank
+    case MENU_RAND: c1 = 'X', c2 = ' ', c3 = ' ', c4 = ' '; break;  // NEW RANDOM
+    default: c1 = ' ', c2 = ' ', c3 = ' ', c4 = ' ';                // Default blank
   }
 }
 
@@ -974,7 +1165,7 @@ void drawEuclideanRhythms() {
   }
 
   // draw hits line : 1hits if not muted
-  for (int k = 0; k <= 5; k++) {                                               // Channel count
+  for (int k = 0; k <= 5; k++) {                                           // Channel count
     if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  // don't draw when muted or when editing probability
       if (currentConfig.hits[k] == 1) {
         int x1 = 15 + graph_x[k];
@@ -989,7 +1180,7 @@ void drawEuclideanRhythms() {
   }
 
   //draw play step circle
-  for (int k = 0; k <= 5; k++) {                                               //ch count
+  for (int k = 0; k <= 5; k++) {                                           //ch count
     if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  //mute on = no display circle
       if (offset_buf[k][playing_step[k]] == 0) {
         display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
@@ -1098,15 +1289,15 @@ void drawEuclideanRhythms() {
 
 void drawSaveLoadSelection() {
   // Display selected slot
-  int16_t  x1 = 18, y1 = 14;
+  int16_t x1 = 18, y1 = 14;
   uint16_t w = 94, h = 34;
   uint16_t b = 4;
   uint16_t b2 = 8;
 
-  display.fillRect(x1-b, y1-b, w+b2, h+b2, BLACK); // clear screen underneath
+  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
   display.drawRect(x1, y1, w, h, WHITE);
 
-  display.setCursor(x1+b, y1+b);
+  display.setCursor(x1 + b, y1 + b);
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
   display.setCursor(60, 29);
@@ -1120,19 +1311,19 @@ void drawPresetSelection() {
   char presetName[10];
   memcpy_P(&presetName, &defaultSlots[selected_preset].name, sizeof(presetName));
 
-  int16_t  x1 = 18, y1 = 14;
+  int16_t x1 = 18, y1 = 14;
   uint16_t w = 94, h = 34;
   uint16_t b = 4;
   uint16_t b2 = 8;
 
-  display.fillRect(x1-b, y1-b, w+b2, h+b2, BLACK); // clear screen underneath
+  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
   display.drawRect(x1, y1, w, h, WHITE);
 
-  display.setCursor(x1+b, y1+b);
+  display.setCursor(x1 + b, y1 + b);
   display.println(F("Select Preset:"));
 
   // Shift cursor down a few pixels.
   y1 += 12;
-  display.setCursor(x1+b, y1+b);
+  display.setCursor(x1 + b, y1 + b);
   display.print(presetName);
 }
