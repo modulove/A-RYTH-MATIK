@@ -145,7 +145,9 @@ TopMenu selected_menu = MENU_CH_1;
 Setting selected_setting = SETTING_TOP_MENU;
 byte selected_preset = 0;
 byte selected_slot = 0;
-bool disp_refresh = true, allMutedFlag = false;
+bool disp_refresh = true;
+unsigned long last_refresh = 0;
+bool allMutedFlag = false;
 
 //const byte graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
@@ -162,6 +164,7 @@ const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
 unsigned long gate_timer = 0;
 const int CLOCK_STOP_DURATION = 1000;  // After this duration since last clock input, the module has stopped running. 1000ms == half note at 120bpm.
+const int MIN_REFRESH_DURATION = 500;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -729,8 +732,11 @@ void onEncoderClicked(EncoderButton &eb) {
 
 void onEncoderRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
-  if (increment == 0) {
-    return;
+  if (increment == 0) return;
+
+  // Throttle display refresh on fast input components.
+  if (millis() > last_refresh + MIN_REFRESH_DURATION) {
+    disp_refresh = true;
   }
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment
@@ -749,6 +755,11 @@ void onPress(EncoderButton &eb) {
 void onEncoderPressedRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
+
+  // Throttle display refresh on fast input components.
+  if (millis() > last_refresh + MIN_REFRESH_DURATION) {
+    disp_refresh = true;
+  }
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
   if (increment < 0) {
@@ -1076,6 +1087,7 @@ void OLED_display() {
   // Ensure the OLED display does not redraw when state unchanged.
   if (!disp_refresh) return;
   disp_refresh = false;
+  last_refresh = millis();
 
   display.clearDisplay();
 
