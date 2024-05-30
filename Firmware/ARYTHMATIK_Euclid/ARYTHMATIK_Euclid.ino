@@ -570,11 +570,12 @@ void loop() {
 
   //-----------------trigger detect, reset & output----------------------
   bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
+  bool force_refresh = false;
 
   // Handle reset input
   if (!old_rst_in && rst_in) {
     memset(playing_step, 0, sizeof(playing_step));
-    disp_refresh = true;
+    force_refresh = true;
   }
 
   // Trigger detection and response
@@ -652,10 +653,10 @@ void loop() {
 
   // If no gate has been detected for a given duration, then allow the non-running state to constantly update the UI.
   if (old_trg_in == 0 && trg_in == 0 && millis() > gate_timer + CLOCK_STOP_DURATION) {
-    disp_refresh = true;
+    force_refresh = true;
   }
 
-  OLED_display();  // refresh display
+  OLED_display(force_refresh);  // refresh display
 
   old_trg_in = trg_in;
   old_rst_in = rst_in;
@@ -734,10 +735,7 @@ void onEncoderRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
 
-  // Throttle display refresh on fast input components.
-  if (millis() > last_refresh + MIN_REFRESH_DURATION) {
-    disp_refresh = true;
-  }
+  disp_refresh = true;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment
   if (increment < 0) {
@@ -756,10 +754,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
 
-  // Throttle display refresh on fast input components.
-  if (millis() > last_refresh + MIN_REFRESH_DURATION) {
-    disp_refresh = true;
-  }
+  disp_refresh = true;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
   if (increment < 0) {
@@ -1083,9 +1078,11 @@ void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, c
   }
 }
 
-void OLED_display() {
+void OLED_display(bool force_refresh) {
   // Ensure the OLED display does not redraw when state unchanged.
-  if (!disp_refresh) return;
+  if (!force_refresh && !disp_refresh) return;
+  // Enforce throttled display refresh rate 
+  if (!force_refresh && millis() < last_refresh + MIN_REFRESH_DURATION) return;
   disp_refresh = false;
   last_refresh = millis();
 
