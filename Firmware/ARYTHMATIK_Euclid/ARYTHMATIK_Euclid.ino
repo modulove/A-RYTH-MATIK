@@ -225,204 +225,105 @@ struct SlotConfiguration {
 // Updated default (preset) configuration with names and rhythm patterns
 const SlotConfiguration defaultSlots[] PROGMEM = {
   // Techno preset: Characterized by repetitive beats with variations in hits and offsets
-  // Song structure phases: Intro, Rise, Break, Drop
-  // Techno Variant 1: Intro
-  { { 4, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechIntro" },
-
-  // Techno Variant 2: Rise
-  { { 5, 3, 4, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechRise" },
-
-  // Techno Variant 3: Break
-  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechBreak" },
-
-  // Techno Variant 4: Drop
-  { { 6, 4, 5, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechDrop" },
-
-  // Techno Variant 5: Outro
-  { { 3, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TechOutro" },
+  { { 4, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno" },
 
   // House preset: A steady beat with a slightly different rhythm structure
-  // Song structure phases: Intro, Rise, Break, Drop
-  // House Variant 1: Intro
-  { { 3, 2, 4, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseIntro" },
-
-  // House Variant 2: Rise
-  { { 4, 3, 5, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseRise" },
-
-  // House Variant 3: Break
-  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseBreak" },
-
-  // House Variant 4: Drop
-  { { 5, 4, 6, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseDrop" },
-
-  // House Variant 5: Outro
-  { { 3, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "HouseOutro" },
+  { { 3, 2, 4, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "House" },
 
   // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
-  // Song structure phases: Intro, Rise, Break, Drop (with subtle variations)
-  // Generative Variant 1: Intro
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenIntro" },
-
-  // Generative Variant 2: Rise
-  { { 3, 3, 4, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenRise" },
-
-  // Generative Variant 3: Break
-  { { 1, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "GenBreak" },
-
-  // Generative Variant 4: Drop
-  { { 4, 4, 5, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenDrop" },
-
-  // Generative Variant 5: Outro
-  { { 2, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "GenOutro" },
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen" },
 
   // Samba preset: Traditional Brazilian rhythm with alternating offsets
-  // Song structure phases: Intro, Verse, Chorus, Outro
   { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" },
 
   // Swing preset: Syncopated rhythm typical in swing jazz
-  // Song structure phases: Intro, Verse, Chorus, Solo, Outro
   { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" },
 
   // Bossa Nova preset: Smooth, syncopated rhythm with consistent hits
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "BossaNova" },
 
   // Reggae preset: Emphasis on the off-beat
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Reggae" },
 
   // Hip Hop preset: Consistent beat with subtle variations
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "HipHop" },
 
   // Breakbeat preset: Fast-paced rhythm with alternating hits and offsets
-  // Song structure phases: Intro, Rise, Break, Drop
   { { 6, 4, 6, 4, 6, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Breakbeat" },
 
   // Drum and Bass preset: High energy with rapid hits
-  // Song structure phases: Intro, Rise, Break, Drop
   { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DnB" },
 
   // Afrobeat preset: Polyrhythmic structure with consistent hits
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat" },
 
   // Funk preset: Tight, groovy rhythm with steady hits
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk" },
 
   // Cumbia preset: Latin rhythm with alternating hits and offsets
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 3, 3, 4, 4, 3, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 10, 12, 10, 12, 10, 12 }, { 100, 100, 100, 100, 100, 100 }, "Cumbia" },
 
   // Tango preset: Rhythmic hits with a distinct offset pattern
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Tango" },
 
   // Waltz preset: Triple meter rhythm with regular hits
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz" },
 
   // Salsa preset: Lively, syncopated rhythm with alternating hits
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 7, 5, 7, 5, 7, 5 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Salsa" },
 
   // Mambo preset: Energetic rhythm with consistent hits and offsets
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 6, 4, 6, 4, 6, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Mambo" },
 
   // Cha Cha preset: Syncopated hits with regular offsets
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ChaCha" },
 
   // Rumba preset: Smooth rhythm with a distinctive offset pattern
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Rumba" },
 
   // Indian Dhol preset: Fast-paced rhythm with regular hits and offsets
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 5, 4, 5, 4, 5, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dhol" },
 
   // Middle Eastern preset: Complex rhythm with a unique offset pattern
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Baladi" },
 
   // Indonesian Gamelan preset: Rhythmic structure with repetitive hits
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Gamelan" },
 
   // Dub preset: Slow rhythm with heavy emphasis on beats
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
-  // Dub Variant 1: Intro
-  { { 3, 1, 2, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubIntro" },
-
-  // Dub Variant 2: Rise
-  { { 4, 2, 3, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubRise" },
-
-  // Dub Variant 3: Break
-  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubBreak" },
-
-  // Dub Variant 4: Drop
-  { { 5, 3, 4, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubDrop" },
-
-  // Dub Variant 5: Outro
-  { { 3, 1, 2, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DubOutro" },
+  { { 3, 1, 2, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dub" },
 
   // Experimental preset: Randomized rhythm with varying probabilities
-  // Song structure phases: Intro, Rise, Break, Drop
   { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 80, 70, 90, 60, 85, 75 }, "Experimtl" },
 
   // Minimal preset: Simplistic rhythm with regular hits and offsets
-  // Song structure phases: Intro, Rise, Break, Drop
   { { 4, 4, 4, 4, 4, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Minimal" },
 
   // Blues preset: Traditional blues rhythm with swing feel
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Blues" },
 
   // Rock preset: Steady rock rhythm with emphasis on kick and snare
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Rock" },
 
   // Electro preset: Heavy beats with a distinct rhythm
-  // Song structure phases: Intro, Verse, Break, Drop
-  // Electro Variant 1: Intro
-  { { 3, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectIn" },
-
-  // Electro Variant 2: Rise
-  { { 4, 3, 4, 2, 3, 2 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectRise" },
-
-  // Electro Variant 3: Break
-  { { 2, 1, 2, 1, 1, 1 }, { 0, 1, 0, 1, 0, 0 }, { false, false, false, false, false, false }, { 8, 8, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectBreak" },
-
-  // Electro Variant 4: Drop
-  { { 5, 4, 5, 3, 4, 3 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectDrop" },
-
-  // Electro Variant 5: Outro
-  { { 3, 2, 3, 1, 2, 1 }, { 1, 2, 1, 0, 1, 1 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ElectOut" },
+  { { 3, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Electro" },
 
   // Dubstep preset: Heavy bass with complex rhythms
-  // Song structure phases: Intro, Verse, Drop, Break
   { { 6, 4, 6, 4, 6, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dubstep" },
 
   // Psytrance preset: Fast-paced, hypnotic beats
-  // Song structure phases: Intro, Build, Peak, Break
   { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Psytrance" },
 
   // Offbeat preset: Off-kilter rhythms typical of certain electronic styles
-  // Song structure phases: Intro, Verse, Break, Drop
   { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Offbeat" },
 
   // Progressive preset: Gradual build-ups with evolving rhythms
-  // Song structure phases: Intro, Build, Peak, Break
   { { 6, 5, 6, 5, 6, 5 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Progressv" },
 
   // Halfstep preset: Sparse beats typical of certain electronic subgenres
-  // Song structure phases: Intro, Verse, Break, Drop
   { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Halfstep" },
 
   // Random Jam preset: Completely random rhythm for fun and experimentation
-  // Song structure phases: Intro, Verse, Chorus, Bridge, Outro
   { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam" }
 };
 
@@ -1096,13 +997,13 @@ void OLED_display(bool force_refresh) {
   // Check if all channels are muted
   if (allMutedFlag) {
     // Draw "MUTE" message in the center of the screen
-    display.setTextSize(2);  // large letters
+    //display.setTextSize(2);  // no large letters for now to avoid ugly artifacts
     display.setTextColor(WHITE);
     display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
     display.println(F("MUTE"));
     display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
     display.display();
-    display.setTextSize(1);  // Reset text size
+    //display.setTextSize(1);  // Reset text size
     return;                  // Exit function early to avoid drawing other elements
   }
 
@@ -1315,9 +1216,9 @@ void drawSaveLoadSelection() {
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
   display.setCursor(60, 29);
-  display.setTextSize(2);
+  //display.setTextSize(2);
   display.print(selected_slot + 1, DEC);
-  display.setTextSize(1);
+  //display.setTextSize(1);
 }
 
 void drawPresetSelection() {
