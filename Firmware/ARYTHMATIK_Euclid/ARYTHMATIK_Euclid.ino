@@ -492,30 +492,18 @@ void loop() {
       }
     }
 
-    // Output gate signal, there must be a better way to do this..
-    if (offset_buf[0][playing_step[0]] == 1 && currentConfig.mute[0] == 0 && random(100) < currentConfig.probability[0]) {
-      OUTPUT1::setOutput(1);
-      LED1::setOutput(1);
-    }
-    if (offset_buf[1][playing_step[1]] == 1 && currentConfig.mute[1] == 0 && random(100) < currentConfig.probability[1]) {
-      OUTPUT2::setOutput(1);
-      LED2::setOutput(1);
-    }
-    if (offset_buf[2][playing_step[2]] == 1 && currentConfig.mute[2] == 0 && random(100) < currentConfig.probability[2]) {
-      OUTPUT3::setOutput(1);
-      LED3::setOutput(1);
-    }
-    if (offset_buf[3][playing_step[3]] == 1 && currentConfig.mute[3] == 0 && random(100) < currentConfig.probability[3]) {
-      OUTPUT4::setOutput(1);
-      LED4::setOutput(1);
-    }
-    if (offset_buf[4][playing_step[4]] == 1 && currentConfig.mute[4] == 0 && random(100) < currentConfig.probability[4]) {
-      OUTPUT5::setOutput(1);
-      LED5::setOutput(1);
-    }
-    if (offset_buf[5][playing_step[5]] == 1 && currentConfig.mute[5] == 0 && random(100) < currentConfig.probability[5]) {
-      OUTPUT6::setOutput(1);
-      LED6::setOutput(1);
+    // Output gate signal
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+      if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
+        switch (i) {
+          case 0: OUTPUT1::setOutput(1); LED1::setOutput(1); break;
+          case 1: OUTPUT2::setOutput(1); LED2::setOutput(1); break;
+          case 2: OUTPUT3::setOutput(1); LED3::setOutput(1); break;
+          case 3: OUTPUT4::setOutput(1); LED4::setOutput(1); break;
+          case 4: OUTPUT5::setOutput(1); LED5::setOutput(1); break;
+          case 5: OUTPUT6::setOutput(1); LED6::setOutput(1); break;
+        }
+      }
     }
 
     disp_refresh = true;  // Updates the display where the trigger was entered.
@@ -799,29 +787,26 @@ void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
 }
 
 void Random_change() {
-  // Loop over the channels to randomly change values
-  for (int k = 0; k < 6; k++) {  // Loop through all channels
+  for (int k = 0; k < MAX_CHANNELS; k++) {
     if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
-      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]));
+      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
     }
     if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
-      currentConfig.offset[k] = random(0, 16);
+      currentConfig.offset[k] = random(0, MAX_STEPS);
     }
-    if (k > 0 && pgm_read_byte(&mute_occ[k]) >= random(1, 100)) {  // Avoid muting channel 1
-      currentConfig.mute[k] = 1;
-    } else if (k > 0 && pgm_read_byte(&mute_occ[k]) < random(1, 100)) {
-      currentConfig.mute[k] = 0;
+    if (k > 0) {
+      currentConfig.mute[k] = pgm_read_byte(&mute_occ[k]) >= random(1, 100) ? 1 : 0;
     }
   }
 }
 
 // random change function for one channel (no mute)
 void Random_change_one(byte select_ch) {
-  if (random(100) < pgm_read_byte(&hit_occ[select_ch])) {
+  if (pgm_read_byte(&hit_occ[select_ch]) >= random(1, 100)) {
     currentConfig.hits[select_ch] = random(pgm_read_byte(&hit_rng_min[select_ch]), pgm_read_byte(&hit_rng_max[select_ch]) + 1);
   }
   if (pgm_read_byte(&off_occ[select_ch]) >= random(1, 100)) {
-    currentConfig.offset[select_ch] = random(0, 16);
+    currentConfig.offset[select_ch] = random(0, MAX_STEPS);
   }
 }
 
