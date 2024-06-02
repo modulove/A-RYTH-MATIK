@@ -657,7 +657,10 @@ void loop() {
     force_refresh = true;
   }
 
-  OLED_display(force_refresh);  // refresh display
+  if (disp_refresh || force_refresh) {
+    OLED_display(force_refresh);  // refresh display
+    disp_refresh = false;
+  }
 
   old_trg_in = trg_in;
   old_rst_in = rst_in;
