@@ -163,7 +163,6 @@ const byte MAX_CHANNELS = 6;
 const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
 unsigned long gate_timer = 0;
-const int CLOCK_STOP_DURATION = 1000;  // After this duration since last clock input, the module has stopped running. 1000ms == half note at 120bpm.
 const int MIN_REFRESH_DURATION = 200;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
@@ -539,11 +538,6 @@ void loop() {
     LED4::setOutput(0);
     LED5::setOutput(0);
     LED6::setOutput(0);
-  }
-
-  // If no gate has been detected for a given duration, then allow the non-running state to constantly update the UI.
-  if (old_trg_in == 0 && trg_in == 0 && millis() > gate_timer + CLOCK_STOP_DURATION) {
-    force_refresh = true;
   }
 
   if (disp_refresh || force_refresh) {
