@@ -164,7 +164,7 @@ const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
 unsigned long gate_timer = 0;
 const int CLOCK_STOP_DURATION = 1000;  // After this duration since last clock input, the module has stopped running. 1000ms == half note at 120bpm.
-const int MIN_REFRESH_DURATION = 500;  // Used by fast inputs like encoder rotation to throttle the display refresh.
+const int MIN_REFRESH_DURATION = 200;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -548,7 +548,7 @@ void setup() {
   }
   loadFromEEPROM(lastUsedSlot);
 
-  OLED_display();
+  OLED_display(true);
 
   unsigned long seed = analogRead(A0);
   randomSeed(seed);  // random seed once during setup
@@ -581,6 +581,7 @@ void loop() {
   // Trigger detection and response
   if (old_trg_in == 0 && trg_in == 1) {
     gate_timer = millis();
+    force_refresh = true;
     CLK_LED::setOutput(1);
     debug = 0;
     for (int i = 0; i < MAX_CHANNELS; i++) {
@@ -1080,9 +1081,10 @@ void drawStepDots(const SlotConfiguration &currentConfig, const byte *graph_x, c
 
 void OLED_display(bool force_refresh) {
   // Ensure the OLED display does not redraw when state unchanged.
-  if (!force_refresh && !disp_refresh) return;
   // Enforce throttled display refresh rate 
-  if (!force_refresh && millis() < last_refresh + MIN_REFRESH_DURATION) return;
+  if (!force_refresh) {
+    if (disp_refresh && millis() < last_refresh + MIN_REFRESH_DURATION) return;
+  }
   disp_refresh = false;
   last_refresh = millis();
 
