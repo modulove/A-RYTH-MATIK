@@ -162,8 +162,8 @@ const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }
 const byte MAX_CHANNELS = 6;
 const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
+const int MIN_REFRESH_DURATION = 100;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 unsigned long gate_timer = 0;
-const int MIN_REFRESH_DURATION = 1000;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -473,7 +473,7 @@ void loop() {
   bool force_refresh = false;
 
   // Handle reset input
-  if (!old_rst_in && rst_in) {
+  if (old_rst_in == 0 && rst_in == 1) {
     memset(playing_step, 0, sizeof(playing_step));
     force_refresh = true;
   }
@@ -956,10 +956,13 @@ void drawStepDots(const SlotConfiguration &currentConfig) {
 }
 
 void OLED_display(bool force_refresh) {
+  bool should_refresh = false;
   // Ensure the OLED display does not redraw when state unchanged.
-  // Enforce throttled display refresh rate 
-  if (!force_refresh) {
-    if (disp_refresh && millis() < last_refresh + MIN_REFRESH_DURATION) return;
+  should_refresh |= force_refresh;
+  // Enforce throttled display refresh rate for encoder press or rotate.
+  should_refresh |= disp_refresh && (millis() > last_refresh + MIN_REFRESH_DURATION);
+  if (!should_refresh) {
+    return;
   }
   disp_refresh = false;
   last_refresh = millis();
