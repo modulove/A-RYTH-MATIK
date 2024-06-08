@@ -162,7 +162,7 @@ const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }
 const byte MAX_CHANNELS = 6;
 const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
-const int MIN_REFRESH_DURATION = 100;  // Used by fast inputs like encoder rotation to throttle the display refresh.
+const int MIN_REFRESH_DURATION = 250;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 unsigned long gate_timer = 0;
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
