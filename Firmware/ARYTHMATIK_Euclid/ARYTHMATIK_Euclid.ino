@@ -129,7 +129,7 @@ enum Setting {
 #define SCREEN_HEIGHT 64
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 2  // Works with more than 2 slots now. Expand after release. WIP
+#define NUM_MEMORY_SLOTS 3
 #define EEPROM_START_ADDRESS 7
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 #define LAST_USED_SLOT_ADDRESS (EEPROM_START_ADDRESS + NUM_MEMORY_SLOTS * CONFIG_SIZE)
@@ -425,7 +425,7 @@ void drawAnimation() {
 void setup() {
   encoder.setDebounceInterval(5);  // Increase debounce interval
   encoder.setMultiClickInterval(10);
-  encoder.setRateLimit(5);
+  encoder.setRateLimit(20);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setEncoderHandler(onEncoderRotation);
   encoder.setPressedHandler(onPress);
