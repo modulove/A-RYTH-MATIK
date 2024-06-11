@@ -224,34 +224,13 @@ struct SlotConfiguration {
 // Updated default (preset) configuration with names and rhythm patterns
 const SlotConfiguration defaultSlots[] PROGMEM = {
   // Techno preset: Characterized by repetitive beats with variations in hits and offsets
-  { { 4, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno" },
-
-  // House preset: A steady beat with a slightly different rhythm structure
-  { { 3, 2, 4, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "House" },
-
-  // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen" },
+  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno" },
 
   // Samba preset: Traditional Brazilian rhythm with alternating offsets
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" },
 
   // Swing preset: Syncopated rhythm typical in swing jazz
-  { { 4, 3, 4, 2, 4, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" },
-
-  // Bossa Nova preset: Smooth, syncopated rhythm with consistent hits
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "BossaNova" },
-
-  // Reggae preset: Emphasis on the off-beat
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Reggae" },
-
-  // Hip Hop preset: Consistent beat with subtle variations
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "HipHop" },
-
-  // Breakbeat preset: Fast-paced rhythm with alternating hits and offsets
-  { { 6, 4, 6, 4, 6, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Breakbeat" },
-
-  // Drum and Bass preset: High energy with rapid hits
-  { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "DnB" },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" },
 
   // Afrobeat preset: Polyrhythmic structure with consistent hits
   { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat" },
@@ -259,74 +238,29 @@ const SlotConfiguration defaultSlots[] PROGMEM = {
   // Funk preset: Tight, groovy rhythm with steady hits
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk" },
 
-  // Cumbia preset: Latin rhythm with alternating hits and offsets
-  { { 3, 3, 4, 4, 3, 3 }, { 0, 1, 2, 1, 0, 2 }, { false, false, false, false, false, false }, { 10, 12, 10, 12, 10, 12 }, { 100, 100, 100, 100, 100, 100 }, "Cumbia" },
-
-  // Tango preset: Rhythmic hits with a distinct offset pattern
-  { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Tango" },
-
   // Waltz preset: Triple meter rhythm with regular hits
   { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz" },
 
-  // Salsa preset: Lively, syncopated rhythm with alternating hits
-  { { 7, 5, 7, 5, 7, 5 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Salsa" },
-
-  // Mambo preset: Energetic rhythm with consistent hits and offsets
-  { { 6, 4, 6, 4, 6, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Mambo" },
-
-  // Cha Cha preset: Syncopated hits with regular offsets
-  { { 5, 4, 5, 4, 5, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ChaCha" },
-
-  // Rumba preset: Smooth rhythm with a distinctive offset pattern
-  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Rumba" },
-
-  // Indian Dhol preset: Fast-paced rhythm with regular hits and offsets
-  { { 5, 4, 5, 4, 5, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dhol" },
-
-  // Middle Eastern preset: Complex rhythm with a unique offset pattern
-  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Baladi" },
-
-  // Indonesian Gamelan preset: Rhythmic structure with repetitive hits
-  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Gamelan" },
-
-  // Dub preset: Slow rhythm with heavy emphasis on beats
-  { { 3, 1, 2, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dub" },
-
-  // Experimental preset: Randomized rhythm with varying probabilities
-  { { 7, 6, 7, 6, 7, 6 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 80, 70, 90, 60, 85, 75 }, "Experimtl" },
-
-  // Minimal preset: Simplistic rhythm with regular hits and offsets
-  { { 4, 4, 4, 4, 4, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Minimal" },
-
-  // Blues preset: Traditional blues rhythm with swing feel
-  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Blues" },
-
-  // Rock preset: Steady rock rhythm with emphasis on kick and snare
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Rock" },
-
-  // Electro preset: Heavy beats with a distinct rhythm
-  { { 3, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Electro" },
-
-  // Dubstep preset: Heavy bass with complex rhythms
-  { { 6, 4, 6, 4, 6, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Dubstep" },
-
-  // Psytrance preset: Fast-paced, hypnotic beats
-  { { 8, 6, 8, 6, 8, 6 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Psytrance" },
-
-  // Offbeat preset: Off-kilter rhythms typical of certain electronic styles
-  { { 5, 4, 5, 4, 5, 4 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Offbeat" },
-
-  // Progressive preset: Gradual build-ups with evolving rhythms
-  { { 6, 5, 6, 5, 6, 5 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Progressv" },
-
-  // Halfstep preset: Sparse beats typical of certain electronic subgenres
-  { { 4, 3, 4, 3, 4, 3 }, { 1, 2, 1, 2, 1, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Halfstep" },
-
   // Random Jam preset: Completely random rhythm for fun and experimentation
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam" }
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam" },
+
+  // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen" },
+
+  // test
+  { { 4, 4, 4, 4, 4, 4 }, { 4, 5, 6, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test4" },
+  { { 6, 6, 6, 6, 6, 6 }, { 7, 8, 9, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test6" },
+  { { 8, 8, 8, 8, 8, 8 }, { 11, 12, 13, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test8" },
+  { { 12, 12, 12, 12, 12, 12 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test12" },
+  { { 16, 16, 16, 16, 16, 16 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test16" },
+
+  // div
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv" },
+
+  // odd
+  { { 15, 1, 3, 5, 7, 9 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Odd16" }
+
 };
-
-
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
 byte lastUsedSlot = 0;
@@ -447,7 +381,7 @@ void setup() {
     lastUsedSlot = 0;
   }
   loadFromEEPROM(lastUsedSlot);
-  
+
   OLED_display(true);
 
   unsigned long seed = analogRead(A0);
@@ -495,12 +429,30 @@ void loop() {
     for (int i = 0; i < MAX_CHANNELS; i++) {
       if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
         switch (i) {
-          case 0: OUTPUT1::setOutput(1); LED1::setOutput(1); break;
-          case 1: OUTPUT2::setOutput(1); LED2::setOutput(1); break;
-          case 2: OUTPUT3::setOutput(1); LED3::setOutput(1); break;
-          case 3: OUTPUT4::setOutput(1); LED4::setOutput(1); break;
-          case 4: OUTPUT5::setOutput(1); LED5::setOutput(1); break;
-          case 5: OUTPUT6::setOutput(1); LED6::setOutput(1); break;
+          case 0:
+            OUTPUT1::setOutput(1);
+            LED1::setOutput(1);
+            break;
+          case 1:
+            OUTPUT2::setOutput(1);
+            LED2::setOutput(1);
+            break;
+          case 2:
+            OUTPUT3::setOutput(1);
+            LED3::setOutput(1);
+            break;
+          case 3:
+            OUTPUT4::setOutput(1);
+            LED4::setOutput(1);
+            break;
+          case 4:
+            OUTPUT5::setOutput(1);
+            LED5::setOutput(1);
+            break;
+          case 5:
+            OUTPUT6::setOutput(1);
+            LED6::setOutput(1);
+            break;
         }
       }
     }
@@ -626,7 +578,7 @@ void onEncoderRotation(EncoderButton &eb) {
     acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
   }
 
-  if (!allMutedFlag) { // Only handle setting navigation if not all muted
+  if (!allMutedFlag) {  // Only handle setting navigation if not all muted
     handleSettingNavigation(acceleratedIncrement);
   }
 }
@@ -869,7 +821,7 @@ void drawTopMenuRight(TopMenu select_ch) {
     case MENU_ALL_RESET:
     case MENU_ALL_MUTE: rightMenu('A', 'L', 'L', ' '); break;
     case MENU_RAND: rightMenu('X', ' ', ' ', ' '); break;
-    default:break;
+    default: break;
   }
 }
 
@@ -1006,7 +958,7 @@ void OLED_display(bool force_refresh) {
 
   // Selection Indicator and Step Dots
   drawSelectionIndicator(selected_setting);
-  
+
   if (selected_setting == SETTING_PROB) {
     // Draw Probability screen
     drawProbabilityConfig();
@@ -1016,7 +968,7 @@ void OLED_display(bool force_refresh) {
     // Main Euclid pattern display
     drawEuclideanRhythms();
   }
-  
+
   // Draw top-level menu overlays while encoder is pressed.
   if (encoder.buttonState() == 0) {  // NOTE: We can remove this check to make the overlay visible without holding encoder.
     if (selected_setting == SETTING_TOP_MENU && selected_menu == MENU_PRESET) {
@@ -1063,8 +1015,8 @@ void drawEuclideanRhythms() {
   }
 
   // draw hits line : 1hits if not muted
-  for (int k = 0; k < MAX_CHANNELS; k++) {                                           // Channel count
-    if (currentConfig.mute[k] == 0) {  // don't draw when muted or when editing probability
+  for (int k = 0; k < MAX_CHANNELS; k++) {  // Channel count
+    if (currentConfig.mute[k] == 0) {       // don't draw when muted or when editing probability
       if (currentConfig.hits[k] == 1) {
         int x1 = 15 + graph_x[k];
         int y1 = 15 + graph_y[k];
@@ -1078,7 +1030,7 @@ void drawEuclideanRhythms() {
   }
 
   //draw play step circle
-  for (int k = 0; k < MAX_CHANNELS; k++) {                                           //ch count
+  for (int k = 0; k < MAX_CHANNELS; k++) {                                 //ch count
     if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  //mute on = no display circle
       if (offset_buf[k][playing_step[k]] == 0) {
         display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
