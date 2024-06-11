@@ -129,7 +129,7 @@ enum Setting {
 #define SCREEN_HEIGHT 64
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 3
+#define NUM_MEMORY_SLOTS 5
 #define EEPROM_START_ADDRESS 7
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 #define LAST_USED_SLOT_ADDRESS (EEPROM_START_ADDRESS + NUM_MEMORY_SLOTS * CONFIG_SIZE)
@@ -432,11 +432,11 @@ void setup() {
   encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler for pressed rotation
   encoder.setEncoderReleasedHandler(onEncoderReleased);
 
-  initIO();  // includes delay for OLED init!
+  initIO();
   initDisplay();
 
+  // This might change to a smaller logo centered in the screen. LGT8F boards seem to run out of RAM because the dont have eeprom ?
   //drawAnimation();  // play boot animation
-
   //delay(1500);  // short delay after boot logo
 
   checkAndInitializeSettings();
@@ -447,7 +447,7 @@ void setup() {
     lastUsedSlot = 0;
   }
   loadFromEEPROM(lastUsedSlot);
-
+  
   OLED_display(true);
 
   unsigned long seed = analogRead(A0);
@@ -626,7 +626,9 @@ void onEncoderRotation(EncoderButton &eb) {
     acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
   }
 
-  handleSettingNavigation(acceleratedIncrement);
+  if (!allMutedFlag) { // Only handle setting navigation if not all muted
+    handleSettingNavigation(acceleratedIncrement);
+  }
 }
 
 void onPress(EncoderButton &eb) {
@@ -785,9 +787,12 @@ void Random_change() {
     if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
       currentConfig.offset[k] = random(0, MAX_STEPS);
     }
+    /*
+    // no mute when manually advancing random progression ?
     if (k > 0) {
       currentConfig.mute[k] = pgm_read_byte(&mute_occ[k]) >= random(1, 100) ? 1 : 0;
     }
+    */
   }
 }
 
@@ -972,13 +977,13 @@ void OLED_display(bool force_refresh) {
   // Check if all channels are muted
   if (allMutedFlag) {
     // Draw "MUTE" message in the center of the screen
-    //display.setTextSize(2);  // no large letters for now to avoid ugly artifacts
+    display.setTextSize(2);  // no large letters for now to avoid ugly artifacts
     display.setTextColor(WHITE);
     display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
     display.println(F("MUTE"));
     display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
     display.display();
-    //display.setTextSize(1);  // Reset text size
+    display.setTextSize(1);  // Reset text size
     return;                  // Exit function early to avoid drawing other elements
   }
 
@@ -1197,9 +1202,9 @@ void drawSaveLoadSelection() {
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
   display.setCursor(60, 29);
-  //display.setTextSize(2);
+  display.setTextSize(2);
   display.print(selected_slot + 1, DEC);
-  //display.setTextSize(1);
+  display.setTextSize(1);
 }
 
 void drawPresetSelection() {
