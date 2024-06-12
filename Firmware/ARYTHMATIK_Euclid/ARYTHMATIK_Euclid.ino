@@ -161,11 +161,8 @@ bool showOverlay = false;
 
 int tempo = 120;                 // beats per minute.
 int period = 60000 / tempo / 4;  // one minute in ms divided by tempo divided by 4 for 16th note period.
-// store the BPM derived from the external clock pulses
+// BPM derived from the external clock pulses
 int externalBPM = 0;
-// smoothing BPM
-float smoothedBPM = 0.0;
-const float alpha = 0.25;  // factor for smoothing
 
 //const byte graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
@@ -382,7 +379,9 @@ void setup() {
   encoder.setDebounceInterval(5);  // Increase debounce interval
   encoder.setMultiClickInterval(10);
   encoder.setRateLimit(20);
+  encoder.setLongClickDuration(500);
   encoder.setClickHandler(onEncoderClicked);
+  encoder.setLongClickHandler(onEncoderLongClicked);  // Add long click handler
   encoder.setEncoderHandler(onEncoderRotation);
   encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler again for pressed rotation of channels while editing parameters
 
@@ -442,7 +441,6 @@ void loop() {
   // External clock detection and response
   if (old_trg_in == 0 && trg_in == 1) {
     beat_start = true;
-    internalClock = false;
     last_clock_input = millis();
     static unsigned long lastPulseTime = 0;
     unsigned long currentTime = millis();
@@ -451,14 +449,12 @@ void loop() {
       externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
     }
     lastPulseTime = currentTime;
+    if (!internalClock) {
+      beat_start = true;
+    }
   }
 
   // Switch to internal clock if no clock input received for set duration.
-  if (millis() > last_clock_input + INTERNAL_CLOCK_SWITCH_DURATION) {
-    internalClock = true;
-  }
-
-  // Internal clock behavior
   if (internalClock && (millis() - internalClockTimer >= period)) {
     beat_start = true;
     internalClockTimer = millis();
@@ -646,6 +642,14 @@ void onEncoderClicked(EncoderButton &eb) {
   }
 }
 
+void onEncoderLongClicked(EncoderButton &eb) {
+  if (selected_menu == MENU_TEMPO) {
+    internalClock = !internalClock;  // Toggle the internal clock state
+    showOverlay = true;  // Show overlay to indicate clock state change
+    disp_refresh = true;  // Force display refresh to show the new state
+  }
+}
+
 void onEncoderRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
@@ -671,8 +675,8 @@ void onEncoderRotation(EncoderButton &eb) {
     if (selected_menu == MENU_TEMPO) {
       tempo += acceleratedIncrement;
       // Constrain the tempo between 30 and 200 BPM
-      if (tempo < 20) tempo = 20;
-      if (tempo > 280) tempo = 280;
+      if (tempo < 30) tempo = 30;
+      if (tempo > 200) tempo = 200;
     }
 
     // Handle channel switching only when in specific modes
@@ -729,12 +733,8 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     bar_select += increment;
     if (bar_select < 1) bar_select = 6;
     if (bar_select > 6) bar_select = 1;
-  } else if (selected_menu == MENU_TEMPO) {
-    tempo += acceleratedIncrement;
-    // Constrain the tempo between 30 and 200 BPM
-    if (tempo < 20) tempo = 20;
-    if (tempo > 280) tempo = 280;
-  }
+  } 
+  
 }
 
 void initializeCurrentConfig(bool loadDefaults = false) {
@@ -919,6 +919,7 @@ void drawTopMenuRight(TopMenu select_ch) {
     case MENU_ALL_RESET:
     case MENU_ALL_MUTE: rightMenu('A', 'L', 'L', ' '); break;
     case MENU_RAND: rightMenu('X', ' ', ' ', ' '); break;
+    case MENU_TEMPO: rightMenu('B', 'P', 'M', ' '); break;
     default: break;
   }
 }
@@ -945,7 +946,7 @@ void drawModeMenu(TopMenu select_ch) {
     case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;
     case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;
     case MENU_PRESET: leftMenu('P', 'R', 'S', 'T'); break;
-    case MENU_TEMPO: leftMenu('B', 'P', 'M', ' '); break;
+    case MENU_TEMPO: leftMenu('T', 'E', 'M', 'P'); break;
     case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;
     default: break;
   }
@@ -1298,8 +1299,8 @@ void drawTempo() {
   display.setTextSize(1);
   display.setCursor(x1 + b, y1 + b);
   if (internalClock) {
-    display.print(F("Internal BPM"));
+    display.print(F("Internal CLK"));
   } else {
-    display.print(F("External BPM"));
+    display.print(F("External CLK"));
   }
 }
