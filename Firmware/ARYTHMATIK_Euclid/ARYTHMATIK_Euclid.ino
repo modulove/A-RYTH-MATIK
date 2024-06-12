@@ -600,10 +600,6 @@ void onEncoderClicked(EncoderButton &eb) {
       case MENU_LOAD:
         loadFromEEPROM(selected_slot);
         break;
-      case MENU_TEMPO:
-        // recalculate period.
-        period = 60000 / tempo / 4;
-        break;
     }
     disp_refresh = true;
   }
@@ -677,6 +673,8 @@ void onEncoderRotation(EncoderButton &eb) {
       // Constrain the tempo between 30 and 200 BPM
       if (tempo < 30) tempo = 30;
       if (tempo > 200) tempo = 200;
+      // one minute in ms divided by tempo divided by 4 for 16th note period.
+      period = 60000 / tempo / 4;
     }
 
     // Handle channel switching only when in specific modes
