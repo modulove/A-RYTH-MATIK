@@ -45,7 +45,6 @@
 // ToDo: change to be in line with libModulove, put in config Menue dialog
 //#define ROTATE_PANEL
 
-// Define the LGT8FX board if the specific macro is defined
 #if defined(__LGT8FX8P__)
 #define LGT8FX_BOARD
 #endif
@@ -162,6 +161,11 @@ bool showOverlay = false;
 
 int tempo = 120;                 // beats per minute.
 int period = 60000 / tempo / 4;  // one minute in ms divided by tempo divided by 4 for 16th note period.
+// store the BPM derived from the external clock pulses
+int externalBPM = 0;
+// smoothing BPM
+float smoothedBPM = 0.0;
+const float alpha = 0.25;  // factor for smoothing
 
 //const byte graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
 const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
@@ -180,7 +184,7 @@ const int MIN_REFRESH_DURATION = 250;  // Used by fast inputs like encoder rotat
 unsigned long gate_timer = 0;
 unsigned long last_clock_input = 0;
 unsigned long internalClockTimer = 0;
-const int INTERNAL_CLOCK_SWITCH_DURATION = 2000;  // Used by fast inputs like encoder rotation to throttle the display refresh.
+const int INTERNAL_CLOCK_SWITCH_DURATION = 1000;  // Used by fast inputs like encoder rotation to throttle the display refresh.
 
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
@@ -440,6 +444,13 @@ void loop() {
     beat_start = true;
     internalClock = false;
     last_clock_input = millis();
+    static unsigned long lastPulseTime = 0;
+    unsigned long currentTime = millis();
+    unsigned long pulseInterval = currentTime - lastPulseTime;
+    if (pulseInterval > 0) {
+      externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
+    }
+    lastPulseTime = currentTime;
   }
 
   // Switch to internal clock if no clock input received for set duration.
@@ -1240,9 +1251,9 @@ void drawSaveLoadSelection() {
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
   display.setCursor(60, 29);
-  //display.setTextSize(2);
+  display.setTextSize(2);
   display.print(selected_slot + 1, DEC);
-  //display.setTextSize(1);
+  display.setTextSize(1);
 }
 
 void drawPresetSelection() {
@@ -1277,11 +1288,18 @@ void drawTempo() {
   display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
   display.drawRect(x1, y1, w, h, WHITE);
 
-  display.setCursor(x1 + b, y1 + b);
-  display.print(F("Adjust BPM:"));
-
-  display.setCursor(40, 29);
+  display.setCursor(42, 30);
   display.setTextSize(2);
-  display.print(tempo, DEC);
+  if (internalClock) {
+    display.print(tempo + 1, DEC);
+  } else {
+    display.print(externalBPM, DEC);
+  }
   display.setTextSize(1);
+  display.setCursor(x1 + b, y1 + b);
+  if (internalClock) {
+    display.print(F("Internal BPM"));
+  } else {
+    display.print(F("External BPM"));
+  }
 }
