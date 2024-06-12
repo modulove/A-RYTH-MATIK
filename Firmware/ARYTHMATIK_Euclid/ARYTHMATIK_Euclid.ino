@@ -426,11 +426,11 @@ void loop() {
   }
 
   // External clock detection and response
-    if (old_trg_in == 0 && trg_in == 1) {
-        beat_start = true;
-        internalClock = false;
-        last_clock_input = millis();
-    }
+  if (old_trg_in == 0 && trg_in == 1) {
+    beat_start = true;
+    internalClock = false;
+    last_clock_input = millis();
+  }
 
   // Switch to internal clock if no clock input received for set duration.
   if (millis() > last_clock_input + INTERNAL_CLOCK_SWITCH_DURATION) {
@@ -438,10 +438,10 @@ void loop() {
   }
 
   // Internal clock behavior
-    if (internalClock && (millis() - internalClockTimer >= period)) {
-        beat_start = true;
-        internalClockTimer = millis();
-    }
+  if (internalClock && (millis() - internalClockTimer >= period)) {
+    beat_start = true;
+    internalClockTimer = millis();
+  }
 
   if (beat_start) {
     gate_timer = millis();
@@ -666,19 +666,6 @@ void onEncoderRotation(EncoderButton &eb) {
       // EEPROM slot selection for saving or loading
       selected_slot = (selected_slot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
     }
-
-    if (selected_menu <= MENU_CH_6) {
-      // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
-      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
-    } else if (selected_menu == MENU_RAND) {
-      // Random X mode here
-      Random_change();
-    } else if (selected_menu == MENU_RANDOM_ADVANCE) {
-      // Ensure `bar_select` stays within the range of 1 to 5
-      bar_select += increment;
-      if (bar_select < 1) bar_select = 6;
-      if (bar_select > 6) bar_select = 1;
-    }
   }
 }
 
@@ -798,6 +785,7 @@ void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
   EEPROM.put(address, config);
 }
 
+// "X"" random avance without mute (turn encoder CW & Auto advance mode)
 void Random_change() {
   for (int k = 0; k < MAX_CHANNELS; k++) {
     if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
@@ -806,12 +794,23 @@ void Random_change() {
     if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
       currentConfig.offset[k] = random(0, MAX_STEPS);
     }
-    /*
-    // no mute when manually advancing random progression ?
+    currentConfig.mute[k] = false;  // Ensure no channels are muted during random change
+  }
+}
+
+
+// Add random avance with mute (turn encoder CCW)
+void Random_change_mute() {
+  for (int k = 0; k < MAX_CHANNELS; k++) {
+    if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
+      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
+    }
+    if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
+      currentConfig.offset[k] = random(0, MAX_STEPS);
+    }
     if (k > 0) {
       currentConfig.mute[k] = pgm_read_byte(&mute_occ[k]) >= random(1, 100) ? 1 : 0;
     }
-    */
   }
 }
 
