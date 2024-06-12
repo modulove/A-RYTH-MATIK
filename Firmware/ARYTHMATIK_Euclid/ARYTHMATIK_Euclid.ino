@@ -426,11 +426,11 @@ void loop() {
   }
 
   // External clock detection and response
-  if (old_trg_in == 0 && trg_in == 1) {
-    beat_start = true;
-    internalClock = false;
-    last_clock_input = millis();
-  }
+    if (old_trg_in == 0 && trg_in == 1) {
+        beat_start = true;
+        internalClock = false;
+        last_clock_input = millis();
+    }
 
   // Switch to internal clock if no clock input received for set duration.
   if (millis() > last_clock_input + INTERNAL_CLOCK_SWITCH_DURATION) {
@@ -438,10 +438,10 @@ void loop() {
   }
 
   // Internal clock behavior
-  if (internalClock && (millis() - internalClockTimer >= period)) {
-    beat_start = true;
-    internalClockTimer = millis();
-  }
+    if (internalClock && (millis() - internalClockTimer >= period)) {
+        beat_start = true;
+        internalClockTimer = millis();
+    }
 
   if (beat_start) {
     gate_timer = millis();
@@ -666,6 +666,11 @@ void onEncoderRotation(EncoderButton &eb) {
       // EEPROM slot selection for saving or loading
       selected_slot = (selected_slot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
     }
+/*
+    if (selected_menu <= MENU_CH_6) {
+      // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
+      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+    } */
   }
 }
 
@@ -682,7 +687,6 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 
   // Handle channel switching only when in specific modes
   if (selected_setting != SETTING_TOP_MENU) {
-
     selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
     // Ensure the selected_menu is within the range of channels
     if (selected_menu > MENU_CH_6) {
@@ -695,8 +699,12 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
     currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
   } else if (selected_menu == MENU_RAND) {
-    // Random X mode here
-    Random_change();
+    // Check rotation direction to call appropriate random change function
+    if (increment > 0) {
+      Random_change();  // Rotate CW: Random change without mute
+    } else {
+      Random_change_mute();  // Rotate CCW: Random change with mute
+    }
   } else if (selected_menu == MENU_RANDOM_ADVANCE) {
     // Ensure `bar_select` stays within the range of 1 to 5
     bar_select += increment;
@@ -1086,11 +1094,11 @@ void drawEuclideanRhythms() {
 
   // draw hits line : 1hits if not muted
   for (int k = 0; k < MAX_CHANNELS; k++) {  // Channel count
-    if (currentConfig.mute[k] == 0) {       // don't draw when muted or when editing probability
+    if (currentConfig.mute[k] == 0) {       // don't draw when muted
       if (currentConfig.hits[k] == 1) {
         int x1 = 15 + graph_x[k];
         int y1 = 15 + graph_y[k];
-        int x2 = x16[currentConfig.offset[k]] + graph_x[k];
+        int x2 = x16[(currentConfig.offset[k] + 8) % 16] + graph_x[k]; // Adjust the offset to draw in the correct direction
         int y2 = y16[currentConfig.offset[k]] + graph_y[k];
         if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
           display.drawLine(x1, y1, x2, y2, WHITE);
