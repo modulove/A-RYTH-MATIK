@@ -45,6 +45,14 @@
 // ToDo: change to be in line with libModulove, put in config Menue dialog
 //#define ROTATE_PANEL
 
+// Define the LGT8FX board if the specific macro is defined
+#if defined(__LGT8FX8P__)
+  #define LGT8FX_BOARD
+#endif
+
+//  disable the boot logo entirely
+// #define DISABLE_BOOT_LOGO
+
 #ifdef ROTATE_PANEL
 // When panel is rotated
 #define RESET FastGPIO::Pin<13>
@@ -130,7 +138,7 @@ enum Setting {
 #define SCREEN_HEIGHT 64
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 5
+#define NUM_MEMORY_SLOTS 4
 #define EEPROM_START_ADDRESS 7
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 #define LAST_USED_SLOT_ADDRESS (EEPROM_START_ADDRESS + NUM_MEMORY_SLOTS * CONFIG_SIZE)
@@ -377,9 +385,11 @@ void setup() {
   initIO();
   initDisplay();
 
-  // This might change to a smaller logo centered in the screen. LGT8F boards seem to run out of RAM because the dont have eeprom ?
-  //drawAnimation();  // play boot animation
-  //delay(1500);  // short delay after boot logo
+  // boot logo animation only on nano for now
+  #if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
+    drawAnimation();  // play boot animation
+    delay(1500);  // short delay after boot logo
+  #endif
 
   checkAndInitializeSettings();
 
@@ -426,11 +436,11 @@ void loop() {
   }
 
   // External clock detection and response
-    if (old_trg_in == 0 && trg_in == 1) {
-        beat_start = true;
-        internalClock = false;
-        last_clock_input = millis();
-    }
+  if (old_trg_in == 0 && trg_in == 1) {
+    beat_start = true;
+    internalClock = false;
+    last_clock_input = millis();
+  }
 
   // Switch to internal clock if no clock input received for set duration.
   if (millis() > last_clock_input + INTERNAL_CLOCK_SWITCH_DURATION) {
@@ -438,10 +448,10 @@ void loop() {
   }
 
   // Internal clock behavior
-    if (internalClock && (millis() - internalClockTimer >= period)) {
-        beat_start = true;
-        internalClockTimer = millis();
-    }
+  if (internalClock && (millis() - internalClockTimer >= period)) {
+    beat_start = true;
+    internalClockTimer = millis();
+  }
 
   if (beat_start) {
     gate_timer = millis();
@@ -649,6 +659,9 @@ void onEncoderRotation(EncoderButton &eb) {
 
     if (selected_menu == MENU_TEMPO) {
       tempo += acceleratedIncrement;
+      // Constrain the tempo between 30 and 200 BPM
+      if (tempo < 20) tempo = 20;
+      if (tempo > 280) tempo = 280;
     }
 
     // Handle channel switching only when in specific modes
@@ -666,11 +679,6 @@ void onEncoderRotation(EncoderButton &eb) {
       // EEPROM slot selection for saving or loading
       selected_slot = (selected_slot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
     }
-/*
-    if (selected_menu <= MENU_CH_6) {
-      // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
-      currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
-    } */
   }
 }
 
@@ -710,6 +718,11 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     bar_select += increment;
     if (bar_select < 1) bar_select = 6;
     if (bar_select > 6) bar_select = 1;
+  } else if (selected_menu == MENU_TEMPO) {
+    tempo += acceleratedIncrement;
+    // Constrain the tempo between 30 and 200 BPM
+    if (tempo < 20) tempo = 20;
+    if (tempo > 280) tempo = 280;
   }
 }
 
@@ -1098,7 +1111,7 @@ void drawEuclideanRhythms() {
       if (currentConfig.hits[k] == 1) {
         int x1 = 15 + graph_x[k];
         int y1 = 15 + graph_y[k];
-        int x2 = x16[(currentConfig.offset[k] + 8) % 16] + graph_x[k]; // Adjust the offset to draw in the correct direction
+        int x2 = x16[(currentConfig.offset[k] + 8) % 16] + graph_x[k];  // Adjust the offset to draw in the correct direction
         int y2 = y16[currentConfig.offset[k]] + graph_y[k];
         if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
           display.drawLine(x1, y1, x2, y2, WHITE);
@@ -1232,9 +1245,9 @@ void drawSaveLoadSelection() {
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
   display.setCursor(60, 29);
-  display.setTextSize(2);
+  //display.setTextSize(2);
   display.print(selected_slot + 1, DEC);
-  display.setTextSize(1);
+  //display.setTextSize(1);
 }
 
 void drawPresetSelection() {
@@ -1272,8 +1285,8 @@ void drawTempo() {
   display.setCursor(x1 + b, y1 + b);
   display.print(F("Adjust BPM:"));
 
-  display.setCursor(60, 29);
+  display.setCursor(40, 29);
   display.setTextSize(2);
-  display.print(tempo + 1, DEC);
+  display.print(tempo, DEC);
   display.setTextSize(1);
 }
