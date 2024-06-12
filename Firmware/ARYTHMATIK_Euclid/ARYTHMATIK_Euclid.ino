@@ -47,7 +47,7 @@
 
 // Define the LGT8FX board if the specific macro is defined
 #if defined(__LGT8FX8P__)
-  #define LGT8FX_BOARD
+#define LGT8FX_BOARD
 #endif
 
 //  disable the boot logo entirely
@@ -138,7 +138,7 @@ enum Setting {
 #define SCREEN_HEIGHT 64
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 4
+#define NUM_MEMORY_SLOTS 8
 #define EEPROM_START_ADDRESS 7
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 #define LAST_USED_SLOT_ADDRESS (EEPROM_START_ADDRESS + NUM_MEMORY_SLOTS * CONFIG_SIZE)
@@ -385,11 +385,11 @@ void setup() {
   initIO();
   initDisplay();
 
-  // boot logo animation only on nano for now
-  #if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
-    drawAnimation();  // play boot animation
-    delay(1500);  // short delay after boot logo
-  #endif
+// boot logo animation only on nano for now
+#if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
+  drawAnimation();  // play boot animation
+  delay(1500);      // short delay after boot logo
+#endif
 
   checkAndInitializeSettings();
 
@@ -1132,9 +1132,9 @@ void drawEuclideanRhythms() {
     }
   }
 
-  // Draw big 'M' for muted channels
+  // Draw 'M' for muted channels
   for (int k = 0; k < MAX_CHANNELS; k++) {
-    if (currentConfig.mute[k] && selected_setting == SETTING_TOP_MENU) {
+    if (currentConfig.mute[k]) {
       int centerX = graph_x[k] + 15;  // Center of the channel's area
       int centerY = graph_y[k] + 15;
       display.setCursor(centerX - 3, centerY - 4);  // Adjust cursor to center the 'M'
@@ -1149,28 +1149,23 @@ void drawEuclideanRhythms() {
     int x_base = graph_x[ch];
     int y_base = graph_y[ch] + 8;
 
+    // Draw hits info
+    if (currentConfig.hits[ch] > 9 && selected_setting != SETTING_LIMIT && selected_setting != SETTING_MUTE) {  // Display only if there is space in the UI
+      if (x_base + 10 < 120 && y_base < 56) {
+        display.setCursor(x_base + 10, y_base);  // Adjust position
+        display.print(currentConfig.hits[ch]);
+        display.setCursor(x_base + 13, y_base + 8);
+        display.println('H');
+      }
+    }
     // draw selected parameter UI for currently active channel when editing
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
-        case SETTING_HITS:                   // Hits
-          if (currentConfig.hits[ch] > 9) {  // Display only if there is space in the UI
-            if (x_base + 10 < 120 && y_base < 56) {
-              display.setCursor(x_base + 10, y_base);  // Adjust position
-              display.print(currentConfig.hits[ch]);
-              display.setCursor(x_base + 13, y_base + 8);
-              display.println('H');
-            }
-          }
+        case SETTING_HITS:  // Hits
           break;
         case SETTING_OFFSET:
           break;
-        case SETTING_LIMIT:  // Limit prevents from running draw L in to shape
-          if (currentConfig.limit[ch] == 0 && currentConfig.hits[ch] > 3) {
-            display.setCursor(x_base + 12, y_base + 4);
-            if (x_base + 10 < 128 && y_base < 64) {
-              display.println('L');
-            }
-          }
+        case SETTING_LIMIT:
           if (currentConfig.limit[ch] > 0 && currentConfig.hits[ch] > 6) {
             // draw line indicator from center to limit point
             int x1 = 15 + graph_x[ch];
