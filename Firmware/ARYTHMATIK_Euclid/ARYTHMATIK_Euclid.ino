@@ -181,8 +181,6 @@ const int MIN_REFRESH_DURATION = 250;  // Used by fast inputs like encoder rotat
 unsigned long gate_timer = 0;
 unsigned long last_clock_input = 0;
 unsigned long internalClockTimer = 0;
-const int INTERNAL_CLOCK_SWITCH_DURATION = 1000;  // Used by fast inputs like encoder rotation to throttle the display refresh.
-
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -439,7 +437,7 @@ void loop() {
   }
 
   // External clock detection and response
-  if (old_trg_in == 0 && trg_in == 1) {
+  if (!internalClock && old_trg_in == 0 && trg_in == 1) {
     beat_start = true;
     last_clock_input = millis();
     static unsigned long lastPulseTime = 0;
@@ -449,9 +447,6 @@ void loop() {
       externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
     }
     lastPulseTime = currentTime;
-    if (!internalClock) {
-      beat_start = true;
-    }
   }
 
   // Switch to internal clock if no clock input received for set duration.
@@ -657,11 +652,13 @@ void onEncoderRotation(EncoderButton &eb) {
     acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
   }
 
-  if (!allMutedFlag && !showOverlay) {  // Only handle setting navigation if not all muted
+  // Only handle setting navigation if not all muted and the overlay is not shown.
+  if (!allMutedFlag && !showOverlay) {
     handleSettingNavigation(acceleratedIncrement);
   }
 
-  if (selected_setting == SETTING_TOP_MENU) {
+  // Overlay shown menu adjustments.
+  else if (selected_setting == SETTING_TOP_MENU && showOverlay) {
 
     if (selected_menu == MENU_PRESET) {
       // Handle preset selection
@@ -675,17 +672,6 @@ void onEncoderRotation(EncoderButton &eb) {
       if (tempo > 200) tempo = 200;
       // one minute in ms divided by tempo divided by 4 for 16th note period.
       period = 60000 / tempo / 4;
-    }
-
-    // Handle channel switching only when in specific modes
-    if (selected_setting != SETTING_TOP_MENU) {
-
-      selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
-      // Ensure the selected_menu is within the range of channels
-      if (selected_menu > MENU_CH_6) {
-        selected_menu = MENU_CH_1;
-      }
-      return;
     }
 
     if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
