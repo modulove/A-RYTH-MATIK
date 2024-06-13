@@ -236,47 +236,51 @@ struct SlotConfiguration {
   byte limit[MAX_CHANNELS];        // Step limit (length) of the pattern for each channel
   byte probability[MAX_CHANNELS];  // Probability of triggering each hit (0-100%)
   char name[10];                   // Name of the preset with a fixed size
+  int tempo;                       // Tempo for the preset
+  bool internalClock;              // Clock source state
+  byte lastUsedSlot;               // Last used slot
+  byte selectedPreset;             // Last used preset
+  bool lastLoadedFromPreset;       // Flag to indicate last load source
 };
 
 // Updated default (preset) configuration with names and rhythm patterns
 const SlotConfiguration defaultSlots[] PROGMEM = {
   // Techno preset: Characterized by repetitive beats with variations in hits and offsets
-  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno" },
+  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
 
   // Samba preset: Traditional Brazilian rhythm with alternating offsets
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba" },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
 
   // Swing preset: Syncopated rhythm typical in swing jazz
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing" },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
 
   // Afrobeat preset: Polyrhythmic structure with consistent hits
-  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat" },
+  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120 },
 
   // Funk preset: Tight, groovy rhythm with steady hits
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk" },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
 
   // Waltz preset: Triple meter rhythm with regular hits
-  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz" },
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
 
   // Random Jam preset: Completely random rhythm for fun and experimentation
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam" },
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120 },
 
   // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen" },
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
 
-  // test
-  { { 4, 4, 4, 4, 4, 4 }, { 4, 5, 6, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test4" },
-  { { 6, 6, 6, 6, 6, 6 }, { 7, 8, 9, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test6" },
-  { { 8, 8, 8, 8, 8, 8 }, { 11, 12, 13, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test8" },
-  { { 12, 12, 12, 12, 12, 12 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test12" },
-  { { 16, 16, 16, 16, 16, 16 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test16" },
+  // Test patterns
+  { { 4, 4, 4, 4, 4, 4 }, { 4, 5, 6, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test4", 120 },
+  { { 6, 6, 6, 6, 6, 6 }, { 7, 8, 9, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test6", 120 },
+  { { 8, 8, 8, 8, 8, 8 }, { 11, 12, 13, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test8", 120 },
+  { { 12, 12, 12, 12, 12, 12 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test12", 120 },
+  { { 16, 16, 16, 16, 16, 16 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test16", 120 },
 
   // div
-  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv" },
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 },
 
   // odd
-  { { 15, 1, 3, 5, 7, 9 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Odd16" }
-
+  { { 15, 1, 3, 5, 7, 9 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Odd16", 120 }
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
@@ -400,6 +404,12 @@ void setup() {
     lastUsedSlot = 0;
   }
   loadFromEEPROM(lastUsedSlot);
+
+  if (currentConfig.lastLoadedFromPreset) {
+    loadFromPreset(currentConfig.selectedPreset);
+  } else {
+    loadFromEEPROM(lastUsedSlot);
+  }
 
   OLED_display(true);
 
@@ -588,12 +598,16 @@ void onEncoderClicked(EncoderButton &eb) {
     switch (selected_menu) {
       case MENU_PRESET:
         loadDefaultConfig(&currentConfig, selected_preset);
+        currentConfig.lastLoadedFromPreset = true; // Indicates that the current config was loaded from a preset
+        tempo = currentConfig.tempo; // Use the preset's tempo
+        period = 60000 / tempo / 4; // Update period with loaded tempo
         break;
       case MENU_SAVE:
         saveToEEPROM(selected_slot);
         break;
       case MENU_LOAD:
         loadFromEEPROM(selected_slot);
+        currentConfig.lastLoadedFromPreset = false; // Indicates that the current config was loaded from a save slot
         break;
     }
     disp_refresh = true;
@@ -629,15 +643,28 @@ void onEncoderClicked(EncoderButton &eb) {
     case MENU_PRESET:
     case MENU_TEMPO:
       showOverlay = !showOverlay;
+      disp_refresh = true;
       break;
   }
+
+  // Save the current state after an action is performed
+  saveToEEPROM(lastUsedSlot);
+
+  // Force the display to update immediately
+  OLED_display(true);
 }
+
 
 void onEncoderLongClicked(EncoderButton &eb) {
   if (selected_menu == MENU_TEMPO) {
     internalClock = !internalClock;  // Toggle the internal clock state
-    showOverlay = true;  // Show overlay to indicate clock state change
-    disp_refresh = true;  // Force display refresh to show the new state
+    showOverlay = true;              // Show overlay to indicate clock state change
+    disp_refresh = true;             // Force display refresh to show the new state
+
+    // Update period with the current tempo if the internal clock is enabled
+    if (internalClock) {
+      period = 60000 / tempo / 4;
+    }
   }
 }
 
@@ -717,8 +744,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     bar_select += increment;
     if (bar_select < 1) bar_select = 6;
     if (bar_select > 6) bar_select = 1;
-  } 
-  
+  }
 }
 
 void initializeCurrentConfig(bool loadDefaults = false) {
@@ -729,6 +755,15 @@ void initializeCurrentConfig(bool loadDefaults = false) {
     // Load configuration from EEPROM
     int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
     EEPROM.get(baseAddress, currentConfig);
+    tempo = currentConfig.tempo;               // Load tempo
+    internalClock = currentConfig.internalClock;  // Load clock state
+    lastUsedSlot = currentConfig.lastUsedSlot;    // Load last used slot
+    selected_preset = currentConfig.selectedPreset; // Load last used preset
+    if (currentConfig.lastLoadedFromPreset) {
+      loadFromPreset(selected_preset);
+    } else {
+      loadFromEEPROM(lastUsedSlot);
+    }
   }
 }
 
@@ -767,8 +802,13 @@ void loadDefaultConfig(SlotConfiguration *config, int index) {
 }
 
 void saveToEEPROM(int slot) {
-  int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
-  if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
+  int baseAddress = EEPROM_START_ADDRESS + (slot * CONFIG_SIZE);
+  if (baseAddress + CONFIG_SIZE <= EEPROM.length()) {
+    currentConfig.tempo = tempo;
+    currentConfig.internalClock = internalClock;
+    currentConfig.lastUsedSlot = slot;
+    currentConfig.selectedPreset = selected_preset;
+    currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
     EEPROM.put(baseAddress, currentConfig);
     // Save the last used slot
     EEPROM.put(LAST_USED_SLOT_ADDRESS, slot);
@@ -779,20 +819,37 @@ void saveToEEPROM(int slot) {
 }
 
 void loadFromEEPROM(int slot) {
-  int baseAddress = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
-  if (baseAddress + sizeof(SlotConfiguration) <= EEPROM.length()) {
+  int baseAddress = EEPROM_START_ADDRESS + (slot * CONFIG_SIZE);
+  if (baseAddress + CONFIG_SIZE <= EEPROM.length()) {
     EEPROM.get(baseAddress, currentConfig);
+    tempo = currentConfig.tempo;
+    internalClock = currentConfig.internalClock;
+    lastUsedSlot = slot;
+    selected_preset = currentConfig.selectedPreset;
+    period = 60000 / tempo / 4;  // Update period with loaded tempo
   } else {
     // Handle the error
     printDebugMessage("EEPROM Load Error");
   }
 }
 
+// Add a function to load from the last used preset
+void loadFromPreset(int preset) {
+  if (preset >= sizeof(defaultSlots) / sizeof(SlotConfiguration)) {
+    preset = 0;
+  }
+  loadDefaultConfig(&currentConfig, preset);
+  tempo = currentConfig.tempo; // Use the preset's tempo
+  internalClock = currentConfig.internalClock;
+  selected_preset = preset;
+  period = 60000 / tempo / 4; // Update period with loaded tempo
+}
+
 void initializeDefaultRhythms() {
   for (int i = 0; i < NUM_MEMORY_SLOTS; i++) {
     SlotConfiguration config;
-    memcpy_P(&config, &defaultSlots[i], sizeof(SlotConfiguration));
-    EEPROM.put(EEPROM_START_ADDRESS + i * sizeof(SlotConfiguration), config);
+    memcpy_P(&config, &defaultSlots[i % (sizeof(defaultSlots) / sizeof(SlotConfiguration))], sizeof(SlotConfiguration));
+    EEPROM.put(EEPROM_START_ADDRESS + i * CONFIG_SIZE, config);
   }
 }
 
@@ -936,7 +993,6 @@ void drawModeMenu(TopMenu select_ch) {
   }
 }
 
-// In setup() or appropriate initialization function
 void checkAndInitializeSettings() {
   char magic[sizeof(FIRMWARE_MAGIC)];
   EEPROM.get(FIRMWARE_MAGIC_ADDRESS, magic);
@@ -1145,8 +1201,8 @@ void drawEuclideanRhythms() {
     int x_base = graph_x[ch];
     int y_base = graph_y[ch] + 8;
 
-    // Draw hits info
-    if (currentConfig.hits[ch] > 9 && selected_setting != SETTING_LIMIT && selected_setting != SETTING_MUTE) {  // Display only if there is space in the UI
+    // Draw hits info  if not muted only
+    if (currentConfig.mute[ch] == 0 && currentConfig.hits[ch] > 9 && selected_setting != SETTING_LIMIT && selected_setting != SETTING_MUTE) {  // Display only if there is space in the UI
       if (x_base + 10 < 120 && y_base < 56) {
         display.setCursor(x_base + 10, y_base);  // Adjust position
         display.print(currentConfig.hits[ch]);
