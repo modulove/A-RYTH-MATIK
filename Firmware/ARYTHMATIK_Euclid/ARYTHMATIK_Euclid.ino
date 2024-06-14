@@ -127,17 +127,6 @@ enum Setting {
   SETTING_LAST
 };
 
-// Add Clock Divider Variables
-enum ClockDivider {
-  DIV_1X,
-  DIV_2X,
-  DIV_4X,
-  DIV_LAST
-};
-
-ClockDivider clockDivider = DIV_1X;
-const char *clockDividerNames[] = { "1x", "/2", "/4" };
-
 // For debug / UI
 #define FIRMWARE_MAGIC "EUCLID"
 #define FIRMWARE_MAGIC_ADDRESS 0  // Store the firmware magic number at address 0
@@ -252,25 +241,44 @@ struct SlotConfiguration {
   byte lastUsedSlot;               // Last used slot
   byte selectedPreset;             // Last used preset
   bool lastLoadedFromPreset;       // Flag to indicate last load source
-  ClockDivider clockDivider;       // Clock divider state
 };
 
 // Updated default (preset) configuration with names and rhythm patterns
 const SlotConfiguration defaultSlots[] PROGMEM = {
-  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130, false, 0, 0, false, DIV_1X },
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100, false, 0, 0, false, DIV_1X },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140, false, 0, 0, false, DIV_1X },
-  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120, false, 0, 0, false, DIV_1X },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110, false, 0, 0, false, DIV_1X },
-  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90, false, 0, 0, false, DIV_1X },
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120, false, 0, 0, false, DIV_1X },
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80, false, 0, 0, false, DIV_1X },
-  { { 4, 4, 4, 4, 4, 4 }, { 4, 5, 6, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test4", 120, false, 0, 0, false, DIV_1X },
-  { { 6, 6, 6, 6, 6, 6 }, { 7, 8, 9, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test6", 120, false, 0, 0, false, DIV_1X },
-  { { 8, 8, 8, 8, 8, 8 }, { 11, 12, 13, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test8", 120, false, 0, 0, false, DIV_1X },
-  { { 12, 12, 12, 12, 12, 12 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test12", 120, false, 0, 0, false, DIV_1X },
-  { { 16, 16, 16, 16, 16, 16 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test16", 120, false, 0, 0, false, DIV_1X },
-  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120, false, 0, 0, false, DIV_1X },
+  // Techno preset: Characterized by repetitive beats with variations in hits and offsets
+  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
+
+  // Samba preset: Traditional Brazilian rhythm with alternating offsets
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
+
+  // Swing preset: Syncopated rhythm typical in swing jazz
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
+
+  // Afrobeat preset: Polyrhythmic structure with consistent hits
+  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120 },
+
+  // Funk preset: Tight, groovy rhythm with steady hits
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
+
+  // Waltz preset: Triple meter rhythm with regular hits
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
+
+  // Random Jam preset: Completely random rhythm for fun and experimentation
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120 },
+
+  // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
+
+  // Test patterns
+  { { 4, 4, 4, 4, 4, 4 }, { 4, 5, 6, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test4", 120 },
+  { { 6, 6, 6, 6, 6, 6 }, { 7, 8, 9, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test6", 120 },
+  { { 8, 8, 8, 8, 8, 8 }, { 11, 12, 13, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test8", 120 },
+  { { 12, 12, 12, 12, 12, 12 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test12", 120 },
+  { { 16, 16, 16, 16, 16, 16 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test16", 120 },
+
+  // div
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 },
+
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
@@ -436,26 +444,15 @@ void loop() {
 
   // External clock detection and response
   if (!internalClock && old_trg_in == 0 && trg_in == 1) {
-    static int dividerCounter = 0;
-    dividerCounter++;
-    int dividerValue = 1;
-    switch (clockDivider) {
-      case DIV_2X: dividerValue = 2; break;
-      case DIV_4X: dividerValue = 4; break;
-      default: dividerValue = 1; break;
+    beat_start = true;
+    last_clock_input = millis();
+    static unsigned long lastPulseTime = 0;
+    unsigned long currentTime = millis();
+    unsigned long pulseInterval = currentTime - lastPulseTime;
+    if (pulseInterval > 0) {
+      externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
     }
-    if (dividerCounter >= dividerValue) {
-      beat_start = true;
-      last_clock_input = millis();
-      static unsigned long lastPulseTime = 0;
-      unsigned long currentTime = millis();
-      unsigned long pulseInterval = currentTime - lastPulseTime;
-      if (pulseInterval > 0) {
-        externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
-      }
-      lastPulseTime = currentTime;
-      dividerCounter = 0;  // Reset the divider counter
-    }
+    lastPulseTime = currentTime;
   }
 
   // Switch to internal clock if no clock input received for set duration.
@@ -548,7 +545,6 @@ void loop() {
   old_trg_in = trg_in;
   old_rst_in = rst_in;
 }
-
 
 void initIO() {
   RESET::setInput();        // RST
@@ -693,16 +689,12 @@ void onEncoderRotation(EncoderButton &eb) {
     }
 
     if (selected_menu == MENU_TEMPO) {
-      if (internalClock) {
-        tempo += acceleratedIncrement;
-        // Constrain the tempo between 30 and 200 BPM
-        if (tempo < 30) tempo = 30;
-        if (tempo > 200) tempo = 200;
-        // one minute in ms divided by tempo divided by 4 for 16th note period.
-        period = 60000 / tempo / 4;
-      } else {
-        clockDivider = static_cast<ClockDivider>((clockDivider + acceleratedIncrement + DIV_LAST) % DIV_LAST);
-      }
+      tempo += acceleratedIncrement;
+      // Constrain the tempo between 30 and 200 BPM
+      if (tempo < 30) tempo = 30;
+      if (tempo > 200) tempo = 200;
+      // one minute in ms divided by tempo divided by 4 for 16th note period.
+      period = 60000 / tempo / 4;
     }
 
     if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
@@ -813,7 +805,6 @@ void saveToEEPROM(int slot) {
     currentConfig.lastUsedSlot = slot;
     currentConfig.selectedPreset = selected_preset;
     currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
-    currentConfig.clockDivider = clockDivider;   // Save clock divider state
     EEPROM.put(baseAddress, currentConfig);
     // Save the last used slot
     EEPROM.put(LAST_USED_SLOT_ADDRESS, slot);
@@ -831,14 +822,12 @@ void loadFromEEPROM(int slot) {
     internalClock = currentConfig.internalClock;
     lastUsedSlot = slot;
     selected_preset = currentConfig.selectedPreset;
-    clockDivider = currentConfig.clockDivider;  // Load clock divider state
     period = 60000 / tempo / 4;  // Update period with loaded tempo
   } else {
     // Handle the error
     printDebugMessage("EEPROM Load Error");
   }
 }
-
 
 // Add a function to load from the last used preset
 void loadFromPreset(int preset) {
@@ -1354,7 +1343,6 @@ void drawTempo() {
   if (internalClock) {
     display.print(F("Dial in Tempo"));
   } else {
-    display.print(F("BPM | Div = "));
-    display.print(clockDividerNames[clockDivider]); // Display Clock Divider
+    display.print(F("Ext BPM / Div"));
   }
 }
