@@ -374,6 +374,25 @@ void drawAnimation() {
   }
 }
 
+// Unified random change function
+void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
+  for (int k = 0; k < MAX_CHANNELS; k++) {
+    if (!allChannels && k != select_ch) continue;  // Skip if not all channels and not the selected channel
+
+    if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
+      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
+    }
+    if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
+      currentConfig.offset[k] = random(0, MAX_STEPS);
+    }
+    if (includeMute && k > 0) {  // Apply mute logic only if includeMute is true and not for channel 0
+      currentConfig.mute[k] = pgm_read_byte(&mute_occ[k]) >= random(1, 100) ? 1 : 0;
+    } else {
+      currentConfig.mute[k] = false;
+    }
+  }
+}
+
 void setup() {
   encoder.setDebounceInterval(5);  // Increase debounce interval
   encoder.setMultiClickInterval(10);
@@ -407,6 +426,8 @@ void setup() {
     loadFromPreset(currentConfig.selectedPreset);
   }
 
+  updateRythm();
+
   OLED_display(true);
 
   unsigned long seed = analogRead(A0);
@@ -421,15 +442,7 @@ void loop() {
   encoder.update();  // Process Encoder & button updates
 
   //-----------------offset setting----------------------
-  for (int k = 0; k < MAX_CHANNELS; k++) {  //k = 1~6ch
-    for (int i = currentConfig.offset[k]; i < MAX_STEPS; i++) {
-      offset_buf[k][i - currentConfig.offset[k]] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
-    }
-
-    for (int i = 0; i < currentConfig.offset[k]; i++) {
-      offset_buf[k][MAX_STEPS - currentConfig.offset[k] + i] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
-    }
-  }
+  updateRythm();
 
   //-----------------trigger detect, reset & output----------------------
   bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
@@ -515,7 +528,7 @@ void loop() {
         step_cnt = 0;
         if (bar_now > pgm_read_word(&bar_max[bar_select])) {
           bar_now = 1;
-          Random_change();
+          Random_change(true, true);
           //randomSeed(analogRead(A0));  // Reinitialize random seed
         }
       }
@@ -590,6 +603,7 @@ void initDisplay() {
 
 void onEncoderClicked(EncoderButton &eb) {
   // Clicked while overlay shown.
+  disp_refresh = true;
   if (showOverlay) {
     switch (selected_menu) {
       case MENU_PRESET:
@@ -606,7 +620,6 @@ void onEncoderClicked(EncoderButton &eb) {
         currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
         break;
     }
-    disp_refresh = true;
   }
 
   switch (selected_menu) {
@@ -631,20 +644,21 @@ void onEncoderClicked(EncoderButton &eb) {
       disp_refresh = true;
       break;
     case MENU_RAND:
-      Random_change();
+      Random_change(false, true);
       disp_refresh = true;
       break;
     case MENU_SAVE:
     case MENU_LOAD:
     case MENU_PRESET:
+      disp_refresh = true;
     case MENU_TEMPO:
       showOverlay = !showOverlay;
       disp_refresh = true;
       break;
   }
 
-  // Save the current state after an action is performed
-  saveToEEPROM(lastUsedSlot);
+  // Save the current state after an action is performed but not directly while running
+  //saveToEEPROM(lastUsedSlot); // throttle this ?
 
   // Force the display to update immediately
   OLED_display(true);
@@ -731,9 +745,9 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   } else if (selected_menu == MENU_RAND) {
     // Check rotation direction to call appropriate random change function
     if (increment > 0) {
-      Random_change();  // Rotate CW: Random change without mute
+      Random_change(false, true);  // Rotate CW: Random change without mute
     } else {
-      Random_change_mute();  // Rotate CCW: Random change with mute
+      Random_change(true, true);  // Rotate CCW: Random change with mute
     }
   } else if (selected_menu == MENU_RANDOM_ADVANCE) {
     // Ensure `bar_select` stays within the range of 1 to 5
@@ -784,7 +798,7 @@ void handleSettingNavigation(int changeDirection) {
       playing_step[selected_menu] = 0;
       break;
     case SETTING_RANDOM:  // Randomize channel
-      Random_change_one(selected_menu);
+      Random_change(false, false, selected_menu);
       break;
     case SETTING_PROB:  // Set probability
       currentConfig.probability[selected_menu] = (currentConfig.probability[selected_menu] + changeDirection + 101) % 101;
@@ -795,6 +809,7 @@ void handleSettingNavigation(int changeDirection) {
 // Loading SlotConfiguration from PROGMEM
 void loadDefaultConfig(SlotConfiguration *config, int index) {
   memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
+  disp_refresh = true;
 }
 
 void saveToEEPROM(int slot) {
@@ -823,6 +838,7 @@ void loadFromEEPROM(int slot) {
     lastUsedSlot = slot;
     selected_preset = currentConfig.selectedPreset;
     period = 60000 / tempo / 4;  // Update period with loaded tempo
+    updateRythm();               // Refresh
   } else {
     // Handle the error
     printDebugMessage("EEPROM Load Error");
@@ -852,45 +868,6 @@ void initializeDefaultRhythms() {
 void saveDefaultsToEEPROM(int slot, SlotConfiguration config) {
   int address = EEPROM_START_ADDRESS + (slot * sizeof(SlotConfiguration));
   EEPROM.put(address, config);
-}
-
-// "X"" random avance without mute (turn encoder CW & Auto advance mode)
-void Random_change() {
-  for (int k = 0; k < MAX_CHANNELS; k++) {
-    if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
-      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
-    }
-    if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
-      currentConfig.offset[k] = random(0, MAX_STEPS);
-    }
-    currentConfig.mute[k] = false;  // Ensure no channels are muted during random change
-  }
-}
-
-
-// Add random avance with mute (turn encoder CCW)
-void Random_change_mute() {
-  for (int k = 0; k < MAX_CHANNELS; k++) {
-    if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
-      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
-    }
-    if (pgm_read_byte(&off_occ[k]) >= random(1, 100)) {
-      currentConfig.offset[k] = random(0, MAX_STEPS);
-    }
-    if (k > 0) {
-      currentConfig.mute[k] = pgm_read_byte(&mute_occ[k]) >= random(1, 100) ? 1 : 0;
-    }
-  }
-}
-
-// random change function for one channel (no mute)
-void Random_change_one(byte select_ch) {
-  if (pgm_read_byte(&hit_occ[select_ch]) >= random(1, 100)) {
-    currentConfig.hits[select_ch] = random(pgm_read_byte(&hit_rng_min[select_ch]), pgm_read_byte(&hit_rng_max[select_ch]) + 1);
-  }
-  if (pgm_read_byte(&off_occ[select_ch]) >= random(1, 100)) {
-    currentConfig.offset[select_ch] = random(0, MAX_STEPS);
-  }
 }
 
 void toggleAllMutes() {
@@ -989,7 +966,7 @@ void drawModeMenu(TopMenu select_ch) {
     case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;
     case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;
     case MENU_PRESET: leftMenu('P', 'R', 'S', 'T'); break;
-    case MENU_TEMPO: leftMenu('C', 'L', 'K', ' '); break;
+    case MENU_TEMPO: leftMenu(' ', 'C', 'L', 'K'); break;
     case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;
     default: break;
   }
@@ -1236,6 +1213,7 @@ void drawEuclideanRhythms() {
   }
 }
 
+
 void drawProbabilityConfig() {
   for (int ch = 0; ch < MAX_CHANNELS; ch++) {
     int barWidth = 4;    // Width of the probability bar
@@ -1343,6 +1321,17 @@ void drawTempo() {
   if (internalClock) {
     display.print(F("Dial in Tempo"));
   } else {
-    display.print(F("Ext BPM / Div"));
+    display.print(F("Ext BPM"));
+  }
+}
+
+void updateRythm() {
+  for (int k = 0; k < MAX_CHANNELS; k++) {
+    for (int i = currentConfig.offset[k]; i < MAX_STEPS; i++) {
+      offset_buf[k][i - currentConfig.offset[k]] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
+    }
+    for (int i = 0; i < currentConfig.offset[k]; i++) {
+      offset_buf[k][MAX_STEPS - currentConfig.offset[k] + i] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
+    }
   }
 }
