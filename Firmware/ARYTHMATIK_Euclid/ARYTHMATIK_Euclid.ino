@@ -153,7 +153,7 @@ bool allMutedFlag = false;
 bool internalClock = false;
 bool showOverlay = false;
 unsigned long overlayStartTime = 0;
-const unsigned long overlayTimeout = 5000; // 5 seconds
+//const unsigned long overlayTimeout = 5000; // 5 seconds
 
 int tempo = 120;                 // beats per minute.
 int period = 60000 / tempo / 4;  // one minute in ms divided by tempo divided by 4 for 16th note period.
@@ -389,10 +389,18 @@ void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
   }
 }
 
+void onOverlayTimeout() {
+    showOverlay = false;
+    disp_refresh = true;
+    OLED_display(true); // Ensure the display is refreshed immediately
+}
+
 void setup() {
   encoder.setDebounceInterval(5);  // Increase debounce interval
   encoder.setMultiClickInterval(10);
   encoder.setRateLimit(20);
+  encoder.setIdleTimeout(5000);
+  encoder.setIdleHandler(onOverlayTimeout);
   encoder.setLongClickDuration(500);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setLongClickHandler(onEncoderLongClicked);  // Add long click handler
@@ -436,11 +444,13 @@ void setup() {
 void loop() {
   encoder.update();  // Process Encoder & button updates
 
+/*
   // Timeout overlay menu
     if (showOverlay && millis() - overlayStartTime >= overlayTimeout) {
         showOverlay = false;
         disp_refresh = true; // refresh to hide overlay
     }
+    */
 
   updateRythm();
 
@@ -529,7 +539,6 @@ void loop() {
         if (bar_now > pgm_read_word(&bar_max[bar_select])) {
           bar_now = 1;
           Random_change(true, true);
-          //randomSeed(analogRead(A0));  // Reinitialize random seed
         }
       }
     }
@@ -603,7 +612,7 @@ void initDisplay() {
 
 void onEncoderClicked(EncoderButton &eb) {
   overlayStartTime = millis(); // Reset timeout timer
-  disp_refresh = true;
+  //disp_refresh = true;
   if (showOverlay) {
     switch (selected_menu) {
       case MENU_PRESET:
