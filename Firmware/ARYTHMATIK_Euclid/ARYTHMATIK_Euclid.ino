@@ -388,9 +388,9 @@ void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
 }
 
 void onOverlayTimeout() {
-    showOverlay = false;
-    disp_refresh = true;
-    OLED_display(true); // Ensure the display is refreshed immediately
+  showOverlay = false;
+  disp_refresh = true;
+  OLED_display(true);  // Ensure the display is refreshed immediately
 }
 
 void setup() {
@@ -663,15 +663,19 @@ void onEncoderClicked(EncoderButton &eb) {
   OLED_display(true);
 }
 
-
+// now toggles the mute status of the selected channel when in SETTING_TOP_MENU
 void onEncoderLongClicked(EncoderButton &eb) {
   if (selected_menu == MENU_TEMPO) {
     internalClock = !internalClock;  // Toggle the internal clock state
     showOverlay = true;              // Show overlay to indicate clock state change
     disp_refresh = true;             // Force display refresh to show the new state
     if (internalClock) period = 60000 / tempo / 4;
-  }
-  if (showOverlay && selected_menu == MENU_PRESET || selected_menu == MENU_SAVE || selected_menu == MENU_LOAD ) {
+  } else if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
+    // Mute the selected channel
+    int channelIndex = selected_menu - MENU_CH_1;
+    currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
+    disp_refresh = true;
+  } else if (showOverlay && (selected_menu == MENU_PRESET || selected_menu == MENU_SAVE || selected_menu == MENU_LOAD)) {
     onOverlayTimeout();  // Handle long click to exit overlay
   }
 }
@@ -1211,10 +1215,10 @@ void drawProbabilityConfig() {
   }
 }
 
+//  Display selected slot
 void drawSaveLoadSelection() {
-  // Display selected slot
-  int16_t x1 = 18, y1 = 14;
-  uint16_t w = 94, h = 34;
+  int16_t x1 = 10, y1 = 10;  // Starting coordinates
+  uint16_t w = 108, h = 44;  // Increased width and height
   uint16_t b = 4;
   uint16_t b2 = 8;
 
@@ -1224,10 +1228,14 @@ void drawSaveLoadSelection() {
   display.setCursor(x1 + b, y1 + b);
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
-  display.setCursor(60, 29);
+  display.setCursor(x1 + w / 2 - 12, y1 + h / 2 - 8);
   display.setTextSize(2);
   display.print(selected_slot + 1, DEC);
   display.setTextSize(1);
+
+  // Add EXIT option display
+  display.setCursor(x1 + b, y1 + h - 10);
+  display.print(F("HOLD to EXIT menu"));
 }
 
 void drawPresetSelection() {
@@ -1235,8 +1243,8 @@ void drawPresetSelection() {
   char presetName[10];
   memcpy_P(&presetName, &defaultSlots[selected_preset].name, sizeof(presetName));
 
-  int16_t x1 = 18, y1 = 14;
-  uint16_t w = 94, h = 34;
+  int16_t x1 = 10, y1 = 10;
+  uint16_t w = 108, h = 44;
   uint16_t b = 4;
   uint16_t b2 = 8;
 
@@ -1249,7 +1257,13 @@ void drawPresetSelection() {
   // Shift cursor down a few pixels.
   y1 += 12;
   display.setCursor(x1 + b, y1 + b);
+  display.setTextSize(2);
   display.print(presetName);
+  display.setTextSize(2);
+
+  // Add EXIT option display
+  display.setCursor(x1 + b, y1 + h - 22);
+  display.print(F("HOLD to EXIT menu"));
 }
 
 void drawTempo() {
