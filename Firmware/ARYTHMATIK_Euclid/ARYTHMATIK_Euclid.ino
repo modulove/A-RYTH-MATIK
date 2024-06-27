@@ -37,20 +37,14 @@
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 
-// Flag for reversing the encoder direction.
-// ToDo: Put this in config Menue dialog at boot ?
-// #define ENCODER_REVERSED
-
-// Flag for using the panel upside down
-// ToDo: change to be in line with libModulove, put in config Menue dialog
+// Configuration flags
+//#define ENCODER_REVERSED
 //#define ROTATE_PANEL
+//#define DISABLE_BOOT_LOGO
 
 #if defined(__LGT8FX8P__)
 #define LGT8FX_BOARD
 #endif
-
-//  disable the boot logo entirely
-// #define DISABLE_BOOT_LOGO
 
 #ifdef ROTATE_PANEL
 // When panel is rotated
@@ -158,6 +152,8 @@ unsigned long last_refresh = 0;
 bool allMutedFlag = false;
 bool internalClock = false;
 bool showOverlay = false;
+unsigned long overlayStartTime = 0;
+const unsigned long overlayTimeout = 5000; // 5 seconds
 
 int tempo = 120;                 // beats per minute.
 int period = 60000 / tempo / 4;  // one minute in ms divided by tempo divided by 4 for 16th note period.
@@ -366,7 +362,7 @@ void printDebugMessage(const char *message) {
 }
 
 void drawAnimation() {
-  for (int x = 0; x <= SCREEN_WIDTH; x += 10) {  //change the last number here to change the speed of the wipe on effect of the logo ;)
+  for (int x = 0; x <= SCREEN_WIDTH; x += 10) {
     display.clearDisplay();
     display.drawBitmap(0, 0, Modulove_Logo, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
     display.fillRect(x, 0, SCREEN_WIDTH - x, SCREEN_HEIGHT, BLACK);
@@ -408,8 +404,8 @@ void setup() {
 
 // boot logo animation only on nano for now
 #if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
-  drawAnimation();  // play boot animation
-  delay(1500);      // short delay after boot logo
+  drawAnimation();
+  delay(1500);
 #endif
 
   checkAndInitializeSettings();
@@ -427,11 +423,10 @@ void setup() {
   }
 
   updateRythm();
-
   OLED_display(true);
 
   unsigned long seed = analogRead(A0);
-  randomSeed(seed);  // random seed once during setup
+  randomSeed(seed);
 
   // Initialize the last external clock time to the current time
   last_clock_input = millis();
@@ -441,7 +436,12 @@ void setup() {
 void loop() {
   encoder.update();  // Process Encoder & button updates
 
-  //-----------------offset setting----------------------
+  // Timeout overlay menu
+    if (showOverlay && millis() - overlayStartTime >= overlayTimeout) {
+        showOverlay = false;
+        disp_refresh = true; // refresh to hide overlay
+    }
+
   updateRythm();
 
   //-----------------trigger detect, reset & output----------------------
@@ -602,7 +602,7 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  // Clicked while overlay shown.
+  overlayStartTime = millis(); // Reset timeout timer
   disp_refresh = true;
   if (showOverlay) {
     switch (selected_menu) {
@@ -666,33 +666,26 @@ void onEncoderClicked(EncoderButton &eb) {
 
 
 void onEncoderLongClicked(EncoderButton &eb) {
+  overlayStartTime = millis(); // Reset timeout timer
   if (selected_menu == MENU_TEMPO) {
     internalClock = !internalClock;  // Toggle the internal clock state
     showOverlay = true;              // Show overlay to indicate clock state change
     disp_refresh = true;             // Force display refresh to show the new state
-
-    // Update period with the current tempo if the internal clock is enabled
-    if (internalClock) {
-      period = 60000 / tempo / 4;
-    }
+    if (internalClock) period = 60000 / tempo / 4;
   }
 }
 
 void onEncoderRotation(EncoderButton &eb) {
+  overlayStartTime = millis(); // Reset timeout timer
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
-
   disp_refresh = true;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment
-  if (increment < 0) {
-    acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-  }
+  if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
   // Only handle setting navigation if not all muted and the overlay is not shown.
-  if (!allMutedFlag && !showOverlay) {
-    handleSettingNavigation(acceleratedIncrement);
-  }
+  if (!allMutedFlag && !showOverlay) handleSettingNavigation(acceleratedIncrement);
 
   // Overlay shown menu adjustments.
   else if (selected_setting == SETTING_TOP_MENU && showOverlay) {
@@ -704,10 +697,7 @@ void onEncoderRotation(EncoderButton &eb) {
 
     if (selected_menu == MENU_TEMPO) {
       tempo += acceleratedIncrement;
-      // Constrain the tempo between 30 and 200 BPM
-      if (tempo < 30) tempo = 30;
-      if (tempo > 200) tempo = 200;
-      // one minute in ms divided by tempo divided by 4 for 16th note period.
+      tempo = constrain(tempo, 30, 200);
       period = 60000 / tempo / 4;
     }
 
@@ -719,15 +709,13 @@ void onEncoderRotation(EncoderButton &eb) {
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
+  overlayStartTime = millis(); // Reset timeout timer
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
-
   disp_refresh = true;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
-  if (increment < 0) {
-    acceleratedIncrement = -acceleratedIncrement;  // Ensure that the direction of increment is preserved
-  }
+  if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
   // Handle channel switching only when in specific modes
   if (selected_setting != SETTING_TOP_MENU) {
@@ -845,16 +833,13 @@ void loadFromEEPROM(int slot) {
   }
 }
 
-// Add a function to load from the last used preset
 void loadFromPreset(int preset) {
-  if (preset >= sizeof(defaultSlots) / sizeof(SlotConfiguration)) {
-    preset = 0;
-  }
+  if (preset >= sizeof(defaultSlots) / sizeof(SlotConfiguration)) preset = 0;
   loadDefaultConfig(&currentConfig, preset);
-  tempo = currentConfig.tempo;  // Use the preset's tempo
+  tempo = currentConfig.tempo;
   internalClock = currentConfig.internalClock;
   selected_preset = preset;
-  period = 60000 / tempo / 4;  // Update period with loaded tempo
+  period = 60000 / tempo / 4;
 }
 
 void initializeDefaultRhythms() {
@@ -996,27 +981,15 @@ void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max
 }
 
 void drawSelectionIndicator(Setting select_menu) {
-  // Right side indicators
-  if (select_menu == SETTING_TOP_MENU) {
-    display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
-  } else if (select_menu == SETTING_HITS) {
-    display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
-  } else if (select_menu == SETTING_OFFSET) {
-    display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
-  }
+  if (select_menu == SETTING_TOP_MENU) display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
+  else if (select_menu == SETTING_HITS) display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
+  else if (select_menu == SETTING_OFFSET) display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
 
-  // Left side indicators
-  if (select_menu == SETTING_LIMIT) {
-    display.drawTriangle(12, 34, 12, 41, 7, 37, WHITE);
-  } else if (select_menu == SETTING_MUTE) {
-    display.drawTriangle(12, 42, 12, 49, 7, 45, WHITE);
-  } else if (select_menu == SETTING_RESET) {
-    display.drawTriangle(12, 50, 12, 57, 7, 53, WHITE);
-  } else if (select_menu == SETTING_RANDOM) {
-    display.drawTriangle(12, 58, 12, 65, 7, 61, WHITE);
-  } else if (select_menu == SETTING_PROB) {
-    display.drawTriangle(12, 66, 12, 73, 7, 69, WHITE);
-  }
+  if (select_menu == SETTING_LIMIT) display.drawTriangle(12, 34, 12, 41, 7, 37, WHITE);
+  else if (select_menu == SETTING_MUTE) display.drawTriangle(12, 42, 12, 49, 7, 45, WHITE);
+  else if (select_menu == SETTING_RESET) display.drawTriangle(12, 50, 12, 57, 7, 53, WHITE);
+  else if (select_menu == SETTING_RANDOM) display.drawTriangle(12, 58, 12, 65, 7, 61, WHITE);
+  else if (select_menu == SETTING_PROB) display.drawTriangle(12, 66, 12, 73, 7, 69, WHITE);
 }
 
 void drawStepDots(const SlotConfiguration &currentConfig) {
@@ -1032,11 +1005,7 @@ void drawStepDots(const SlotConfiguration &currentConfig) {
 }
 
 void OLED_display(bool force_refresh) {
-  bool should_refresh = false;
-  // Ensure the OLED display does not redraw when state unchanged.
-  should_refresh |= force_refresh;
-  // Enforce throttled display refresh rate for encoder press or rotate.
-  should_refresh |= disp_refresh && (millis() > last_refresh + MIN_REFRESH_DURATION);
+  bool should_refresh = force_refresh || (disp_refresh && (millis() > last_refresh + MIN_REFRESH_DURATION));
   if (!should_refresh) {
     return;
   }
@@ -1192,10 +1161,8 @@ void drawEuclideanRhythms() {
     // draw selected parameter UI for currently active channel when editing
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
-        case SETTING_HITS:  // Hits
-          break;
-        case SETTING_OFFSET:
-          break;
+        case SETTING_HITS: break;
+        case SETTING_OFFSET: break;
         case SETTING_LIMIT:
           if (currentConfig.limit[ch] > 0 && currentConfig.hits[ch] > 6) {
             // draw line indicator from center to limit point
@@ -1216,45 +1183,32 @@ void drawEuclideanRhythms() {
 
 void drawProbabilityConfig() {
   for (int ch = 0; ch < MAX_CHANNELS; ch++) {
-    int barWidth = 4;    // Width of the probability bar
-    int maxHeight = 15;  // Maximum height of the bar, adjust as needed
-    int margin = 2;      // Margin around the fillin
+    int barWidth = 4;
+    int maxHeight = 15;
+    int margin = 2;
 
-    int bar_x = graph_x[ch] + 12;  // X position of the bar graph
-    int bar_y = graph_y[ch] + 30;  // Y position of the bar graph, adjust for bar to start from the bottom up
+    int bar_x = graph_x[ch] + 12;
+    int bar_y = graph_y[ch] + 30;
 
-    // Calculate the height of the bar based on probability
-    int barHeight = map(currentConfig.probability[ch], 0, 100, 0, maxHeight);  // Map probability to bar height
-    int startY = bar_y - barHeight;                                            // Calculate the top starting point of the filled bar
+    int barHeight = map(currentConfig.probability[ch], 0, 100, 0, maxHeight);
+    int startY = bar_y - barHeight;
 
-    // Calculate the outer rectangle dimensions
     int outerWidth = barWidth + 2 * margin;
     int outerHeight = maxHeight + 2 * margin;
     int outerX = bar_x - margin;
     int outerY = bar_y - maxHeight - margin;
 
-    // Position the percentage text directly on top of the rectangle border
-    int text_x = outerX + (outerWidth / 2) - 6;  // Centered over the border
-    int text_y = outerY - 10;                    // Positioned just inside the top border
+    int text_x = outerX + (outerWidth / 2) - 6;
+    int text_y = outerY - 10;
 
-    // Ensure elements stay within display boundaries
-    text_x = constrain(text_x, 0, 128);  // Constrain x to OLED width
-    text_y = constrain(text_y, 0, 64);   // Constrain y to OLED height
+    text_x = constrain(text_x, 0, 128);
+    text_y = constrain(text_y, 0, 64);
 
-    // Display percentage on top of the bar graph
     display.setCursor(text_x, text_y);
     display.print(currentConfig.probability[ch]);
 
-    {
-      // Draw the outer rectangle
-      display.drawRect(outerX, outerY, outerWidth, outerHeight, WHITE);
-
-      // Calculate startY to begin at the bottom of the rectangle
-      int startY = bar_y - barHeight;  // Start point for the filled bar, no bottom margin
-
-      // Draw the filled bar part within the margins
-      display.fillRect(bar_x, startY, barWidth, barHeight, WHITE);  // Adjust to only fill within the border
-    }
+    display.drawRect(outerX, outerY, outerWidth, outerHeight, WHITE);
+    display.fillRect(bar_x, startY, barWidth, barHeight, WHITE);
   }
 }
 
@@ -1326,12 +1280,9 @@ void drawTempo() {
 }
 
 void updateRythm() {
-  for (int k = 0; k < MAX_CHANNELS; k++) {
-    for (int i = currentConfig.offset[k]; i < MAX_STEPS; i++) {
-      offset_buf[k][i - currentConfig.offset[k]] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
-    }
-    for (int i = 0; i < currentConfig.offset[k]; i++) {
-      offset_buf[k][MAX_STEPS - currentConfig.offset[k] + i] = (pgm_read_byte(&(euc16[currentConfig.hits[k]][i])));
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    for (int j = 0; j < MAX_STEPS; j++) {
+      offset_buf[i][j] = pgm_read_byte(&euc16[currentConfig.hits[i]][(j + currentConfig.offset[i]) % MAX_STEPS]);
     }
   }
 }
