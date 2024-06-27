@@ -152,8 +152,6 @@ unsigned long last_refresh = 0;
 bool allMutedFlag = false;
 bool internalClock = false;
 bool showOverlay = false;
-unsigned long overlayStartTime = 0;
-//const unsigned long overlayTimeout = 5000; // 5 seconds
 
 int tempo = 120;                 // beats per minute.
 int period = 60000 / tempo / 4;  // one minute in ms divided by tempo divided by 4 for 16th note period.
@@ -444,13 +442,6 @@ void setup() {
 void loop() {
   encoder.update();  // Process Encoder & button updates
 
-/*
-  // Timeout overlay menu
-    if (showOverlay && millis() - overlayStartTime >= overlayTimeout) {
-        showOverlay = false;
-        disp_refresh = true; // refresh to hide overlay
-    }
-    */
 
   updateRythm();
 
@@ -611,7 +602,6 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  overlayStartTime = millis(); // Reset timeout timer
   //disp_refresh = true;
   if (showOverlay) {
     switch (selected_menu) {
@@ -675,17 +665,18 @@ void onEncoderClicked(EncoderButton &eb) {
 
 
 void onEncoderLongClicked(EncoderButton &eb) {
-  overlayStartTime = millis(); // Reset timeout timer
   if (selected_menu == MENU_TEMPO) {
     internalClock = !internalClock;  // Toggle the internal clock state
     showOverlay = true;              // Show overlay to indicate clock state change
     disp_refresh = true;             // Force display refresh to show the new state
     if (internalClock) period = 60000 / tempo / 4;
   }
+  if (showOverlay && selected_menu == MENU_PRESET || selected_menu == MENU_SAVE || selected_menu == MENU_LOAD ) {
+    onOverlayTimeout();  // Handle long click to exit overlay
+  }
 }
 
 void onEncoderRotation(EncoderButton &eb) {
-  overlayStartTime = millis(); // Reset timeout timer
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
   disp_refresh = true;
@@ -718,7 +709,6 @@ void onEncoderRotation(EncoderButton &eb) {
 }
 
 void onEncoderPressedRotation(EncoderButton &eb) {
-  overlayStartTime = millis(); // Reset timeout timer
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
   disp_refresh = true;
