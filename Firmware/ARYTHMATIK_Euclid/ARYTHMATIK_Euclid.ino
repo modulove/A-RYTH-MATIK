@@ -387,7 +387,7 @@ void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
   }
 }
 
-void onOverlayTimeout() {
+void onOverlayTimeout(EncoderButton &eb) {
   showOverlay = false;
   disp_refresh = true;
   OLED_display(true);  // Ensure the display is refreshed immediately
@@ -649,7 +649,6 @@ void onEncoderClicked(EncoderButton &eb) {
     case MENU_SAVE:
     case MENU_LOAD:
     case MENU_PRESET:
-      disp_refresh = true;
     case MENU_TEMPO:
       showOverlay = !showOverlay;
       disp_refresh = true;
@@ -676,7 +675,7 @@ void onEncoderLongClicked(EncoderButton &eb) {
     currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
     disp_refresh = true;
   } else if (showOverlay && (selected_menu == MENU_PRESET || selected_menu == MENU_SAVE || selected_menu == MENU_LOAD)) {
-    onOverlayTimeout();  // Handle long click to exit overlay
+    onOverlayTimeout(eb);  // Handle long click to exit overlay
   }
 }
 
