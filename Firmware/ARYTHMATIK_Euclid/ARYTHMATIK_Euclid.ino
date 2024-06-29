@@ -148,6 +148,7 @@ Setting selected_setting = SETTING_TOP_MENU;
 byte selected_preset = 0;
 byte selected_slot = 0;
 bool disp_refresh = true;
+bool force_refresh = true;
 unsigned long last_refresh = 0;
 bool allMutedFlag = false;
 bool internalClock = false;
@@ -389,8 +390,7 @@ void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
 
 void onOverlayTimeout(EncoderButton &eb) {
   showOverlay = false;
-  disp_refresh = true;
-  OLED_display(true);  // Ensure the display is refreshed immediately
+  force_refresh = true;
 }
 
 void setup() {
@@ -429,7 +429,7 @@ void setup() {
   }
 
   updateRythm();
-  OLED_display(true);
+  OLED_display();
 
   unsigned long seed = analogRead(A0);
   randomSeed(seed);
@@ -447,7 +447,6 @@ void loop() {
 
   //-----------------trigger detect, reset & output----------------------
   bool rst_in = RESET::isInputHigh(), trg_in = CLK::isInputHigh();
-  bool force_refresh = false;
   bool beat_start = false;
 
   // Handle reset input
@@ -553,7 +552,7 @@ void loop() {
     LED6::setOutput(0);
   }
 
-  OLED_display(force_refresh);  // refresh display
+  OLED_display();  // refresh display
 
   old_trg_in = trg_in;
   old_rst_in = rst_in;
@@ -602,7 +601,8 @@ void initDisplay() {
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  //disp_refresh = true;
+  force_refresh = true;
+
   if (showOverlay) {
     switch (selected_menu) {
       case MENU_PRESET:
@@ -631,49 +631,37 @@ void onEncoderClicked(EncoderButton &eb) {
     case MENU_CH_6:
       // Click should only advance selected setting when a channel top menu is selected.
       selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
-      disp_refresh = true;
       break;
     // Mode-specific actions
     case MENU_ALL_RESET:
       resetSeq();
-      disp_refresh = true;
       break;
     case MENU_ALL_MUTE:
       toggleAllMutes();
-      disp_refresh = true;
       break;
     case MENU_RAND:
       Random_change(false, true);
-      disp_refresh = true;
       break;
     case MENU_SAVE:
     case MENU_LOAD:
     case MENU_PRESET:
     case MENU_TEMPO:
       showOverlay = !showOverlay;
-      disp_refresh = true;
       break;
   }
-
-  // Save the current state after an action is performed but not directly while running
-  //saveToEEPROM(lastUsedSlot); // throttle this ?
-
-  // Force the display to update immediately
-  OLED_display(true);
 }
 
 // now toggles the mute status of the selected channel when in SETTING_TOP_MENU
 void onEncoderLongClicked(EncoderButton &eb) {
+  force_refresh = true;
   if (selected_menu == MENU_TEMPO) {
     internalClock = !internalClock;  // Toggle the internal clock state
     showOverlay = true;              // Show overlay to indicate clock state change
-    disp_refresh = true;             // Force display refresh to show the new state
     if (internalClock) period = 60000 / tempo / 4;
   } else if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
     // Mute the selected channel
     int channelIndex = selected_menu - MENU_CH_1;
     currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
-    disp_refresh = true;
   } else if (showOverlay && (selected_menu == MENU_PRESET || selected_menu == MENU_SAVE || selected_menu == MENU_LOAD)) {
     onOverlayTimeout(eb);  // Handle long click to exit overlay
   }
@@ -1006,12 +994,13 @@ void drawStepDots(const SlotConfiguration &currentConfig) {
   }
 }
 
-void OLED_display(bool force_refresh) {
+void OLED_display() {
   bool should_refresh = force_refresh || (disp_refresh && (millis() > last_refresh + MIN_REFRESH_DURATION));
   if (!should_refresh) {
     return;
   }
   disp_refresh = false;
+  force_refresh = false;
   last_refresh = millis();
 
   display.clearDisplay();
