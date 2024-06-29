@@ -353,7 +353,6 @@ const unsigned char Modulove_Logo[] PROGMEM = {
 void printDebugMessage(const char *message) {
   display.clearDisplay();
   display.setTextSize(1);
-  display.setTextColor(WHITE);
   display.setCursor(0, 0);
   display.println(message);
   display.display();
@@ -1009,7 +1008,6 @@ void OLED_display() {
   if (allMutedFlag) {
     // Draw "MUTE" message in the center of the screen
     display.setTextSize(2);  // no large letters for now to avoid ugly artifacts
-    display.setTextColor(WHITE);
     display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
     display.println(F("MUTE"));
     display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
@@ -1129,8 +1127,6 @@ void drawEuclideanRhythms() {
       int centerX = graph_x[k] + 15;  // Center of the channel's area
       int centerY = graph_y[k] + 15;
       display.setCursor(centerX - 3, centerY - 4);  // Adjust cursor to center the 'M'
-      display.setTextSize(1);
-      display.setTextColor(WHITE);
       display.print('M');
     }
   }
@@ -1247,7 +1243,7 @@ void drawPresetSelection() {
   display.setCursor(x1 + b, y1 + b);
   display.setTextSize(2);
   display.print(presetName);
-  display.setTextSize(2);
+  display.setTextSize(1);
 
   // Add EXIT option display
   display.setCursor(x1 + b, y1 + h - 22);
@@ -1266,18 +1262,10 @@ void drawTempo() {
 
   display.setCursor(42, 30);
   display.setTextSize(2);
-  if (internalClock) {
-    display.print(tempo + 1, DEC);
-  } else {
-    display.print(externalBPM, DEC);
-  }
+  display.print(internalClock ? tempo + 1 : externalBPM, DEC);
   display.setTextSize(1);
   display.setCursor(x1 + b, y1 + b);
-  if (internalClock) {
-    display.print(F("Dial in Tempo"));
-  } else {
-    display.print(F("Ext BPM"));
-  }
+  display.print(internalClock ? F("Dial in Tempo") : F("Ext BPM"));
 }
 
 void updateRythm() {
