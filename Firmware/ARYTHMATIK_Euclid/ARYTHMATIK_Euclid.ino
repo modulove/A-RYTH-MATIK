@@ -46,6 +46,14 @@
 #define LGT8FX_BOARD
 #endif
 
+#ifdef LGT8FX_BOARD
+#define NUM_MEMORY_SLOTS 10
+#define NUM_PRESETS 10 // 10 for LGT8FX8P
+#else
+#define NUM_MEMORY_SLOTS 16
+#define NUM_PRESETS 21 // All presets for Nano
+#endif
+
 #ifdef ROTATE_PANEL
 // When panel is rotated
 #define RESET FastGPIO::Pin<13>
@@ -122,8 +130,8 @@ enum Setting {
 };
 
 // For debug / UI
-#define FIRMWARE_MAGIC "EUCLID"
-#define FIRMWARE_MAGIC_ADDRESS 0  // Store the firmware magic number at address 0
+#define FIRMWARE_MAGIC "EUCLID09"
+#define FIRMWARE_MAGIC_ADDRESS 0  // Store firmware magic (read with debug fw)
 
 // OLED
 #define OLED_ADDRESS 0x3C
@@ -131,8 +139,7 @@ enum Setting {
 #define SCREEN_HEIGHT 64
 
 // EEPROM
-#define NUM_MEMORY_SLOTS 9
-#define EEPROM_START_ADDRESS 7
+#define EEPROM_START_ADDRESS 20
 #define CONFIG_SIZE (sizeof(SlotConfiguration))
 #define LAST_USED_SLOT_ADDRESS (EEPROM_START_ADDRESS + NUM_MEMORY_SLOTS * CONFIG_SIZE)
 
@@ -239,41 +246,33 @@ struct SlotConfiguration {
 };
 
 // Updated default (preset) configuration with names and rhythm patterns
-const SlotConfiguration defaultSlots[] PROGMEM = {
-  // Techno preset: Characterized by repetitive beats with variations in hits and offsets
-  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
-
-  // Samba preset: Traditional Brazilian rhythm with alternating offsets
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
-
-  // Swing preset: Syncopated rhythm typical in swing jazz
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
-
-  // Afrobeat preset: Polyrhythmic structure with consistent hits
-  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120 },
-
-  // Funk preset: Tight, groovy rhythm with steady hits
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
-
-  // Waltz preset: Triple meter rhythm with regular hits
-  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
-
-  // Random Jam preset: Completely random rhythm for fun and experimentation
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120 },
-
-  // Generative preset: Minimalist hits with higher step limits for a spacious, unpredictable feel
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
-
-  // Test patterns
-  { { 4, 4, 4, 4, 4, 4 }, { 4, 5, 6, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test4", 120 },
-  { { 6, 6, 6, 6, 6, 6 }, { 7, 8, 9, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test6", 120 },
-  { { 8, 8, 8, 8, 8, 8 }, { 11, 12, 13, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test8", 120 },
-  { { 12, 12, 12, 12, 12, 12 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test12", 120 },
-  { { 16, 16, 16, 16, 16, 16 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Test16", 120 },
-
-  // div
-  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 },
-
+// presets with conditional size
+const SlotConfiguration defaultSlots[NUM_PRESETS] PROGMEM = {
+    // Define only the first 10 presets for LGT8FX_BOARD
+    { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
+    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
+    { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
+    { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Bossa", 120 },
+    { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 1, 2, 0 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Tango", 120 },
+    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Rumba", 100 },
+    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "House", 120 },
+    { { 4, 4, 4, 4, 4, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Trap", 140 },
+    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Dubstep", 140 },
+    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "D N B", 170 },
+    // Additional presets for Arduino Nano
+#ifndef LGT8FX_BOARD
+    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Poly34", 120 },
+    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Phase12", 120 },
+    { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Phase8", 120 },
+    { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120 },
+    { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
+    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
+    { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120 },
+    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
+    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Clave", 120 },
+    { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Reggae", 75 },
+    { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 }
+#endif
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
@@ -785,8 +784,9 @@ void handleSettingNavigation(int changeDirection) {
 
 // Loading SlotConfiguration from PROGMEM
 void loadDefaultConfig(SlotConfiguration *config, int index) {
-  memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
-  disp_refresh = true;
+    if (index >= NUM_PRESETS) index = 0;
+    memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
+    disp_refresh = true;
 }
 
 void saveToEEPROM(int slot) {
