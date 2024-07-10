@@ -48,10 +48,10 @@
 
 #ifdef LGT8FX_BOARD
 #define NUM_MEMORY_SLOTS 10
-#define NUM_PRESETS 10 // 10 for LGT8FX8P
+#define NUM_PRESETS 10  // 10 for LGT8FX8P
 #else
 #define NUM_MEMORY_SLOTS 16
-#define NUM_PRESETS 21 // All presets for Nano
+#define NUM_PRESETS 21  // All presets for Nano
 #endif
 
 #ifdef ROTATE_PANEL
@@ -248,30 +248,30 @@ struct SlotConfiguration {
 // Updated default (preset) configuration with names and rhythm patterns
 // presets with conditional size
 const SlotConfiguration defaultSlots[NUM_PRESETS] PROGMEM = {
-    // Define only the first 10 presets for LGT8FX_BOARD
-    { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
-    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
-    { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
-    { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Bossa", 120 },
-    { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 1, 2, 0 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Tango", 120 },
-    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Rumba", 100 },
-    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "House", 120 },
-    { { 4, 4, 4, 4, 4, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Trap", 140 },
-    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Dubstep", 140 },
-    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "D N B", 170 },
-    // Additional presets for Arduino Nano
+  // Define only the first 10 presets for LGT8FX_BOARD
+  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Bossa", 120 },
+  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 1, 2, 0 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Tango", 120 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Rumba", 100 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "House", 120 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Trap", 140 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Dubstep", 140 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "D N B", 170 },
+// Additional presets for Arduino Nano
 #ifndef LGT8FX_BOARD
-    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Poly34", 120 },
-    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Phase12", 120 },
-    { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Phase8", 120 },
-    { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120 },
-    { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
-    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
-    { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120 },
-    { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
-    { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Clave", 120 },
-    { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Reggae", 75 },
-    { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 }
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Poly34", 120 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Phase12", 120 },
+  { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Phase8", 120 },
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 50, 50, 50, 50, 50, 50 }, "RandJam", 120 },
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
+  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Afrobeat", 120 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Clave", 120 },
+  { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Reggae", 75 },
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 }
 #endif
 };
 
@@ -530,8 +530,9 @@ void loop() {
         }
       }
     }
-  }
+  } 
 
+  
   if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
     OUTPUT1::setOutput(0);
     OUTPUT2::setOutput(0);
@@ -705,6 +706,63 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
+  // nudge the sequencer ( dj style)
+  if (selected_menu == MENU_TEMPO) {  // MENU_TEMPO mode
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+      playing_step[i] = (playing_step[i] + acceleratedIncrement + currentConfig.limit[i]) % currentConfig.limit[i];
+    }
+    if (!internalClock && millis() - last_clock_input > period) {
+    // Trigger outputs like clock pulse
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+      if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
+        switch (i) {
+          case 0:
+            OUTPUT1::setOutput(1);
+            LED1::setOutput(1);
+            break;
+          case 1:
+            OUTPUT2::setOutput(1);
+            LED2::setOutput(1);
+            break;
+          case 2:
+            OUTPUT3::setOutput(1);
+            LED3::setOutput(1);
+            break;
+          case 3:
+            OUTPUT4::setOutput(1);
+            LED4::setOutput(1);
+            break;
+          case 4:
+            OUTPUT5::setOutput(1);
+            LED5::setOutput(1);
+            break;
+          case 5:
+            OUTPUT6::setOutput(1);
+            LED6::setOutput(1);
+            break;
+        }
+      }
+    }
+
+    delay(10);
+    OUTPUT1::setOutput(0);
+    OUTPUT2::setOutput(0);
+    OUTPUT3::setOutput(0);
+    OUTPUT4::setOutput(0);
+    OUTPUT5::setOutput(0);
+    OUTPUT6::setOutput(0);
+    LED1::setOutput(0);
+    LED2::setOutput(0);
+    LED3::setOutput(0);
+    LED4::setOutput(0);
+    LED5::setOutput(0);
+    LED6::setOutput(0);
+
+    return;
+  }
+    return;
+  }
+
   // Handle channel switching only when in specific modes
   if (selected_setting != SETTING_TOP_MENU) {
     selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
@@ -784,9 +842,9 @@ void handleSettingNavigation(int changeDirection) {
 
 // Loading SlotConfiguration from PROGMEM
 void loadDefaultConfig(SlotConfiguration *config, int index) {
-    if (index >= NUM_PRESETS) index = 0;
-    memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
-    disp_refresh = true;
+  if (index >= NUM_PRESETS) index = 0;
+  memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
+  disp_refresh = true;
 }
 
 void saveToEEPROM(int slot) {
@@ -1007,7 +1065,7 @@ void OLED_display() {
   // Check if all channels are muted
   if (allMutedFlag) {
     // Draw "MUTE" message in the center of the screen
-    display.setTextSize(2);  // no large letters for now to avoid ugly artifacts
+    display.setTextSize(2);                                                       // no large letters for now to avoid ugly artifacts
     display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
     display.println(F("MUTE"));
     display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
