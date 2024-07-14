@@ -106,13 +106,13 @@ enum TopMenu {
   MENU_CH_5,
   MENU_CH_6,
   MENU_RANDOM_ADVANCE,
+  MENU_RAND,
   MENU_SAVE,
   MENU_LOAD,
-  MENU_ALL_RESET,
-  MENU_ALL_MUTE,
   MENU_PRESET,
   MENU_TEMPO,
-  MENU_RAND,
+  MENU_ALL_RESET,
+  MENU_ALL_MUTE,
   MENU_LAST
 };
 
@@ -271,7 +271,7 @@ const SlotConfiguration defaultSlots[NUM_PRESETS] PROGMEM = {
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
   { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Clave", 120 },
   { { 2, 3, 2, 3, 2, 3 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Reggae", 75 },
-  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "TestDiv", 120 }
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ClkDiv", 120 }
 #endif
 };
 
@@ -1304,7 +1304,7 @@ void drawSaveLoadSelection() {
   display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
   display.drawRect(x1, y1, w, h, WHITE);
 
-  display.setCursor(x1 + b, y1 + b);
+  display.setCursor(x1 + 12, y1 + b);
   display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
 
   display.setCursor(x1 + w / 2 - 12, y1 + h / 2 - 8);
@@ -1330,7 +1330,7 @@ void drawPresetSelection() {
   display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
   display.drawRect(x1, y1, w, h, WHITE);
 
-  display.setCursor(x1 + b, y1 + b);
+  display.setCursor(x1 + 12, y1 + b);
   display.println(F("Select Preset:"));
 
   // Shift cursor down a few pixels.
