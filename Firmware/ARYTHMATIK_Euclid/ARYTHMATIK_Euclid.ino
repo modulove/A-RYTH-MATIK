@@ -401,7 +401,7 @@ void setup() {
   encoder.setClickHandler(onEncoderClicked);
   encoder.setLongClickHandler(onEncoderLongClicked);  // Add long click handler
   encoder.setEncoderHandler(onEncoderRotation);
-  encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler again for pressed rotation of channels while editing parameters
+  encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler again for pressed rotation 
 
   initIO();
   initDisplay();
@@ -703,11 +703,48 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   if (increment == 0) return;
   disp_refresh = true;
 
-  int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+ int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
+  // Handle channel muting/unmuting in MENU_ALL_MUTE mode
+  if (selected_menu == MENU_ALL_MUTE) {
+    // Calculate the current channel based on the direction of rotation
+    static int current_channel = 0;
+    current_channel = (current_channel + increment + MAX_CHANNELS) % MAX_CHANNELS;
+
+    // Mute or unmute channels sequentially
+    if (increment > 0) {  // CW rotation
+      currentConfig.mute[current_channel] = true;
+    } else {  // CCW rotation
+      currentConfig.mute[MAX_CHANNELS - 1 - current_channel] = false;
+    }
+
+    // Check if all channels are muted or unmuted and reset if needed
+    bool all_muted = true, all_unmuted = true;
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+      if (!currentConfig.mute[i]) all_muted = false;
+      if (currentConfig.mute[i]) all_unmuted = false;
+    }
+    if (all_muted) {
+      // Start unmuting from the beginning
+      current_channel = 0;
+      for (int i = 0; i < MAX_CHANNELS; i++) {
+        currentConfig.mute[i] = false;
+      }
+    }
+    if (all_unmuted) {
+      // Start muting from the beginning
+      current_channel = 0;
+      for (int i = 0; i < MAX_CHANNELS; i++) {
+        currentConfig.mute[i] = true;
+      }
+    }
+
+    return;  // Exit early
+  }
+
   // nudge the sequencer ( dj style)
-  if (selected_menu == MENU_TEMPO) {  // MENU_TEMPO mode
+  if (selected_menu == MENU_TEMPO) {
     for (int i = 0; i < MAX_CHANNELS; i++) {
       playing_step[i] = (playing_step[i] + acceleratedIncrement + currentConfig.limit[i]) % currentConfig.limit[i];
     }
@@ -1310,21 +1347,43 @@ void drawPresetSelection() {
 
 void drawTempo() {
   // Display selected slot
-  int16_t x1 = 18, y1 = 14;
-  uint16_t w = 94, h = 34;
+  int16_t x1 = 10, y1 = 10; 
+  uint16_t w = 108, h = 44;  // Increased width and height
   uint16_t b = 4;
   uint16_t b2 = 8;
 
-  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
+  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);
   display.drawRect(x1, y1, w, h, WHITE);
 
-  display.setCursor(42, 30);
-  display.setTextSize(2);
-  display.print(internalClock ? tempo + 1 : externalBPM, DEC);
-  display.setTextSize(1);
-  display.setCursor(x1 + b, y1 + b);
-  display.print(internalClock ? F("Dial in Tempo") : F("Ext BPM"));
+  if (internalClock) {
+    display.setCursor(46, 30);
+    display.setTextSize(2);
+    display.print(tempo + 1, DEC);
+    display.setTextSize(1);
+    display.setCursor(x1 + 12, y1 + b);
+    display.print(F("Dial in Tempo"));
+  } else {
+    if (externalBPM == 0) {
+      display.setCursor((SCREEN_WIDTH - 12 * 6) / 2, y1 + b);
+      display.setTextSize(1);
+      display.print(F("Patch CLK !"));
+
+      display.setCursor((SCREEN_WIDTH - 14 * 6) / 2, y1 + h / 2 - 6);
+      display.print(F("long press for"));
+
+      display.setCursor((SCREEN_WIDTH - 8 * 6) / 2, y1 + h / 2 + 8);
+      display.print(F("INT CLK"));
+    } else {
+      display.setCursor(42, 30);
+      display.setTextSize(2);
+      display.print(externalBPM, DEC);
+      display.setTextSize(1);
+      display.setCursor(x1 + b, y1 + b);
+      display.print(F("Ext BPM"));
+    }
+  }
 }
+
 
 void updateRythm() {
   for (int i = 0; i < MAX_CHANNELS; i++) {
