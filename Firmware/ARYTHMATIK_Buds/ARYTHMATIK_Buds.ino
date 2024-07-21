@@ -1,4 +1,6 @@
 #include "src/libmodulove/arythmatik.h"
+#include <avr/pgmspace.h>
+#include <FastGPIO.h>
 #include <EEPROM.h>
 #include "EncoderButton.h"
 
@@ -9,14 +11,16 @@
 using namespace modulove;
 using namespace arythmatik;
 
-const unsigned long OLED_UPDATE_INTERVAL = 125;  // OLED update interval in milliseconds
+const unsigned long OLED_UPDATE_INTERVAL_NORMAL = 150;  // Normal OLED update interval in milliseconds
+const unsigned long OLED_UPDATE_INTERVAL_IDLE = 300;    // OLED update interval when idle
+const unsigned long TRIGGER_PULSE_DURATION = 12;  // Trigger pulse duration in milliseconds
 
 // Enum for menu items
 enum Menu {
   PROB,
-  //TOGGLE,
-  //LATCH,
+  TOGGLE,
   SWING,
+  FACTOR,
   MENU_COUNT  // Total number of menu items
 };
 
@@ -30,32 +34,33 @@ EncoderButton encoder(ENCODER_PIN1, ENCODER_PIN2, ENCODER_SW_PIN);
 EncoderButton encoder(ENCODER_PIN2, ENCODER_PIN1, ENCODER_SW_PIN);
 #endif
 
-// Struct for channel configuration
+// channel configuration Struct
 struct ChannelConfig {
   float probability = 0.5;
   bool state = false;
-  bool toggleMode = false;
-  bool latchMode = false;
-  float swingAmount = 0.5;  // 0.5 means no swing, range 0.5 to 0.7
-  bool swingMode = false;   // true: swing mode active
+  float swingAmount = 0.5;  // 0.5 means no swing, range 0.0 to 0.7
   unsigned long lastSwingTime = 0;
   bool swingState = false;
-  Menu currentMenu = PROB;  // Add the current menu mode for each channel
+  Menu currentMenu = PROB;  // current menu mode
+  unsigned long lastTriggerTime = 0;
+  bool triggerActive = false;
+  int factor = 1;  // clock divider factor
+  int triggerCount = 0;  // trigger counter for factor mode
 };
 
-// Create configurations for both channels
+// create configuration for both channels
 ChannelConfig channelA;
 ChannelConfig channelB;
 
 bool isChannelASelected = true;
+bool isEncoderIdle = false;
 
-unsigned long lastTriggerTime = 0;
 unsigned long lastUpdateTime = 0;
 
 void setup() {
 
 #ifdef ROTATE_PANEL
-  hw.config.RotatePanel = true;
+  hw.config.RotatePanel = false;
 #endif
 
 #ifdef REVERSE_ENCODER
@@ -66,16 +71,20 @@ void setup() {
   hw.Init();
 
   // Set up encoder parameters
-  //encoder.setDebounceInterval(5);  // Increase debounce interval
-  //encoder.setMultiClickInterval(10);
-  //encoder.setRateLimit(10);
-  encoder.setLongClickDuration(500);
-  encoder.setClickHandler(onEncoderClicked);
-  encoder.setLongClickHandler(onEncoderLongClicked);  // Add long click handler
+  encoder.setDebounceInterval(5);
+  encoder.setMultiClickInterval(70);
+  encoder.setLongClickDuration(400);
+  encoder.setRateLimit(10);
+  encoder.setIdleTimeout(1000);
+  encoder.setIdleHandler(onEncoderIdle);
+  encoder.setClickHandler(onEncoderClicked); // short press to switch sideA-sideB
+  encoder.setDoubleClickHandler(onEncoderDoubleClicked);
+  encoder.setLongClickHandler(onEncoderLongClicked);  // long click to switch Mode
   encoder.setEncoderHandler(onEncoderRotation);
+  encoder.setEncoderPressedHandler(onEncoderPressedRotation);
 }
 
-// abstract tree
+// abstract tree UI
 void drawTree(int x, int y, float probability) {
   // main branch
   hw.display.drawLine(x, y, x, y - 10, WHITE);
@@ -87,10 +96,19 @@ void drawTree(int x, int y, float probability) {
   // two dots based on probability
   if (probability <= 0.5) {
     hw.display.fillCircle(x - 5, y - 15, 2, WHITE);
+    hw.display.drawCircle(x - 5, y - 15, 4, WHITE);
     hw.display.drawCircle(x + 5, y - 15, 2, WHITE);
   } else {
     hw.display.drawCircle(x - 5, y - 15, 2, WHITE);
     hw.display.fillCircle(x + 5, y - 15, 2, WHITE);
+    hw.display.drawCircle(x + 5, y - 15, 4, WHITE);
+  }
+}
+
+// draw vertical line
+void drawDottedLine(int x, int y, int length, int spacing) {
+  for (int i = 0; i < length; i += spacing) {
+    hw.display.drawPixel(x, y + i, WHITE);
   }
 }
 
@@ -99,41 +117,66 @@ void drawBottomBar() {
   hw.display.setCursor(0, 56);
 
   if (channelA.currentMenu == PROB) {
-
     // taller center line for 50% in prob mode
-    hw.display.drawLine(30, 54, 30, 64, WHITE);  // Taller center line for visualization
-    //hw.display.drawLine(94, 54, 94, 64, WHITE); // Taller center line for visualization
+    drawDottedLine(30, 54, 10, 2);  // center line 
     // bar for Channel A (centered at 50% and fill left or right)
     int barLengthA = (channelA.probability - 0.5) * 40;
-    hw.display.drawRect(10, 56, 40, 6, WHITE);
+    hw.display.drawRoundRect(10, 56, 40, 8, 2, WHITE);
     if (barLengthA > 0) {
-      hw.display.fillRect(30, 56, barLengthA, 6, WHITE);
+      hw.display.fillRoundRect(30, 58, barLengthA, 4, 2, WHITE);
     } else {
-      hw.display.fillRect(30 + barLengthA, 56, -barLengthA, 6, WHITE);
+      hw.display.fillRoundRect(30 + barLengthA, 58, -barLengthA, 4, 2, WHITE);
     }
+  } else if (channelA.currentMenu == TOGGLE) {
+    // Toggle mode indicator for Channel A
+    hw.display.fillCircle(30, 25, 3, channelA.state ? WHITE : BLACK);
+    hw.display.drawCircle(30, 25, 5, WHITE);
+    hw.display.fillCircle(30, 45, 3, channelA.state ? BLACK : WHITE);
+    hw.display.drawCircle(30, 45, 5, WHITE);
+    hw.display.setCursor(10, 52);
+    //hw.display.print(channelA.state ? "ON " : "OFF");
   } else if (channelA.currentMenu == SWING) {
-    // bar for Swing A (50% to 70%)
+    // Swing mode indicator for Channel A
     int barLengthA = (channelA.swingAmount - 0.5) * 200;
-    hw.display.drawRect(10, 56, 40, 6, WHITE);
-    hw.display.fillRect(10, 56, barLengthA, 6, WHITE);
+    hw.display.drawRoundRect(10, 56, 40, 8, 2, WHITE);
+    hw.display.fillRoundRect(10, 58, barLengthA, 4, 2, WHITE);
+  } else if (channelA.currentMenu == FACTOR) {
+    // Factor mode indicator for Channel A
+    hw.display.setCursor(24, 30);
+    hw.display.setTextSize(2);
+    hw.display.print(channelA.factor);
+    hw.display.setTextSize(1);
   }
 
   if (channelB.currentMenu == PROB) {
-    //hw.display.drawLine(30, 54, 30, 64, WHITE); // Taller center line for visualization
-    hw.display.drawLine(94, 54, 94, 64, WHITE);  // Taller center line for visualization
+    drawDottedLine(94, 54, 10, 4);  // center line
     // bar for Channel B (centered at 50% and fill left or right)
     int barLengthB = (channelB.probability - 0.5) * 40;
-    hw.display.drawRect(74, 56, 40, 6, WHITE);
+    hw.display.drawRoundRect(74, 56, 40, 8, 2, WHITE);
     if (barLengthB > 0) {
-      hw.display.fillRect(94, 56, barLengthB, 6, WHITE);
+      hw.display.fillRoundRect(94, 58, barLengthB, 4, 2, WHITE);
     } else {
-      hw.display.fillRect(94 + barLengthB, 56, -barLengthB, 6, WHITE);
+      hw.display.fillRoundRect(94 + barLengthB, 58, -barLengthB, 4, 2, WHITE);
     }
+  } else if (channelB.currentMenu == TOGGLE) {
+    // Toggle mode indicator for Channel B
+    hw.display.fillCircle(96, 25, 3, channelB.state ? WHITE : BLACK);
+    hw.display.drawCircle(96, 25, 5, WHITE);
+    hw.display.fillCircle(96, 45, 3, channelB.state ? BLACK : WHITE);
+    hw.display.drawCircle(96, 45, 5, WHITE);
+    hw.display.setCursor(74, 52);
+    //hw.display.print(channelB.state ? "ON " : "OFF");
   } else if (channelB.currentMenu == SWING) {
-    // bar for Swing B (50% to 70%)
+    // Swing mode indicator for Channel B
     int barLengthB = (channelB.swingAmount - 0.5) * 200;
-    hw.display.drawRect(74, 56, 40, 6, WHITE);
-    hw.display.fillRect(74, 56, barLengthB, 6, WHITE);
+    hw.display.drawRoundRect(74, 56, 40, 8, 2, WHITE);
+    hw.display.fillRoundRect(74, 58, barLengthB, 4, 2, WHITE);
+  } else if (channelB.currentMenu == FACTOR) {
+    // Factor mode indicator for Channel B
+    hw.display.setCursor(94, 30);
+    hw.display.setTextSize(2);
+    hw.display.print(channelB.factor);
+    hw.display.setTextSize(1);
   }
 }
 
@@ -141,23 +184,19 @@ void drawBottomBar() {
 void drawTopBar() {
   hw.display.setCursor(0, 0);
 
-  const char* modeStrA = channelA.currentMenu == PROB ? "Prob" : "Swing";
-  const char* modeStrB = channelB.currentMenu == PROB ? "Prob" : "Swing";
-
-
-
-
+  const char* modeStrA = channelA.currentMenu == PROB ? "Buds" : (channelA.currentMenu == TOGGLE ? "Toggle" : (channelA.currentMenu == SWING ? "Swing" : "Factor"));
+  const char* modeStrB = channelB.currentMenu == PROB ? "Buds" : (channelB.currentMenu == TOGGLE ? "Toggle" : (channelB.currentMenu == SWING ? "Swing" : "Factor"));
 
   if (isChannelASelected) {
     hw.display.setCursor(16, 1);
     hw.display.print(modeStrA);
-    hw.display.fillRect(0, 0, 64, 12, INVERSE);  // Invert the mode description for Channel A
+    hw.display.fillRoundRect(10, 0, 44, 12, 3, INVERSE);  // Invert the mode description for Channel A
     hw.display.setCursor(80, 1);
     hw.display.print(modeStrB);
   } else {
-    hw.display.setCursor(80, 0);
+    hw.display.setCursor(80, 1);
     hw.display.print(modeStrB);
-    hw.display.fillRect(64, 0, 64, 12, INVERSE);  // Invert the mode description for Channel B
+    hw.display.fillRoundRect(74, 0, 44, 12, 3, INVERSE);  // Invert the mode description for Channel B
     hw.display.setCursor(16, 1);
     hw.display.print(modeStrA);
   }
@@ -174,62 +213,81 @@ void drawSwingUI(ChannelConfig& channel, int x) {
 }
 
 void drawKnob(int x, int y, float value) {
-  hw.display.drawCircle(x, y, 10, WHITE);  // Increased size of the knob
+  hw.display.drawCircle(x, y, 5, WHITE);  
+  hw.display.drawCircle(x, y, 8, WHITE);  // fancy knob
 
   // Calculate angle based on value (0 to 1)
   float angle = value * 2 * PI - PI / 2;
   int x1 = x + 10 * cos(angle);  // Calculate x position of the line
   int y1 = y + 10 * sin(angle);  // Calculate y position of the line
 
-  hw.display.drawLine(x, y, x1, y1, WHITE);  // line indicating the position
+  hw.display.drawLine(x, y, x1, y1, WHITE);  // knob position
 }
 
-// update the OLED display
 void updateOLED() {
   hw.display.clearDisplay();
   drawTopBar();
-  hw.display.drawLine(64, 0, 64, 64, WHITE);  // Centerline
+  drawDottedLine(64, 0, 64, 2);  // Centerline
 
-  if (channelA.currentMenu == SWING) {
-    drawSwingUI(channelA, 32);
-  } else {
+  if (channelA.currentMenu == PROB) {
     hw.display.setCursor(24, 16);
-    //
     hw.display.print(channelA.probability * 100, 0);
     hw.display.print("% ");
     drawTree(32, 48, channelA.probability);
-  }
+  } else if (channelA.currentMenu == SWING) {
+    drawSwingUI(channelA, 32);
+  } 
 
-  if (channelB.currentMenu == SWING) {
-    drawSwingUI(channelB, 96);
-  } else {
+  if (channelB.currentMenu == PROB) {
     hw.display.setCursor(88, 16);
     hw.display.print(channelB.probability * 100, 0);
     hw.display.print("% ");
     drawTree(96, 48, channelB.probability);
-  }
+  } else if (channelB.currentMenu == SWING) {
+    drawSwingUI(channelB, 96);
+  } 
 
   drawBottomBar();
   hw.display.display();
 }
 
-// save the state to EEPROM
+// save state to EEPROM
 void saveState() {
   EEPROM.put(0, channelA);
   EEPROM.put(sizeof(ChannelConfig), channelB);
 }
 
-// load the state from EEPROM
+// load state
 void loadState() {
   EEPROM.get(0, channelA);
   EEPROM.get(sizeof(ChannelConfig), channelB);
 }
 
+void onEncoderIdle() {
+  isEncoderIdle = true;
+}
+
 void onEncoderClicked() {
+  isEncoderIdle = false;
   isChannelASelected = !isChannelASelected;
 }
 
+void onEncoderDoubleClicked() {
+  isEncoderIdle = false;
+  isChannelASelected = !isChannelASelected;  // Switch sides
+}
+
 void onEncoderLongClicked() {
+  isEncoderIdle = false;
+  if (isChannelASelected) {
+    channelA.state = !channelA.state;  // Mute/unmute channel A
+  } else {
+    channelB.state = !channelB.state;  // Mute/unmute channel B
+  }
+}
+
+void onEncoderPressedRotation() {
+  isEncoderIdle = false;
   if (isChannelASelected) {
     channelA.currentMenu = static_cast<Menu>((channelA.currentMenu + 1) % MENU_COUNT);
   } else {
@@ -238,6 +296,7 @@ void onEncoderLongClicked() {
 }
 
 void onEncoderRotation(EncoderButton& eb) {
+  isEncoderIdle = false;
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
   if (increment == 0) return;
 
@@ -251,8 +310,14 @@ void onEncoderRotation(EncoderButton& eb) {
       case PROB:
         channelA.probability = constrain(channelA.probability + acceleratedIncrement * 0.02, 0.0, 1.0);
         break;
+      case TOGGLE:
+        channelA.state = !channelA.state;
+        break;
       case SWING:
-        channelA.swingAmount = constrain(channelA.swingAmount + acceleratedIncrement * 0.01, 0.5, 0.7);
+        channelA.swingAmount = constrain(channelA.swingAmount + acceleratedIncrement * 0.01, 0.0, 0.7);
+        break;
+      case FACTOR:
+        channelA.factor = constrain(channelA.factor + acceleratedIncrement, 1, 8);
         break;
       default:
         break;
@@ -262,54 +327,78 @@ void onEncoderRotation(EncoderButton& eb) {
       case PROB:
         channelB.probability = constrain(channelB.probability + acceleratedIncrement * 0.02, 0.0, 1.0);
         break;
+      case TOGGLE:
+        channelB.state = !channelB.state;
+        break;
       case SWING:
-        channelB.swingAmount = constrain(channelB.swingAmount + acceleratedIncrement * 0.01, 0.5, 0.7);
+        channelB.swingAmount = constrain(channelB.swingAmount + acceleratedIncrement * 0.01, 0.0, 0.7);
+        break;
+      case FACTOR:
+        channelB.factor = constrain(channelB.factor + acceleratedIncrement, 1, 8);
         break;
       default:
         break;
     }
   }
-
-  //updateOLED();  // Refresh display after changing values (this should not be here i guess for performance reasons?)
 }
 
-void triggerOutput(int output, int duration = 10) {
-  hw.outputs[output].High();
-  delayMicroseconds(duration);  // Use delayMicroseconds for a more precise and non-blocking delay
-  hw.outputs[output].Low();
-}
-
-
-// Swing mode logic (is this mathematical or musical swing ?)
-void handleSwing(ChannelConfig& channel, bool trigger, int output) {
-  if (channel.swingMode && trigger) {
-    if (channel.swingState) {
-      channel.swingState = false;
-      unsigned long delayTime = channel.swingAmount * 1000;  // Convert to milliseconds
-      if (millis() - channel.lastSwingTime >= delayTime) {
-        triggerOutput(output);
-      }
-    } else {
-      channel.swingState = true;
-      channel.lastSwingTime = millis();
-    }
+void triggerOutput(int output, bool state) {
+  if (state) {
+    hw.outputs[output].High();
+  } else {
+    hw.outputs[output].Low();
   }
 }
 
-void handleTrigger(ChannelConfig& channel, bool trigger, int output, int clockOutput) {
+void handleTrigger(ChannelConfig& channel, bool trigger, int mainOutput, int invOutput, int clockOutput) {
   if (trigger) {
-    lastTriggerTime = millis();
-    if (channel.toggleMode) {
+    if (channel.currentMenu == TOGGLE) {
       channel.state = !channel.state;
-    } else if (channel.latchMode) {
-      channel.state = !channel.state;
-    } else {
+      triggerOutput(mainOutput, channel.state);
+      triggerOutput(invOutput, !channel.state);
+    } else if (channel.currentMenu == SWING) {
+      if (channel.swingState) {
+        unsigned long delayTime = map(channel.swingAmount * 100, 0, 70, -150, 150);  // Convert swing amount to milliseconds
+        if (millis() - channel.lastSwingTime >= abs(delayTime)) {
+          triggerOutput(mainOutput, true);
+          triggerOutput(invOutput, false);
+          channel.lastSwingTime = millis();
+          channel.swingState = false;
+        }
+      } else {
+        unsigned long delayTime = map(channel.swingAmount * 100, 0, 70, -50, 50);  // Convert swing amount to milliseconds
+        if (delayTime < 0) {
+          delayMicroseconds(abs(delayTime) * 1000);  // Delay for negative swing
+        }
+        triggerOutput(mainOutput, true);
+        triggerOutput(invOutput, false);
+        channel.lastSwingTime = millis();
+        channel.swingState = true;
+      }
+    } else if (channel.currentMenu == PROB) {
       channel.state = (random(100) < (int)(channel.probability * 100));
+      triggerOutput(mainOutput, channel.state);
+      triggerOutput(invOutput, !channel.state);
+    } else if (channel.currentMenu == FACTOR) {
+      channel.triggerCount++;
+      if (channel.triggerCount >= channel.factor) {
+        channel.triggerCount = 0;
+        triggerOutput(mainOutput, true);
+        triggerOutput(invOutput, false);
+      }
     }
-    if (channel.state) {
-      triggerOutput(output);
+    channel.lastTriggerTime = millis();
+    channel.triggerActive = true;
+    triggerOutput(clockOutput, true);
+  }
+  // Turn off the outputs after the pulse duration
+  if (channel.triggerActive && millis() - channel.lastTriggerTime >= TRIGGER_PULSE_DURATION) {
+    triggerOutput(clockOutput, false);
+    if (channel.currentMenu != TOGGLE) { // Only turn off outputs in non-toggle modes
+      triggerOutput(mainOutput, false);
+      triggerOutput(invOutput, false);
     }
-    triggerOutput(clockOutput);
+    channel.triggerActive = false;
   }
 }
 
@@ -319,23 +408,18 @@ void loop() {
   bool triggerA = hw.rst.State() == DigitalInput::STATE_RISING;
   bool triggerB = hw.clk.State() == DigitalInput::STATE_RISING;
 
-
-
-  // Swing mode logic for Channel A
-  handleSwing(channelA, triggerA, 1);
-
-  // Swing mode logic for Channel B
-  handleSwing(channelB, triggerB, 4);
-
-  handleTrigger(channelA, triggerA, 0, 2);
-  handleTrigger(channelB, triggerB, 3, 5);
+  handleTrigger(channelA, triggerA, 1, 0, 2);
+  handleTrigger(channelB, triggerB, 4, 3, 5);
 
   // Update encoder state
   encoder.update();
 
-  // Throttle the OLED update rate
+  // Throttle OLED update rate
   unsigned long currentTime = millis();
-  if (currentTime - lastUpdateTime >= OLED_UPDATE_INTERVAL || triggerA || triggerB) {
+  unsigned long updateInterval = isEncoderIdle ? OLED_UPDATE_INTERVAL_IDLE : OLED_UPDATE_INTERVAL_NORMAL;
+
+  // updating on triggerA only bc doin both inputs is a bad thing for performance
+    if (currentTime - lastUpdateTime >= updateInterval || triggerA ) {
     lastUpdateTime = currentTime;
     updateOLED();
   }
