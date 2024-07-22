@@ -1,3 +1,5 @@
+// Fun quick experiment with libModulove and ARYTHMATIK eurorack module
+// https://github.com/shveytank/Arduino_Pong_Game
 #include <EncoderButton.h>
 #include "src/libmodulove/arythmatik.h"
 
@@ -41,153 +43,156 @@ const uint8_t CPU_X = 12;
 uint8_t cpu_y = 16;
 const uint8_t PLAYER_X = 115;
 uint8_t player_y = 16;
+uint8_t old_player_y = player_y;
 
 
 void drawCourt() {
-  hw.display.drawRect(0, 0, 128, 64, WHITE);
+    hw.display.drawRect(0, 0, 128, 64, WHITE);
 }
 
 void onEncoderRotation(EncoderButton &eb) {
-  int increment = encoder.increment();  // Get the incremental change
-  player_y = constrain(player_y + increment, 1, SCREEN_HEIGHT - PADDLE_HEIGHT);
+    int increment = encoder.increment(); // Get the incremental change
+    player_y = constrain(player_y + increment, 1, SCREEN_HEIGHT - PADDLE_HEIGHT);
 }
 
 void onEncoderClicked(EncoderButton &eb) {
-  // Start the game or release the ball
-  ball_dir_x = (random(0, 2) * 2) - 1;  // Random direction (-1 or 1)
-  ball_dir_y = (random(0, 2) * 2) - 1;
+    // Start the game or release the ball
+    ball_dir_x = (random(0, 2) * 2) - 1; // Random direction (-1 or 1)
+    ball_dir_y = (random(0, 2) * 2) - 1;
+}
+
+void onEncoderPressedRotation(EncoderButton &eb) {
+   
 }
 
 void setup() {
-  // Initialize A-RYTH-MATIK hardware
-  hw.Init();
+    // Initialize A-RYTH-MATIK hardware
+    hw.Init();
 
-  // Initialize display
-  hw.display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  hw.display.clearDisplay();
-  drawCourt();
-  hw.display.display();
+    // Initialize display
+    hw.display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    hw.display.clearDisplay();
+    drawCourt();
+    hw.display.display();
 
-  // Set up encoder parameters
-  encoder.setDebounceInterval(5);
-  encoder.setMultiClickInterval(70);
-  encoder.setLongClickDuration(400);
-  encoder.setRateLimit(10);
-  encoder.setIdleTimeout(1000);
-  encoder.setEncoderHandler(onEncoderRotation);
-  encoder.setClickHandler(onEncoderClicked);
+    // Set up encoder parameters
+    encoder.setDebounceInterval(5);
+    encoder.setMultiClickInterval(70);
+    encoder.setLongClickDuration(400);
+    encoder.setRateLimit(10);
+    encoder.setIdleTimeout(1000);
+    encoder.setEncoderHandler(onEncoderRotation);
+    encoder.setClickHandler(onEncoderClicked);
+    encoder.setEncoderPressedHandler(onEncoderPressedRotation);
 
-  // Wait for 2 seconds before starting
-  delay(2000);
+    // Wait for 2 seconds before starting
+    delay(2000);
 
-  // Initialize ball and paddle update times
-  ball_update = millis();
-  paddle_update = ball_update;
+    // Initialize ball and paddle update times
+    ball_update = millis();
+    paddle_update = ball_update;
 }
 
 void loop() {
-  // Process A-RYTH-MATIK inputs
-  hw.ProcessInputs();
+    // Process A-RYTH-MATIK inputs
+    hw.ProcessInputs();
 
-  // Update encoder state
-  encoder.update();
+    // Update encoder state
+    encoder.update();
 
-  bool update = false;
-  unsigned long time = millis();
+    bool update = false;
+    unsigned long time = millis();
 
-  if (time > ball_update) {
-    uint8_t new_x = ball_x + ball_dir_x;
-    uint8_t new_y = ball_y + ball_dir_y;
+    if (time > ball_update) {
+        uint8_t new_x = ball_x + ball_dir_x;
+        uint8_t new_y = ball_y + ball_dir_y;
 
-    // Check for wall collisions
-    if (new_x == 0) {  // Player 2 (right side) scores
-      ball_dir_x = -ball_dir_x;
-      new_x += ball_dir_x + ball_dir_x;
-      hw.outputs[0].High();  // Trigger channel 1
-      hw.outputs[5].High();  // Trigger channel 6
-      delay(12);             // Short delay to ensure the trigger is registered
-      hw.outputs[0].Low();
-      hw.outputs[5].Low();
+        // Check for wall collisions
+        if (new_x == 0) { // Player 2 (right side) scores
+            ball_dir_x = -ball_dir_x;
+            new_x += ball_dir_x + ball_dir_x;
+            hw.outputs[0].High(); // Trigger channel 1
+            hw.outputs[5].High(); // Trigger channel 6
+            delay(12); // Short delay to ensure the trigger is registered
+            hw.outputs[0].Low();
+            hw.outputs[5].Low();
+        }
+        if (new_x == 127) { // Player 1 (left side) scores
+            ball_dir_x = -ball_dir_x;
+            new_x += ball_dir_x + ball_dir_x;
+            hw.outputs[1].High(); // Trigger channel 2
+            hw.outputs[5].High(); // Trigger channel 6
+            delay(12); // Short delay to ensure the trigger is registered
+            hw.outputs[1].Low();
+            hw.outputs[5].Low();
+        }
+
+        // Check if we hit the horizontal walls.
+        if (new_y == 0 || new_y == 63) { // Ball hits top or bottom wall
+            ball_dir_y = -ball_dir_y;
+            new_y += ball_dir_y + ball_dir_y;
+            hw.outputs[2].High(); // Trigger channel 3
+            hw.outputs[5].High(); // Trigger channel 6
+            delay(12); // Short delay to ensure the trigger is registered
+            hw.outputs[2].Low();
+            hw.outputs[5].Low();
+        }
+
+        // Check for paddle collisions
+        if (new_x == CPU_X && new_y >= cpu_y && new_y <= cpu_y + PADDLE_HEIGHT) {
+            ball_dir_x = -ball_dir_x;
+            new_x += ball_dir_x + ball_dir_x;
+            hw.outputs[3].High(); // Trigger channel 4
+            hw.outputs[5].High(); // Trigger channel 6
+            delay(12); // Short delay to ensure the trigger is registered
+            hw.outputs[3].Low();
+            hw.outputs[5].Low();
+        }
+        if (new_x == PLAYER_X && new_y >= player_y && new_y <= player_y + PADDLE_HEIGHT) {
+            ball_dir_x = -ball_dir_x;
+            new_x += ball_dir_x + ball_dir_x;
+            hw.outputs[4].High(); // Trigger channel 5
+            hw.outputs[5].High(); // Trigger channel 6
+            delay(12); // Short delay to ensure the trigger is registered
+            hw.outputs[4].Low();
+            hw.outputs[5].Low();
+        }
+
+        // Update ball position
+        hw.display.drawPixel(ball_x, ball_y, BLACK);
+        hw.display.drawPixel(new_x, new_y, WHITE);
+        ball_x = new_x;
+        ball_y = new_y;
+
+        ball_update += BALL_RATE;
+        update = true;
     }
-    if (new_x == 127) {  // Player 1 (left side) scores
-      ball_dir_x = -ball_dir_x;
-      new_x += ball_dir_x + ball_dir_x;
-      hw.outputs[1].High();  // Trigger channel 2
-      hw.outputs[5].High();  // Trigger channel 6
-      delay(12);             // Short delay to ensure the trigger is registered
-      hw.outputs[1].Low();
-      hw.outputs[5].Low();
+
+    if (time > paddle_update) {
+        paddle_update += PADDLE_RATE;
+
+        // Update CPU paddle position
+        hw.display.drawFastVLine(CPU_X, cpu_y, PADDLE_HEIGHT, BLACK);
+        const uint8_t half_paddle = PADDLE_HEIGHT >> 1;
+        if (cpu_y + half_paddle > ball_y) {
+            cpu_y -= 1;
+        }
+        if (cpu_y + half_paddle < ball_y) {
+            cpu_y += 1;
+        }
+        if (cpu_y < 1) cpu_y = 1;
+        if (cpu_y + PADDLE_HEIGHT > 63) cpu_y = 63 - PADDLE_HEIGHT;
+        hw.display.drawFastVLine(CPU_X, cpu_y, PADDLE_HEIGHT, WHITE);
+
+        // Update player paddle position
+        hw.display.drawFastVLine(PLAYER_X, old_player_y, PADDLE_HEIGHT, BLACK); // Erase old paddle position
+        hw.display.drawFastVLine(PLAYER_X, player_y, PADDLE_HEIGHT, WHITE); // Draw new paddle position
+        old_player_y = player_y; // Update old_player_y for next loop
+
+        update = true;
     }
 
-    // Check if we hit the horizontal walls.
-    if (new_y == 0 || new_y == 63) {  // Ball hits top or bottom wall
-      ball_dir_y = -ball_dir_y;
-      new_y += ball_dir_y + ball_dir_y;
-      hw.outputs[2].High();  // Trigger channel 3
-      hw.outputs[5].High();  // Trigger channel 6
-      delay(12);             // Short delay to ensure the trigger is registered
-      hw.outputs[2].Low();
-      hw.outputs[5].Low();
+    if (update) {
+        hw.display.display();
     }
-
-    // Check for paddle collisions
-    if (new_x == CPU_X && new_y >= cpu_y && new_y <= cpu_y + PADDLE_HEIGHT) {
-      ball_dir_x = -ball_dir_x;
-      new_x += ball_dir_x + ball_dir_x;
-      hw.outputs[3].High();  // Trigger channel 4
-      hw.outputs[5].High();  // Trigger channel 6
-      delay(12);             // Short delay to ensure the trigger is registered
-      hw.outputs[3].Low();
-      hw.outputs[5].Low();
-    }
-    if (new_x == PLAYER_X && new_y >= player_y && new_y <= player_y + PADDLE_HEIGHT) {
-      ball_dir_x = -ball_dir_x;
-      new_x += ball_dir_x + ball_dir_x;
-      hw.outputs[4].High();  // Trigger channel 5
-      hw.outputs[5].High();  // Trigger channel 6
-      delay(12);             // Short delay to ensure the trigger is registered
-      hw.outputs[4].Low();
-      hw.outputs[5].Low();
-    }
-
-    // Update ball position
-    hw.display.drawPixel(ball_x, ball_y, BLACK);
-    hw.display.drawPixel(new_x, new_y, WHITE);
-    //hw.display.drawCircle(ball_x, ball_y, 3, BLACK);
-    //hw.display.drawCircle(new_x, new_y, 3, WHITE);
-    ball_x = new_x;
-    ball_y = new_y;
-
-    ball_update += BALL_RATE;
-    update = true;
-  }
-
-  if (time > paddle_update) {
-    paddle_update += PADDLE_RATE;
-
-    // Update CPU paddle position
-    hw.display.drawFastVLine(CPU_X, cpu_y, PADDLE_HEIGHT, BLACK);
-    const uint8_t half_paddle = PADDLE_HEIGHT >> 1;
-    if (cpu_y + half_paddle > ball_y) {
-      cpu_y -= 1;
-    }
-    if (cpu_y + half_paddle < ball_y) {
-      cpu_y += 1;
-    }
-    if (cpu_y < 1) cpu_y = 1;
-    if (cpu_y + PADDLE_HEIGHT > 63) cpu_y = 63 - PADDLE_HEIGHT;
-    hw.display.drawFastVLine(CPU_X, cpu_y, PADDLE_HEIGHT, WHITE);
-
-    // Update player paddle position
-    hw.display.drawFastVLine(PLAYER_X, player_y, PADDLE_HEIGHT, BLACK);
-    if (player_y < 1) player_y = 1;
-    if (player_y + PADDLE_HEIGHT > 63) player_y = 63 - PADDLE_HEIGHT;
-    hw.display.drawFastVLine(PLAYER_X, player_y, PADDLE_HEIGHT, WHITE);
-
-    update = true;
-  }
-
-  if (update) {
-    hw.display.display();
-  }
 }
