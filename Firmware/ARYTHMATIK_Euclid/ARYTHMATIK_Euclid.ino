@@ -318,8 +318,8 @@ const unsigned char Modulove_Logo[] PROGMEM = {
   0x00, 0x40, 0x03, 0x00, 0x40, 0xc3, 0xc3, 0x18, 0x60, 0x82, 0x05, 0x88, 0x60, 0x03, 0x08, 0x00,
   0x00, 0xc0, 0x02, 0x00, 0xc0, 0x83, 0x83, 0x30, 0xc1, 0x86, 0x0d, 0x88, 0x40, 0x06, 0x00, 0x00,
   0x00, 0x80, 0x06, 0x00, 0xc1, 0x83, 0x86, 0x30, 0xc3, 0x86, 0x0d, 0x98, 0x40, 0x04, 0x00, 0x00,
-  0x00, 0xc0, 0x0c, 0x00, 0xc1, 0x07, 0x86, 0x71, 0xc3, 0x0e, 0x09, 0x90, 0x40, 0x04, 0x00, 0x00,
-  0x00, 0xc0, 0x38, 0x00, 0xc3, 0x07, 0x8e, 0x71, 0x87, 0x0e, 0x19, 0xb0, 0x40, 0x04, 0x00, 0x00,
+  0x00, 0xc0, 0x0c, 0x00, 0xc1, 0x07, 0x86, 0x30, 0xc3, 0x0e, 0x09, 0x90, 0x40, 0x04, 0x00, 0x00,
+  0x00, 0xc0, 0x38, 0x00, 0xc3, 0x07, 0x8e, 0x71, 0xc3, 0x0e, 0x19, 0xb0, 0x40, 0x04, 0x00, 0x00,
   0x00, 0xc0, 0x60, 0x00, 0xc7, 0x0d, 0x0e, 0xf3, 0x8d, 0x1e, 0x11, 0xb0, 0x60, 0x0c, 0x00, 0x00,
   0x00, 0x60, 0xc0, 0x00, 0xcd, 0x99, 0x1e, 0xf2, 0x99, 0x32, 0x30, 0xa0, 0x30, 0x18, 0x00, 0x00,
   0x00, 0x3f, 0x80, 0x00, 0x79, 0xf1, 0xf7, 0xbe, 0xf1, 0xe3, 0xe0, 0xe0, 0x3f, 0xf0, 0x00, 0x00,
@@ -334,20 +334,10 @@ const unsigned char Modulove_Logo[] PROGMEM = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 //(Total bytes used to store images in PROGMEM = 1040)
-
 
 void printDebugMessage(const char *message) {
   display.clearDisplay();
@@ -392,16 +382,16 @@ void onOverlayTimeout(EncoderButton &eb) {
 }
 
 void setup() {
-  encoder.setDebounceInterval(5);  // Increase debounce interval
-  encoder.setMultiClickInterval(10);
-  encoder.setRateLimit(20);
+  encoder.setDebounceInterval(2);  // Increase debounce interval
+  encoder.setMultiClickInterval(20);
+  encoder.setRateLimit(100);
   encoder.setIdleTimeout(5000);
   encoder.setIdleHandler(onOverlayTimeout);
   encoder.setLongClickDuration(500);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setLongClickHandler(onEncoderLongClicked);  // Add long click handler
   encoder.setEncoderHandler(onEncoderRotation);
-  encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler again for pressed rotation 
+  encoder.setEncoderPressedHandler(onEncoderPressedRotation);  // Added handler again for pressed rotation
 
   initIO();
   initDisplay();
@@ -439,7 +429,7 @@ void setup() {
 
 void loop() {
   encoder.update();  // Process Encoder & button updates
-
+  display.fillScreen(BLACK);
 
   updateRythm();
 
@@ -462,15 +452,21 @@ void loop() {
     unsigned long pulseInterval = currentTime - lastPulseTime;
     if (pulseInterval > 0) {
       externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
+      if (externalBPM > 299) {                    // Limit BPM to avoid high speed issues
+        externalBPM = 300;
+      }
+      period = 60000 / externalBPM / 4;
     }
     lastPulseTime = currentTime;
   }
+
 
   // Switch to internal clock if no clock input received for set duration.
   if (internalClock && (millis() - internalClockTimer >= period)) {
     beat_start = true;
     internalClockTimer = millis();
   }
+  
 
   if (beat_start) {
     gate_timer = millis();
@@ -485,36 +481,7 @@ void loop() {
     }
 
     // Output gate signal
-    for (int i = 0; i < MAX_CHANNELS; i++) {
-      if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
-        switch (i) {
-          case 0:
-            OUTPUT1::setOutput(1);
-            LED1::setOutput(1);
-            break;
-          case 1:
-            OUTPUT2::setOutput(1);
-            LED2::setOutput(1);
-            break;
-          case 2:
-            OUTPUT3::setOutput(1);
-            LED3::setOutput(1);
-            break;
-          case 3:
-            OUTPUT4::setOutput(1);
-            LED4::setOutput(1);
-            break;
-          case 4:
-            OUTPUT5::setOutput(1);
-            LED5::setOutput(1);
-            break;
-          case 5:
-            OUTPUT6::setOutput(1);
-            LED6::setOutput(1);
-            break;
-        }
-      }
-    }
+    outputGateSignals();
 
     disp_refresh = true;  // Updates the display where the trigger was entered.
 
@@ -530,9 +497,9 @@ void loop() {
         }
       }
     }
-  } 
+  }
 
-  
+
   if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
     OUTPUT1::setOutput(0);
     OUTPUT2::setOutput(0);
@@ -599,8 +566,48 @@ void initDisplay() {
 #endif
 }
 
+void outputGateSignals() {
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
+      switch (i) {
+        case 0:
+          OUTPUT1::setOutput(1);
+          LED1::setOutput(1);
+          break;
+        case 1:
+          OUTPUT2::setOutput(1);
+          LED2::setOutput(1);
+          break;
+        case 2:
+          OUTPUT3::setOutput(1);
+          LED3::setOutput(1);
+          break;
+        case 3:
+          OUTPUT4::setOutput(1);
+          LED4::setOutput(1);
+          break;
+        case 4:
+          OUTPUT5::setOutput(1);
+          LED5::setOutput(1);
+          break;
+        case 5:
+          OUTPUT6::setOutput(1);
+          LED6::setOutput(1);
+          break;
+      }
+    }
+  }
+}
+
+bool isClockRunning() {
+  return internalClock || (millis() - last_clock_input < period);
+}
+
 void onEncoderClicked(EncoderButton &eb) {
-  force_refresh = true;
+
+    if (!isClockRunning()) {
+    force_refresh = true; // this force refresh introduces skips / pauses in the sequence since display updates are slow
+  }
 
   if (showOverlay) {
     switch (selected_menu) {
@@ -687,7 +694,7 @@ void onEncoderRotation(EncoderButton &eb) {
 
     if (selected_menu == MENU_TEMPO) {
       tempo += acceleratedIncrement;
-      tempo = constrain(tempo, 30, 200);
+      tempo = constrain(tempo, 40, 240);
       period = 60000 / tempo / 4;
     }
 
@@ -703,7 +710,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   if (increment == 0) return;
   disp_refresh = true;
 
- int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
+  int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
   // Handle channel muting/unmuting in MENU_ALL_MUTE mode
@@ -749,54 +756,26 @@ void onEncoderPressedRotation(EncoderButton &eb) {
       playing_step[i] = (playing_step[i] + acceleratedIncrement + currentConfig.limit[i]) % currentConfig.limit[i];
     }
     if (!internalClock && millis() - last_clock_input > period) {
-    // Trigger outputs like clock pulse
-    for (int i = 0; i < MAX_CHANNELS; i++) {
-      if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
-        switch (i) {
-          case 0:
-            OUTPUT1::setOutput(1);
-            LED1::setOutput(1);
-            break;
-          case 1:
-            OUTPUT2::setOutput(1);
-            LED2::setOutput(1);
-            break;
-          case 2:
-            OUTPUT3::setOutput(1);
-            LED3::setOutput(1);
-            break;
-          case 3:
-            OUTPUT4::setOutput(1);
-            LED4::setOutput(1);
-            break;
-          case 4:
-            OUTPUT5::setOutput(1);
-            LED5::setOutput(1);
-            break;
-          case 5:
-            OUTPUT6::setOutput(1);
-            LED6::setOutput(1);
-            break;
-        }
-      }
+
+      // Output gate signal
+      outputGateSignals();
+
+      delay(10);
+      OUTPUT1::setOutput(0);
+      OUTPUT2::setOutput(0);
+      OUTPUT3::setOutput(0);
+      OUTPUT4::setOutput(0);
+      OUTPUT5::setOutput(0);
+      OUTPUT6::setOutput(0);
+      LED1::setOutput(0);
+      LED2::setOutput(0);
+      LED3::setOutput(0);
+      LED4::setOutput(0);
+      LED5::setOutput(0);
+      LED6::setOutput(0);
+
+      return;
     }
-
-    delay(10);
-    OUTPUT1::setOutput(0);
-    OUTPUT2::setOutput(0);
-    OUTPUT3::setOutput(0);
-    OUTPUT4::setOutput(0);
-    OUTPUT5::setOutput(0);
-    OUTPUT6::setOutput(0);
-    LED1::setOutput(0);
-    LED2::setOutput(0);
-    LED3::setOutput(0);
-    LED4::setOutput(0);
-    LED5::setOutput(0);
-    LED6::setOutput(0);
-
-    return;
-  }
     return;
   }
 
@@ -999,8 +978,9 @@ void drawTopMenuRight(TopMenu select_ch) {
     case MENU_RANDOM_ADVANCE: rightMenu('R', 'N', 'D', ' '); break;
     case MENU_SAVE: rightMenu('S', ' ', ' ', ' '); break;
     case MENU_LOAD: rightMenu('L', ' ', ' ', ' '); break;
-    case MENU_ALL_RESET:
-    case MENU_ALL_MUTE: rightMenu('A', 'L', 'L', ' '); break;
+    case MENU_PRESET: rightMenu('P', ' ', ' ', ' '); break;
+    case MENU_ALL_RESET: rightMenu('R', ' ', ' ', ' '); break;
+    case MENU_ALL_MUTE: rightMenu('M', ' ', ' ', ' '); break;
     case MENU_RAND: rightMenu('X', ' ', ' ', ' '); break;
     case MENU_TEMPO:
       if (internalClock) {
@@ -1035,7 +1015,7 @@ void drawModeMenu(TopMenu select_ch) {
     case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;
     case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;
     case MENU_PRESET: leftMenu('P', 'R', 'S', 'T'); break;
-    case MENU_TEMPO: leftMenu(' ', 'C', 'L', 'K'); break;
+    case MENU_TEMPO: leftMenu('*', 'C', 'L', 'K'); break;
     case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;
     default: break;
   }
@@ -1141,8 +1121,8 @@ void OLED_display() {
     drawEuclideanRhythms();
   }
 
-  // Draw top-level menu overlays while encoder is pressed.
-  if (showOverlay) {  // NOTE: We can remove this check to make the overlay visible without holding encoder.
+  // Draw top-level menu overlays 
+  if (showOverlay) {  
     if (selected_setting == SETTING_TOP_MENU && selected_menu == MENU_PRESET) {
       drawPresetSelection();
     }
@@ -1347,7 +1327,7 @@ void drawPresetSelection() {
 
 void drawTempo() {
   // Display selected slot
-  int16_t x1 = 10, y1 = 10; 
+  int16_t x1 = 10, y1 = 10;
   uint16_t w = 108, h = 44;  // Increased width and height
   uint16_t b = 4;
   uint16_t b2 = 8;
