@@ -387,7 +387,7 @@ void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
 
 void onOverlayTimeout(EncoderButton &eb) {
   showOverlay = false;
-  force_refresh = true;
+  disp_refresh = true;
 }
 
 void setup() {
@@ -408,7 +408,7 @@ void setup() {
 // boot logo animation only on nano for now
 #if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
   drawAnimation();
-  delay(1500);
+  delay(1200);
 #endif
 
   checkAndInitializeSettings();
@@ -449,7 +449,8 @@ void loop() {
   // Handle reset input
   if (old_rst_in == 0 && rst_in == 1) {
     resetSeq();
-    force_refresh = true;
+    //force_refresh = true;
+    disp_refresh = true;
   }
 
   // External clock detection and response
@@ -469,12 +470,13 @@ void loop() {
     lastPulseTime = currentTime;
   }
 
-
+ 
   // Switch to internal clock if no clock input received for set duration.
   if (internalClock && (millis() - internalClockTimer >= period)) {
     beat_start = true;
     internalClockTimer = millis();
   }
+
 
 
   if (beat_start) {
@@ -706,7 +708,7 @@ void onEncoderRotation(EncoderButton &eb) {
 
     if (selected_menu == MENU_TEMPO) {
       tempo += acceleratedIncrement;
-      tempo = constrain(tempo, 40, 200);
+      tempo = constrain(tempo, 40, 240); // This is the tempo range that is max recommended
       period = 60000 / tempo / 4;
     }
     // nudge the sequencer ( dj style) when overlay is active
@@ -917,6 +919,7 @@ void saveToEEPROM(int slot) {
   } else {
     // Handle error
     printDebugMessage("EEPROM Save Error");
+    return;
   }
 }
 
@@ -1008,6 +1011,7 @@ void rightMenu(char c1, char c2, char c3, char c4) {
 }
 
 void drawTopMenuRight(TopMenu select_ch) {
+  if (showOverlay) return;  // Exit
   switch (select_ch) {
     case MENU_CH_1: rightMenu('1', 'H', 'O', ' '); break;
     case MENU_CH_2: rightMenu('2', 'H', 'O', ' '); break;
@@ -1035,6 +1039,7 @@ void drawTopMenuRight(TopMenu select_ch) {
 
 // left side menue - Channel Settings
 void drawChannelEditMenu(TopMenu select_ch, Setting select_menu) {
+  if (showOverlay) return;  // Exit
   switch (select_menu) {
     case SETTING_HITS: leftMenu('H', 'I', 'T', 'S'); break;
     case SETTING_OFFSET: leftMenu('O', 'F', 'F', 'S'); break;
@@ -1049,6 +1054,7 @@ void drawChannelEditMenu(TopMenu select_ch, Setting select_menu) {
 
 // left side menue - Menu Options
 void drawModeMenu(TopMenu select_ch) {
+  if (showOverlay) return;  // Exit
   switch (select_ch) {
     case MENU_SAVE: leftMenu('S', 'A', 'V', 'E'); break;
     case MENU_LOAD: leftMenu('L', 'O', 'A', 'D'); break;
@@ -1085,6 +1091,7 @@ void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max
 }
 
 void drawSelectionIndicator(Setting select_menu) {
+  if (showOverlay) return;
   if (select_menu == SETTING_TOP_MENU) display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
   else if (select_menu == SETTING_HITS) display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
   else if (select_menu == SETTING_OFFSET) display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
@@ -1110,9 +1117,8 @@ void drawStepDots(const SlotConfiguration &currentConfig) {
 
 void OLED_display() {
   bool should_refresh = force_refresh || (disp_refresh && (millis() > last_refresh + MIN_REFRESH_DURATION));
-  if (!should_refresh) {
-    return;
-  }
+  if (!should_refresh) return;
+
   disp_refresh = false;
   force_refresh = false;
   last_refresh = millis();
@@ -1178,6 +1184,7 @@ void OLED_display() {
 }
 
 void drawEuclideanRhythms() {
+  if (showOverlay) return;  // Exit
   // draw hits line : 2~16hits if not muted
   int buf_count = 0;
   for (int k = 0; k < MAX_CHANNELS; k++) {  // Iterate over each channel
@@ -1251,6 +1258,8 @@ void drawEuclideanRhythms() {
     int x_base = graph_x[ch];
     int y_base = graph_y[ch] + 8;
 
+    /*
+    // Disabled for testing performance
     // Draw hits info  if not muted only
     if (currentConfig.mute[ch] == 0 && currentConfig.hits[ch] > 9 && selected_setting != SETTING_LIMIT && selected_setting != SETTING_MUTE) {  // Display only if there is space in the UI
       if (x_base + 10 < 120 && y_base < 56) {
@@ -1260,6 +1269,7 @@ void drawEuclideanRhythms() {
         display.println('H');
       }
     }
+    */
     // draw selected parameter UI for currently active channel when editing
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
@@ -1284,6 +1294,7 @@ void drawEuclideanRhythms() {
 
 
 void drawProbabilityConfig() {
+  if (selected_setting != SETTING_PROB) return;  // Exit early 
   for (int ch = 0; ch < MAX_CHANNELS; ch++) {
     int barWidth = 4;
     int maxHeight = 15;
@@ -1309,8 +1320,8 @@ void drawProbabilityConfig() {
     display.setCursor(text_x, text_y);
     display.print(currentConfig.probability[ch]);
 
-    display.drawRect(outerX, outerY, outerWidth, outerHeight, WHITE);
-    display.fillRect(bar_x, startY, barWidth, barHeight, WHITE);
+    display.drawRoundRect(outerX, outerY, outerWidth, outerHeight, 2, WHITE);
+    display.fillRoundRect(bar_x, startY, barWidth, barHeight, 2, WHITE);
   }
 }
 
