@@ -696,21 +696,22 @@ void onEncoderRotation(EncoderButton &eb) {
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
   // Only handle setting navigation if not all muted and the overlay is not shown.
-  if (!allMutedFlag && !showOverlay) handleSettingNavigation(acceleratedIncrement);
+  if (!allMutedFlag && !showOverlay) handleSettingNavigation(increment);
 
   // Overlay shown menu adjustments.
   else if (selected_setting == SETTING_TOP_MENU && showOverlay) {
 
     if (selected_menu == MENU_PRESET) {
       // Handle preset selection
-      selected_preset = (selected_preset + acceleratedIncrement + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
+      selected_preset = (selected_preset + increment + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
     }
 
     if (selected_menu == MENU_TEMPO) {
       tempo += acceleratedIncrement;
-      tempo = constrain(tempo, 40, 240); // This is the tempo range that is max recommended
+      tempo = constrain(tempo, 40, 240); //  tempo range that is working / recommended
       period = 60000 / tempo / 4;
     }
+    /*
     // nudge the sequencer ( dj style) when overlay is active
     if (selected_menu == MENU_TEMPO && showOverlay) {
       for (int i = 0; i < MAX_CHANNELS; i++) {
@@ -739,10 +740,11 @@ void onEncoderRotation(EncoderButton &eb) {
       }
       return;
     }
+    */
 
     if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
       // EEPROM slot selection for saving or loading
-      selected_slot = (selected_slot + acceleratedIncrement + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
+      selected_slot = (selected_slot + increment + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
     }
   }
 }
@@ -792,6 +794,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     return;  // Exit early
   }
 
+/*
   // nudge the sequencer ( dj style)
   if (selected_menu == MENU_TEMPO) {
     for (int i = 0; i < MAX_CHANNELS; i++) {
@@ -820,10 +823,11 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     }
     return;
   }
+  */
 
   // Handle channel switching only when in specific modes
   if (selected_setting != SETTING_TOP_MENU) {
-    selected_menu = static_cast<TopMenu>((selected_menu + acceleratedIncrement + MENU_LAST) % MENU_LAST);
+    selected_menu = static_cast<TopMenu>((selected_menu + increment + MENU_LAST) % MENU_LAST);
     // Ensure the selected_menu is within the range of channels
     if (selected_menu > MENU_CH_6) {
       selected_menu = MENU_CH_1;
@@ -833,7 +837,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 
   if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
     // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
-    currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + acceleratedIncrement + 17) % 17;
+    currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + increment + 17) % 17;
   } else if (selected_menu == MENU_RAND) {
     // Check rotation direction to call appropriate random change function
     if (increment > 0) {
@@ -1138,8 +1142,8 @@ void OLED_display() {
   }
 
   // OLED display for Euclidean rhythm settings
-  // Draw setting menu (WIP)
-  // select_ch are the channels and >5 the modes -> random advance, save, load, global mute, sequence reset, ..
+  // Draw setting menu 
+  // select_ch are the channels and >5 the modes
   // select_menu are parameters and functions for each single channel (hits,offs,limit,mute,rest,random,probability)
 
   // Characters to be displayed in right side Menu
