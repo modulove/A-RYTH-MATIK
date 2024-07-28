@@ -40,7 +40,7 @@
 // Configuration flags
 //#define ENCODER_REVERSED
 //#define ROTATE_PANEL
-//#define DISABLE_BOOT_LOGO
+#define DISABLE_BOOT_LOGO
 
 #if defined(__LGT8FX8P__)
 #define LGT8FX_BOARD
@@ -130,8 +130,8 @@ enum Setting {
 };
 
 // For debug / UI
-#define FIRMWARE_MAGIC "EUCLID09"
-#define FIRMWARE_MAGIC_ADDRESS 0  // Store firmware magic (read with debug fw)
+#define FIRMWARE_MAGIC "EUCLID10"
+#define FIRMWARE_MAGIC_ADDRESS 0  // Store firmware magic (read with debug fw!)
 
 // OLED
 #define OLED_ADDRESS 0x3C
@@ -179,7 +179,7 @@ const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }
 const byte MAX_CHANNELS = 6;
 const byte MAX_STEPS = 16;
 const byte MAX_PATTERNS = 17;
-const int MIN_REFRESH_DURATION = 250;  // Used by fast inputs like encoder rotation to throttle the display refresh.
+const int MIN_REFRESH_DURATION = 375;  // 250;  // 125;  // Used by fast inputs like encoder rotation to throttle the display refresh. (3 steps)
 unsigned long gate_timer = 0;
 unsigned long last_clock_input = 0;
 unsigned long internalClockTimer = 0;
@@ -369,8 +369,7 @@ void drawAnimation() {
 // Unified random change function
 void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
   for (int k = 0; k < MAX_CHANNELS; k++) {
-    if (!allChannels && k != select_ch) continue;  // Skip if not all channels and not the selected channel
-
+    if (!allChannels && k != select_ch) return;  // exit early
     if (pgm_read_byte(&hit_occ[k]) >= random(1, 100)) {
       currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
     }
@@ -396,7 +395,7 @@ void setup() {
   encoder.setRateLimit(100);
   encoder.setIdleTimeout(5000);
   encoder.setIdleHandler(onOverlayTimeout);
-  encoder.setLongClickDuration(500);
+  encoder.setLongClickDuration(375);
   encoder.setClickHandler(onEncoderClicked);
   encoder.setLongClickHandler(onEncoderLongClicked);  // Add long click handler
   encoder.setEncoderHandler(onEncoderRotation);
@@ -438,7 +437,7 @@ void setup() {
 
 void loop() {
   encoder.update();  // Process Encoder & button updates
-  display.fillScreen(BLACK);
+  //display.fillScreen(BLACK);
 
   updateRythm();
 
@@ -467,17 +466,15 @@ void loop() {
       }
       period = 60000 / externalBPM / 4;
     }
+
     lastPulseTime = currentTime;
   }
 
- 
   // Switch to internal clock if no clock input received for set duration.
   if (internalClock && (millis() - internalClockTimer >= period)) {
     beat_start = true;
     internalClockTimer = millis();
   }
-
-
 
   if (beat_start) {
     gate_timer = millis();
@@ -621,50 +618,36 @@ void onEncoderClicked(EncoderButton &eb) {
   disp_refresh = true;  // just in case
 
   if (showOverlay) {
+    onOverlayTimeout(eb);  // Handle click to exit overlay
+  } else {
     switch (selected_menu) {
-      case MENU_PRESET:
-        loadDefaultConfig(&currentConfig, selected_preset);
-        currentConfig.lastLoadedFromPreset = true;  // Indicates that the current config was loaded from a preset
-        tempo = currentConfig.tempo;                // Use the preset's tempo
-        period = 60000 / tempo / 4;                 // Update period with loaded tempo
+      // Channel-specific actions
+      case MENU_CH_1:
+      case MENU_CH_2:
+      case MENU_CH_3:
+      case MENU_CH_4:
+      case MENU_CH_5:
+      case MENU_CH_6:
+        // Click should only advance selected setting when a channel top menu is selected.
+        selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
+        break;
+      // Mode-specific actions
+      case MENU_ALL_RESET:
+        resetSeq();
+        break;
+      case MENU_ALL_MUTE:
+        toggleAllMutes();
+        break;
+      case MENU_RAND:
+        Random_change(false, true);
         break;
       case MENU_SAVE:
-        saveToEEPROM(selected_slot);
-        break;
       case MENU_LOAD:
-        loadFromEEPROM(selected_slot);
-        currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
+      case MENU_PRESET:
+      case MENU_TEMPO:
+        showOverlay = !showOverlay;
         break;
     }
-  }
-
-  switch (selected_menu) {
-    // Channel-specific actions
-    case MENU_CH_1:
-    case MENU_CH_2:
-    case MENU_CH_3:
-    case MENU_CH_4:
-    case MENU_CH_5:
-    case MENU_CH_6:
-      // Click should only advance selected setting when a channel top menu is selected.
-      selected_setting = static_cast<Setting>((selected_setting + 1) % SETTING_LAST);
-      break;
-    // Mode-specific actions
-    case MENU_ALL_RESET:
-      resetSeq();
-      break;
-    case MENU_ALL_MUTE:
-      toggleAllMutes();
-      break;
-    case MENU_RAND:
-      Random_change(false, true);
-      break;
-    case MENU_SAVE:
-    case MENU_LOAD:
-    case MENU_PRESET:
-    case MENU_TEMPO:
-      showOverlay = !showOverlay;
-      break;
   }
 }
 
@@ -673,8 +656,28 @@ void onEncoderLongClicked(EncoderButton &eb) {
   if (!isClockRunning()) {
     force_refresh = true;
   }
-  //disp_refresh = true; // could have done this.
-  if (selected_menu == MENU_TEMPO) {
+  disp_refresh = true;  // could have done this.
+
+  if (showOverlay) {
+    switch (selected_menu) {
+      case MENU_PRESET:
+        loadDefaultConfig(&currentConfig, selected_preset);
+        currentConfig.lastLoadedFromPreset = true;  // Indicates that the current config was loaded from a preset
+        tempo = currentConfig.tempo;                // Use the preset's tempo
+        period = 60000 / tempo / 4;                 // Update period with loaded tempo
+        showOverlay = false;                        // Turn off the overlay
+        break;
+      case MENU_SAVE:
+        saveToEEPROM(selected_slot);
+        showOverlay = false;  // Turn off the overlay
+        break;
+      case MENU_LOAD:
+        loadFromEEPROM(selected_slot);
+        currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
+        showOverlay = false;                         // Turn off the overlay
+        break;
+    }
+  } else if (selected_menu == MENU_TEMPO) {
     internalClock = !internalClock;  // Toggle the internal clock state
     showOverlay = true;              // Show overlay to indicate clock state change
     if (internalClock) period = 60000 / tempo / 4;
@@ -682,10 +685,9 @@ void onEncoderLongClicked(EncoderButton &eb) {
     // Mute the selected channel
     int channelIndex = selected_menu - MENU_CH_1;
     currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
-  } else if (showOverlay && (selected_menu == MENU_PRESET || selected_menu == MENU_SAVE || selected_menu == MENU_LOAD)) {
-    onOverlayTimeout(eb);  // Handle long click to exit overlay
   }
 }
+
 
 void onEncoderRotation(EncoderButton &eb) {
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
@@ -696,7 +698,7 @@ void onEncoderRotation(EncoderButton &eb) {
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
   // Only handle setting navigation if not all muted and the overlay is not shown.
-  if (!allMutedFlag && !showOverlay) handleSettingNavigation(increment);
+  if (!allMutedFlag && !showOverlay) handleSettingNavigation(acceleratedIncrement);
 
   // Overlay shown menu adjustments.
   else if (selected_setting == SETTING_TOP_MENU && showOverlay) {
@@ -707,40 +709,19 @@ void onEncoderRotation(EncoderButton &eb) {
     }
 
     if (selected_menu == MENU_TEMPO) {
+      // Increment the tempo with the accelerated increment
       tempo += acceleratedIncrement;
-      tempo = constrain(tempo, 40, 240); //  tempo range that is working / recommended
-      period = 60000 / tempo / 4;
-    }
-    /*
-    // nudge the sequencer ( dj style) when overlay is active
-    if (selected_menu == MENU_TEMPO && showOverlay) {
-      for (int i = 0; i < MAX_CHANNELS; i++) {
-        playing_step[i] = (playing_step[i] + increment + currentConfig.limit[i]) % currentConfig.limit[i];
+
+      // Ensure the tempo stays within the range of 40 to 240 BPM
+      if (tempo < 40) {
+        tempo = 40;
+      } else if (tempo > 240) {
+        tempo = 240;
       }
-      if (!internalClock && millis() - last_clock_input > period) {
 
-        // Output gate signal
-        outputGateSignals();
-
-        delay(10);
-        OUTPUT1::setOutput(0);
-        OUTPUT2::setOutput(0);
-        OUTPUT3::setOutput(0);
-        OUTPUT4::setOutput(0);
-        OUTPUT5::setOutput(0);
-        OUTPUT6::setOutput(0);
-        LED1::setOutput(0);
-        LED2::setOutput(0);
-        LED3::setOutput(0);
-        LED4::setOutput(0);
-        LED5::setOutput(0);
-        LED6::setOutput(0);
-
-        return;
-      }
-      return;
+      // Calculate the period based on the tempo
+      period = 60000 / (tempo * 4);
     }
-    */
 
     if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
       // EEPROM slot selection for saving or loading
@@ -793,37 +774,6 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 
     return;  // Exit early
   }
-
-/*
-  // nudge the sequencer ( dj style)
-  if (selected_menu == MENU_TEMPO) {
-    for (int i = 0; i < MAX_CHANNELS; i++) {
-      playing_step[i] = (playing_step[i] + increment + currentConfig.limit[i]) % currentConfig.limit[i];
-    }
-    if (!internalClock && millis() - last_clock_input > period) {
-
-      // Output gate signal
-      outputGateSignals();
-
-      delay(10);
-      OUTPUT1::setOutput(0);
-      OUTPUT2::setOutput(0);
-      OUTPUT3::setOutput(0);
-      OUTPUT4::setOutput(0);
-      OUTPUT5::setOutput(0);
-      OUTPUT6::setOutput(0);
-      LED1::setOutput(0);
-      LED2::setOutput(0);
-      LED3::setOutput(0);
-      LED4::setOutput(0);
-      LED5::setOutput(0);
-      LED6::setOutput(0);
-
-      return;
-    }
-    return;
-  }
-  */
 
   // Handle channel switching only when in specific modes
   if (selected_setting != SETTING_TOP_MENU) {
@@ -1089,7 +1039,7 @@ void checkAndInitializeSettings() {
 // Drawing random advance indicator
 void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max) {  // Change to const int*
   if (62 - pgm_read_word(&bar_max[bar_select]) * 2 >= 0 && 64 - bar_now * 2 >= 0) {
-    display.drawRect(1, 62 - pgm_read_word(&bar_max[bar_select]) * 2, 6, pgm_read_word(&bar_max[bar_select]) * 2 + 2, WHITE);
+    display.drawRoundRect(1, 62 - pgm_read_word(&bar_max[bar_select]) * 2, 6, pgm_read_word(&bar_max[bar_select]) * 2 + 2, 2, WHITE);
     display.fillRect(1, 64 - bar_now * 2, 6, bar_now * 2, WHITE);
   }
 }
@@ -1108,6 +1058,7 @@ void drawSelectionIndicator(Setting select_menu) {
 }
 
 void drawStepDots(const SlotConfiguration &currentConfig) {
+  if (showOverlay) return;
   for (int k = 0; k < MAX_CHANNELS; k++) {
     for (int j = 0; j < currentConfig.limit[k]; j++) {
       int x_pos = x16[j % 16] + graph_x[k];
@@ -1132,17 +1083,17 @@ void OLED_display() {
   // Check if all channels are muted
   if (allMutedFlag) {
     // Draw "MUTE" message in the center of the screen
-    display.setTextSize(2);                                                       // no large letters for now to avoid ugly artifacts
+    display.setTextSize(2);
     display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);  // Center text
     display.println(F("MUTE"));
-    display.drawRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, WHITE);  // Draw border around text
+    display.drawRoundRect((SCREEN_WIDTH - 4 * 12) / 2 - 4, (SCREEN_HEIGHT - 2 * 8) / 2 - 4, 4 * 12 + 8, 2 * 8 + 8, 2, WHITE);  // Draw border around text
     display.display();
     display.setTextSize(1);  // Reset text size
-    return;                  // Exit function early to avoid drawing other elements
+    return;
   }
 
   // OLED display for Euclidean rhythm settings
-  // Draw setting menu 
+  // Draw setting menu
   // select_ch are the channels and >5 the modes
   // select_menu are parameters and functions for each single channel (hits,offs,limit,mute,rest,random,probability)
 
@@ -1262,9 +1213,9 @@ void drawEuclideanRhythms() {
     int x_base = graph_x[ch];
     int y_base = graph_y[ch] + 8;
 
-    /*
+
     // Disabled for testing performance
-    // Draw hits info  if not muted only
+    // Draw hits info if not muted only
     if (currentConfig.mute[ch] == 0 && currentConfig.hits[ch] > 9 && selected_setting != SETTING_LIMIT && selected_setting != SETTING_MUTE) {  // Display only if there is space in the UI
       if (x_base + 10 < 120 && y_base < 56) {
         display.setCursor(x_base + 10, y_base);  // Adjust position
@@ -1273,7 +1224,7 @@ void drawEuclideanRhythms() {
         display.println('H');
       }
     }
-    */
+
     // draw selected parameter UI for currently active channel when editing
     if (selected_setting != SETTING_TOP_MENU) {
       switch (selected_setting) {
@@ -1296,9 +1247,8 @@ void drawEuclideanRhythms() {
   }
 }
 
-
 void drawProbabilityConfig() {
-  if (selected_setting != SETTING_PROB) return;  // Exit early 
+  if (selected_setting != SETTING_PROB) return;  // Exit early
   for (int ch = 0; ch < MAX_CHANNELS; ch++) {
     int barWidth = 4;
     int maxHeight = 15;
@@ -1331,94 +1281,81 @@ void drawProbabilityConfig() {
 
 //  Display selected slot
 void drawSaveLoadSelection() {
-  int16_t x1 = 10, y1 = 10;  // Starting coordinates
-  uint16_t w = 108, h = 44;  // Increased width and height
-  uint16_t b = 4;
-  uint16_t b2 = 8;
-
-  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
-  display.drawRect(x1, y1, w, h, WHITE);
-
-  display.setCursor(x1 + 12, y1 + b);
-  display.print(selected_menu == MENU_SAVE ? F("Save to Slot:") : F("Load from Slot:"));
-
-  display.setCursor(x1 + w / 2 - 12, y1 + h / 2 - 8);
+  display.setCursor(24, 2);
+  display.print(selected_menu == MENU_SAVE ? F("Save to Slot") : F("Load from Slot"));
+  display.setCursor(58, 24);
   display.setTextSize(2);
   display.print(selected_slot + 1, DEC);
   display.setTextSize(1);
-
-  // Add EXIT option display
-  display.setCursor(x1 + b, y1 + h - 10);
-  display.print(F("HOLD to EXIT menu"));
+  display.setCursor(20, SCREEN_HEIGHT - 10);
+  display.print(selected_menu == MENU_SAVE ? F("long PRESS Save") : F("long PRESS Load"));
 }
 
 void drawPresetSelection() {
-  // Display selected preset name
   char presetName[10];
   memcpy_P(&presetName, &defaultSlots[selected_preset].name, sizeof(presetName));
-
-  int16_t x1 = 10, y1 = 10;
-  uint16_t w = 108, h = 44;
-  uint16_t b = 4;
-  uint16_t b2 = 8;
-
-  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);  // clear screen underneath
-  display.drawRect(x1, y1, w, h, WHITE);
-
-  display.setCursor(x1 + 12, y1 + b);
-  display.println(F("Select Preset:"));
-
-  // Shift cursor down a few pixels.
-  y1 += 12;
-  display.setCursor(x1 + b, y1 + b);
+  display.setCursor(24, 2);
+  display.println(F("Select Preset"));
+  display.setCursor(24, 24);
   display.setTextSize(2);
   display.print(presetName);
   display.setTextSize(1);
-
-  // Add EXIT option display
-  display.setCursor(x1 + b, y1 + h - 22);
-  display.print(F("HOLD to EXIT menu"));
+  display.setCursor(10, SCREEN_HEIGHT - 10);
+  display.print(F("long PRESS to LOAD"));
 }
 
 void drawTempo() {
-  // Display selected slot
   int16_t x1 = 10, y1 = 10;
   uint16_t w = 108, h = 44;  // Increased width and height
   uint16_t b = 4;
   uint16_t b2 = 8;
 
-  display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);
-  display.drawRect(x1, y1, w, h, WHITE);
+  // Clear screen underneath and draw the rectangle
+  //display.fillRect(x1 - b, y1 - b, w + b2, h + b2, BLACK);
+  //display.drawRoundRect(x1, y1, w, h, 2, WHITE);
 
   if (internalClock) {
-    display.setCursor(46, 30);
-    display.setTextSize(2);
-    display.print(tempo + 1, DEC);
-    display.setTextSize(1);
-    display.setCursor(x1 + 12, y1 + b);
+    display.setCursor(x1 + 12, 8);
     display.print(F("Dial in Tempo"));
+
+    // Calculate the width of the filled portion based on the tempo
+    float tempoRatio = (float)(tempo - 40) / (240 - 40);
+    int filledWidth = tempoRatio * (w - 22);  // margin on each side
+
+    // Draw the rounded rectangle
+    display.drawRoundRect(x1 + 10, y1 + h / 2 - 5, w - 20, 10, 2, WHITE);
+
+    // Draw the filled portion
+    display.fillRoundRect(x1 + 11, y1 + h / 2 - 3, filledWidth, 6, 2, WHITE);
+
+    display.setCursor(12, 45);
+    display.print(F("40"));
+
+    display.setCursor(50, 45);
+    display.print(tempo);
+
+    display.setCursor(95, 45);
+    display.print(F("240"));
+
   } else {
     if (externalBPM == 0) {
-      display.setCursor((SCREEN_WIDTH - 12 * 6) / 2, y1 + b);
+      display.setCursor((SCREEN_WIDTH - 12 * 6) / 2, 10);
       display.setTextSize(1);
-      display.print(F("Patch CLK !"));
-
+      display.print(F("Patch CLK or"));
       display.setCursor((SCREEN_WIDTH - 14 * 6) / 2, y1 + h / 2 - 6);
       display.print(F("long press for"));
-
       display.setCursor((SCREEN_WIDTH - 8 * 6) / 2, y1 + h / 2 + 8);
       display.print(F("INT CLK"));
     } else {
-      display.setCursor(42, 30);
-      display.setTextSize(2);
+      display.setCursor(40, 10);
+      display.print(F("Ext BPM"));
+      display.setCursor(55, 35);
+      //display.setTextSize(2);
       display.print(externalBPM, DEC);
       display.setTextSize(1);
-      display.setCursor(x1 + b, y1 + b);
-      display.print(F("Ext BPM"));
     }
   }
 }
-
 
 void updateRythm() {
   for (int i = 0; i < MAX_CHANNELS; i++) {
