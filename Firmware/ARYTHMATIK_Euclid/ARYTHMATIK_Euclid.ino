@@ -50,8 +50,8 @@
 #define NUM_MEMORY_SLOTS 10
 #define NUM_PRESETS 10  // 10 for LGT8FX8P
 #else
-#define NUM_MEMORY_SLOTS 24
-#define NUM_PRESETS 24  // All presets for Nano
+#define NUM_MEMORY_SLOTS 20
+#define NUM_PRESETS 20  // All presets for Nano
 #endif
 
 #ifdef ROTATE_PANEL
@@ -176,9 +176,9 @@ byte line_ybuf[17];
 const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
 
 //Sequence variables
-const byte MAX_CHANNELS = 6;
-const byte MAX_STEPS = 16;
-const byte MAX_PATTERNS = 17;
+constexpr uint8_t MAX_CHANNELS = 6;
+constexpr uint8_t MAX_STEPS = 16;
+constexpr uint8_t MAX_PATTERNS = 17;
 const int MIN_REFRESH_DURATION = 375;  // 250;  // 125;  // Used by fast inputs like encoder rotation to throttle the display refresh. (3 steps)
 unsigned long gate_timer = 0;
 unsigned long last_clock_input = 0;
@@ -206,12 +206,12 @@ const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
 bool offset_buf[MAX_CHANNELS][MAX_STEPS];  //offset buffer , Stores the offset result
 
 // random assign
-const byte hit_occ[MAX_CHANNELS] PROGMEM = { 5, 1, 20, 20, 40, 80 };   // random change rate of occurrence
-const byte off_occ[MAX_CHANNELS] PROGMEM = { 1, 3, 20, 30, 40, 20 };   // random change rate of occurrence
-const byte mute_occ[MAX_CHANNELS] PROGMEM = { 0, 2, 20, 20, 20, 20 };  // random change rate of occurrence
-const byte hit_rng_max[MAX_CHANNELS] PROGMEM = { 6, 5, 8, 4, 4, 6 };   // random change range of max
-const byte hit_rng_min[MAX_CHANNELS] PROGMEM = { 3, 2, 2, 1, 1, 1 };   // random change range of min
-const int bar_max[MAX_CHANNELS] PROGMEM = { 2, 4, 6, 8, 12, 16 };      // control
+const PROGMEM uint8_t hit_occ[MAX_CHANNELS] = { 5, 1, 20, 20, 40, 80 };
+const PROGMEM uint8_t off_occ[MAX_CHANNELS] = { 1, 3, 20, 30, 40, 20 };
+const PROGMEM uint8_t mute_occ[MAX_CHANNELS] = { 0, 2, 20, 20, 20, 20 };
+const PROGMEM uint8_t hit_rng_max[MAX_CHANNELS] = { 6, 5, 8, 4, 4, 6 };
+const PROGMEM uint8_t hit_rng_min[MAX_CHANNELS] = { 3, 2, 2, 1, 1, 1 };
+const int bar_max[MAX_CHANNELS] PROGMEM = { 2, 4, 6, 8, 12, 16 };  // control
 
 byte bar_now = 1;
 byte bar_select = 1;  // ToDo: selected bar needs to be saved as well!
@@ -250,76 +250,47 @@ struct SlotConfiguration {
 const SlotConfiguration defaultSlots[NUM_PRESETS] PROGMEM = {
   // Define only the first 10 presets for LGT8FX_BOARD
   { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
   { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
   { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
-  { { 2, 2, 3, 3, 3, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "BossaNva", 120 },
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 3, 6, 9, 12, 15 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Txaikvsk", 60 },
-  { { 3, 3, 3, 3, 3, 3 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "TakeFive", 90 },
+  { { 2, 2, 3, 3, 3, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "BossaN", 120 },
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Bell", 100 },
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 2, 0, 3 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Gahu", 120 },
   { { 3, 4, 3, 4, 3, 4 }, { 0, 1, 0, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Threes", 120 },
-
 // Additional presets for Arduino Nano
 #ifndef LGT8FX_BOARD
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "BellPtrn", 100 },
   { { 9, 9, 9, 9, 9, 9 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Aksak", 120 },
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "RmbClave", 120 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
+  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Rumba", 120 },
   { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Clave", 120 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Ewe", 120 },
-  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ClkDiv", 120 },
-  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Zarbi", 120 },
+    { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Zarbi", 120 },
   { { 5, 5, 5, 5, 5, 5 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Nawkht", 120 },
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "FumeF", 120 },
   { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Djembe", 120 },
   { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Gahu44", 120 },
   { { 3, 3, 3, 3, 3, 3 }, { 0, 2, 4, 1, 3, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Takita", 120 },
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 4, 1, 3, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "YorkSamai", 120 }
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ClkDiv", 120 },
 #endif
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
 byte lastUsedSlot = 0;
 
-// 'Modulove_Logo', 64x64px
+// 'Modulove_Logo', 28x32px
 const unsigned char Modulove_Logo[] PROGMEM = {
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0xf0, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x70, 0x18, 0x0f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x0c, 0x3c, 0x1c, 0x00, 0x00, 
-	0x00, 0x01, 0x80, 0x06, 0x70, 0x07, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0xc0, 0x03, 0x80, 0x00, 
-	0x00, 0x06, 0x00, 0x01, 0x80, 0x00, 0xc0, 0x00, 0x00, 0x0c, 0x00, 0x03, 0x80, 0x00, 0xc0, 0x00, 
-	0x00, 0x0c, 0x00, 0x02, 0xc0, 0x00, 0x60, 0x00, 0x00, 0x08, 0x00, 0x06, 0x40, 0x00, 0x60, 0x00, 
-	0x00, 0x18, 0x10, 0x04, 0x60, 0x00, 0x20, 0x00, 0x00, 0x18, 0x10, 0x0c, 0x60, 0x00, 0x30, 0x00, 
-	0x00, 0x18, 0x08, 0x0c, 0x60, 0x00, 0x30, 0x00, 0x00, 0x18, 0x0c, 0x0c, 0x60, 0x02, 0x30, 0x00, 
-	0x00, 0x18, 0x0e, 0x0c, 0x40, 0x04, 0x30, 0x00, 0x00, 0x18, 0x06, 0x0c, 0x40, 0x18, 0x30, 0x00, 
-	0x00, 0x08, 0x07, 0x06, 0xc0, 0x38, 0x20, 0x00, 0x00, 0x08, 0x03, 0x07, 0xc0, 0x70, 0x20, 0x00, 
-	0x00, 0x0c, 0x01, 0x83, 0xc0, 0xe0, 0x60, 0x00, 0x00, 0x04, 0x00, 0xc7, 0xff, 0xc0, 0x40, 0x00, 
-	0x00, 0x06, 0x00, 0x7e, 0x3f, 0x00, 0xc0, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 
-	0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00, 0x00, 0x01, 0x80, 0x00, 0x00, 0x01, 0x00, 0x00, 
-	0x00, 0x00, 0xc0, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x06, 0x00, 0x00, 
-	0x00, 0x00, 0x30, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x0c, 0x00, 0x00, 
-	0x00, 0x00, 0x0c, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x30, 0x00, 0x00, 
-	0x00, 0x00, 0x03, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00, 0xc0, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0xe0, 0x01, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x03, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x18, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x1c, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x07, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xf0, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x01, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe0, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x01, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x30, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x03, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x03, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xf0, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  0x00, 0x00, 0x00, 0x00, 0x03, 0xf0, 0x00, 0x00, 0x0c, 0x18, 0x7e, 0x00, 0x18, 0x05, 0x81, 0x80,
+  0x10, 0x07, 0x00, 0xc0, 0x20, 0x06, 0x00, 0x40, 0x20, 0x05, 0x00, 0x20, 0x42, 0x09, 0x00, 0x20,
+  0x42, 0x09, 0x00, 0x20, 0x41, 0x09, 0x01, 0x20, 0x41, 0x89, 0x02, 0x20, 0x40, 0x87, 0x0c, 0x20,
+  0x20, 0xc7, 0x0c, 0x20, 0x20, 0x7d, 0xf0, 0x40, 0x10, 0x00, 0x00, 0x40, 0x10, 0x00, 0x00, 0x80,
+  0x08, 0x00, 0x01, 0x80, 0x04, 0x00, 0x01, 0x00, 0x02, 0x00, 0x02, 0x00, 0x01, 0x00, 0x04, 0x00,
+  0x00, 0xc0, 0x0c, 0x00, 0x00, 0x60, 0x10, 0x00, 0x00, 0x30, 0x20, 0x00, 0x00, 0x08, 0x40, 0x00,
+  0x00, 0x04, 0x80, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x03, 0x80, 0x00, 0x00, 0x04, 0x80, 0x00,
+  0x00, 0x04, 0x40, 0x00, 0x00, 0x04, 0x40, 0x00, 0x00, 0x06, 0xc0, 0x00, 0x00, 0x03, 0x80, 0x00
 };
 
 
-//(Total bytes used to store images in PROGMEM = 1040)
+//(Total bytes used to store images in PROGMEM = 144)
 
 void printDebugMessage(const char *message) {
   display.clearDisplay();
@@ -331,19 +302,9 @@ void printDebugMessage(const char *message) {
 }
 
 void drawAnimation() {
-
   display.fillRect(0, 0, 128, 64, BLACK);
-  display.drawBitmap(32, 0, Modulove_Logo, 64, 64, WHITE);
+  display.drawBitmap(50, 16, Modulove_Logo, 28, 32, WHITE);
   display.display();
-  /*
-  // animation left to right (wortmarke)
-  for (int x = 0; x <= SCREEN_WIDTH; x += 10) {
-    display.clearDisplay();
-    display.drawBitmap(0, 0, Modulove_Logo, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
-    display.fillRect(x, 0, SCREEN_WIDTH - x, SCREEN_HEIGHT, BLACK);
-    display.display();
-  }
-  */
 }
 
 void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
@@ -627,6 +588,9 @@ void onEncoderClicked(EncoderButton &eb) {
       case MENU_RAND:
         Random_change(false, true);
         break;
+      case MENU_RANDOM_ADVANCE:
+        Random_change(false, false);
+        break;
       case MENU_SAVE:
       case MENU_LOAD:
       case MENU_PRESET:
@@ -642,35 +606,57 @@ void onEncoderLongClicked(EncoderButton &eb) {
   if (!isClockRunning()) {
     force_refresh = true;
   }
-  disp_refresh = true;  // could have done this.
+  disp_refresh = true;
 
-  if (showOverlay) {
-    switch (selected_menu) {
-      case MENU_PRESET:
+  switch (selected_menu) {
+    case MENU_PRESET:
+      if (showOverlay) {
         loadDefaultConfig(&currentConfig, selected_preset);
-        currentConfig.lastLoadedFromPreset = true;  // Indicates that the current config was loaded from a preset
-        tempo = currentConfig.tempo;                // Use the preset's tempo
-        period = 60000 / tempo / 4;                 // Update period with loaded tempo
-        showOverlay = false;                        // Turn off the overlay
-        break;
-      case MENU_SAVE:
+        currentConfig.lastLoadedFromPreset = true;
+        tempo = currentConfig.tempo;
+        period = 60000 / tempo / 4;
+        showOverlay = false;
+      }
+      break;
+
+    case MENU_SAVE:
+      if (showOverlay) {
         saveToEEPROM(selected_slot);
-        showOverlay = false;  // Turn off the overlay
-        break;
-      case MENU_LOAD:
+        showOverlay = false;
+      } else {
+        saveToEEPROM(lastUsedSlot);  // fast save option
+      }
+      break;
+
+    case MENU_LOAD:
+      if (showOverlay) {
         loadFromEEPROM(selected_slot);
-        currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
-        showOverlay = false;                         // Turn off the overlay
-        break;
-    }
-  } else if (selected_menu == MENU_TEMPO) {
-    internalClock = !internalClock;  // Toggle the internal clock state
-    showOverlay = true;              // Show overlay to indicate clock state change
-    if (internalClock) period = 60000 / tempo / 4;
-  } else if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
-    // Mute the selected channel
-    int channelIndex = selected_menu - MENU_CH_1;
-    currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
+        currentConfig.lastLoadedFromPreset = false;
+        showOverlay = false;
+      } else {
+        loadFromEEPROM(lastUsedSlot);  // fast reload option
+      }
+      break;
+
+    case MENU_TEMPO:
+      if (!showOverlay) {
+        internalClock = !internalClock;
+        showOverlay = true;
+        if (internalClock) period = 60000 / tempo / 4;
+      }
+      break;
+
+    case MENU_CH_1:
+    case MENU_CH_2:
+    case MENU_CH_3:
+    case MENU_CH_4:
+    case MENU_CH_5:
+    case MENU_CH_6:
+      if (selected_setting == SETTING_TOP_MENU) {
+        int channelIndex = selected_menu - MENU_CH_1;
+        currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
+      }
+      break;
   }
 }
 
@@ -681,39 +667,46 @@ void onEncoderRotation(EncoderButton &eb) {
   disp_refresh = true;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment
-  // optimized ?
-  //int acceleratedIncrement = increment * abs(increment);
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
   // Only handle setting navigation if not all muted and the overlay is not shown.
-  if (!allMutedFlag && !showOverlay) handleSettingNavigation(acceleratedIncrement);
+  if (!allMutedFlag && !showOverlay) {
+    handleSettingNavigation(acceleratedIncrement);
+    return;
+  }
 
   // Overlay shown menu adjustments.
-  else if (selected_setting == SETTING_TOP_MENU && showOverlay) {
+  if (selected_setting == SETTING_TOP_MENU && showOverlay) {
+    switch (selected_menu) {
+      case MENU_PRESET:
+        // Handle preset selection
+        selected_preset = (selected_preset + increment + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
+        break;
 
-    if (selected_menu == MENU_PRESET) {
-      // Handle preset selection
-      selected_preset = (selected_preset + increment + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
-    }
+      case MENU_TEMPO:
+        // Increment the tempo with the accelerated increment
+        tempo += acceleratedIncrement;
 
-    if (selected_menu == MENU_TEMPO) {
-      // Increment the tempo with the accelerated increment
-      tempo += acceleratedIncrement;
+        // Ensure the tempo stays within the range of 40 to 240 BPM
+        if (tempo < 40) {
+          tempo = 40;
+        } else if (tempo > 240) {
+          tempo = 240;
+        }
 
-      // Ensure the tempo stays within the range of 40 to 240 BPM
-      if (tempo < 40) {
-        tempo = 40;
-      } else if (tempo > 240) {
-        tempo = 240;
-      }
+        // Calculate the period based on the tempo
+        period = 60000 / (tempo * 4);
+        break;
 
-      // Calculate the period based on the tempo
-      period = 60000 / (tempo * 4);
-    }
+      case MENU_SAVE:
+      case MENU_LOAD:
+        // EEPROM slot selection for saving or loading
+        selected_slot = (selected_slot + increment + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
+        break;
 
-    if (selected_menu == MENU_SAVE || selected_menu == MENU_LOAD) {
-      // EEPROM slot selection for saving or loading
-      selected_slot = (selected_slot + increment + NUM_MEMORY_SLOTS) % NUM_MEMORY_SLOTS;
+      default:
+        // If no valid menu is selected, do nothing.
+        break;
     }
   }
 }
@@ -726,9 +719,8 @@ void onEncoderPressedRotation(EncoderButton &eb) {
   int acceleratedIncrement = increment * increment;  // Squaring the increment for quicker adjustments
   if (increment < 0) acceleratedIncrement = -acceleratedIncrement;
 
-  // Handle channel muting/unmuting in MENU_ALL_MUTE mode
   if (selected_menu == MENU_ALL_MUTE) {
-    // Calculate the current channel based on the direction of rotation
+    // Handle channel muting/unmuting in MENU_ALL_MUTE mode
     static int current_channel = 0;
     current_channel = (current_channel + increment + MAX_CHANNELS) % MAX_CHANNELS;
 
@@ -746,14 +738,12 @@ void onEncoderPressedRotation(EncoderButton &eb) {
       if (currentConfig.mute[i]) all_unmuted = false;
     }
     if (all_muted) {
-      // Start unmuting from the beginning
       current_channel = 0;
       for (int i = 0; i < MAX_CHANNELS; i++) {
         currentConfig.mute[i] = false;
       }
     }
     if (all_unmuted) {
-      // Start muting from the beginning
       current_channel = 0;
       for (int i = 0; i < MAX_CHANNELS; i++) {
         currentConfig.mute[i] = true;
@@ -763,33 +753,56 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     return;  // Exit early
   }
 
-  // Handle channel switching only when in specific modes
-  if (selected_setting != SETTING_TOP_MENU) {
-    selected_menu = static_cast<TopMenu>((selected_menu + increment + MENU_LAST) % MENU_LAST);
-    // Ensure the selected_menu is within the range of channels
-    if (selected_menu > MENU_CH_6) {
-      selected_menu = MENU_CH_1;
-    }
-    return;
-  }
+  // Handle specific modes when not in MENU_ALL_MUTE
+  switch (selected_menu) {
+    case MENU_CH_1:
+    case MENU_CH_2:
+    case MENU_CH_3:
+    case MENU_CH_4:
+    case MENU_CH_5:
+    case MENU_CH_6:
+      if (selected_setting == SETTING_TOP_MENU) {
+        // Adjust the Hits value for the selected channel to quickly edit the beat/rhythm
+        currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + increment + 17) % 17;
+      } else {
+        // Handle channel switching when in specific modes
+        selected_menu = static_cast<TopMenu>((selected_menu + increment + MENU_LAST) % MENU_LAST);
+        // Ensure the selected_menu is within the range of channels
+        if (selected_menu > MENU_CH_6) {
+          selected_menu = MENU_CH_1;
+        }
+      }
+      break;
 
-  if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
-    // Adjust the Hits value for the selected channel to more quickly edit the beat/rhythm
-    currentConfig.hits[selected_menu] = (currentConfig.hits[selected_menu] + increment + 17) % 17;
-  } else if (selected_menu == MENU_RAND) {
-    // Check rotation direction to call appropriate random change function
-    if (increment > 0) {
-      Random_change(false, true);  // Rotate CW: Random change without mute
-    } else {
-      Random_change(true, true);  // Rotate CCW: Random change with mute
-    }
-  } else if (selected_menu == MENU_RANDOM_ADVANCE) {
-    // Ensure bar_select stays within the range of 1 to 5
-    bar_select += increment;
-    if (bar_select < 1) bar_select = 6;
-    if (bar_select > 6) bar_select = 1;
+    case MENU_RAND:
+      // Check rotation direction to call appropriate random change function
+      if (increment > 0) {
+        Random_change(false, true);  // Rotate CW: Random change without mute
+      } else {
+        Random_change(true, true);  // Rotate CCW: Random change with mute
+      }
+      break;
+
+    case MENU_RANDOM_ADVANCE:
+      // Ensure bar_select stays within the range of 1 to 5
+      bar_select += increment;
+      if (bar_select < 1) bar_select = 6;
+      if (bar_select > 6) bar_select = 1;
+      break;
+
+    default:
+      // Handle other settings or ignore
+      if (selected_setting != SETTING_TOP_MENU) {
+        selected_menu = static_cast<TopMenu>((selected_menu + increment + MENU_LAST) % MENU_LAST);
+        // Ensure the selected_menu is within the range of channels
+        if (selected_menu > MENU_CH_6) {
+          selected_menu = MENU_CH_1;
+        }
+      }
+      break;
   }
 }
+
 
 void initializeCurrentConfig(bool loadDefaults = false) {
   if (loadDefaults) {
@@ -891,7 +904,7 @@ void loadFromPreset(int preset) {
 }
 
 void initializeDefaultRhythms() {
-  for (int i = 0; i < NUM_MEMORY_SLOTS; i++) {
+  for (int i = 0; i < NUM_PRESETS; i++) {
     SlotConfiguration config;
     memcpy_P(&config, &defaultSlots[i % (sizeof(defaultSlots) / sizeof(SlotConfiguration))], sizeof(SlotConfiguration));
     EEPROM.put(EEPROM_START_ADDRESS + i * CONFIG_SIZE, config);
@@ -1085,6 +1098,7 @@ void OLED_display() {
   display.display();
 }
 
+
 void drawMuteScreen() {
   display.setTextSize(2);
   display.setCursor((SCREEN_WIDTH - 4 * 12) / 2, (SCREEN_HEIGHT - 2 * 8) / 2);
@@ -1205,7 +1219,6 @@ void drawEuclideanRhythms() {
     int y_base = graph_y[ch] + 8;
 
 
-    // Disabled for testing performance
     // Draw hits info if not muted only
     if (currentConfig.mute[ch] == 0 && currentConfig.hits[ch] > 9 && selected_setting != SETTING_LIMIT && selected_setting != SETTING_MUTE) {  // Display only if there is space in the UI
       if (x_base + 10 < 120 && y_base < 56) {
