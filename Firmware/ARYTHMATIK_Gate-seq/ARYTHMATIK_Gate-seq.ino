@@ -253,7 +253,8 @@ const static word bnk4_ptn[8][12]PROGMEM = {
 
 
 void setup() {
-
+// Initialization reset
+old_reset_in = digitalRead(11);
 
  // ディスプレイの初期化
  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -535,13 +536,13 @@ void loop() {
 
 
 
- // Reset Input not working for Gate Sequencer yet!
- reset_in = digitalRead(11);
- if (old_reset_in == 0 && reset_in == 1) {
-   step_count = 1;
-   OLED_display();
- }
-
+reset_in = digitalRead(11);
+if (old_reset_in == 0 && reset_in == 1) {
+    step_count = 0;
+    OLED_display();
+}
+// Update old_reset_in for the next loop iteration
+old_reset_in = reset_in;
  
 
  if (step_count >= 17) {
@@ -578,31 +579,54 @@ void loop() {
  CH6_output = bitRead(ch6_step, 16 - step_count );
 
  //--------------出力----------------------------------
- if (CH1_output == 1 && CH1_mute == 0) {
-   digitalWrite(5, clock_in);
-   digitalWrite(14, clock_in);
- }
- if (CH2_output == 1 && CH2_mute == 0) {
-   digitalWrite(6, clock_in);
-   digitalWrite(15, clock_in);
- }
- if (CH3_output == 1 && CH3_mute == 0) {
-   digitalWrite(7, clock_in);
-   digitalWrite(16, clock_in);
- }
- if (CH4_output == 1 && CH4_mute == 0) {
-   digitalWrite(8, clock_in);
-   digitalWrite(0, clock_in);
- }
- if (CH5_output == 1 && CH5_mute == 0) {
-   digitalWrite(9, clock_in);
-   digitalWrite(1, clock_in);
- }
- if (CH6_output == 1 && CH6_mute == 0) {
-   digitalWrite(10, clock_in);
-   digitalWrite(17, clock_in);
- }
+//--------------出力----------------------------------
+if (CH1_output == 1 && CH1_mute == 0) {
+    digitalWrite(5, clock_in);
+    digitalWrite(14, clock_in);
+} else {
+    digitalWrite(5, LOW);
+    digitalWrite(14, LOW);
+}
 
+if (CH2_output == 1 && CH2_mute == 0) {
+    digitalWrite(6, clock_in);
+    digitalWrite(15, clock_in);
+} else {
+    digitalWrite(6, LOW);
+    digitalWrite(15, LOW);
+}
+
+if (CH3_output == 1 && CH3_mute == 0) {
+    digitalWrite(7, clock_in);
+    digitalWrite(16, clock_in);
+} else {
+    digitalWrite(7, LOW);
+    digitalWrite(16, LOW);
+}
+
+if (CH4_output == 1 && CH4_mute == 0) {
+    digitalWrite(8, clock_in);
+    digitalWrite(0, clock_in);
+} else {
+    digitalWrite(8, LOW);
+    digitalWrite(0, LOW);
+}
+
+if (CH5_output == 1 && CH5_mute == 0) {
+    digitalWrite(9, clock_in);
+    digitalWrite(1, clock_in);
+} else {
+    digitalWrite(9, LOW);
+    digitalWrite(1, LOW);
+}
+
+if (CH6_output == 1 && CH6_mute == 0) {
+    digitalWrite(10, clock_in);
+    digitalWrite(17, clock_in);
+} else {
+    digitalWrite(10, LOW);
+    digitalWrite(17, LOW);
+}
  //--------------OLED出力----------------------------------
  //注意：OLEDの更新はクロック入ったタイミングのみ。Arduinoのビジー状態を避けるため。
  if (old_clock_in == 0 && clock_in == 1) {
