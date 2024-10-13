@@ -606,58 +606,41 @@ void onEncoderLongClicked(EncoderButton &eb) {
   if (!isClockRunning()) {
     force_refresh = true;
   }
-  disp_refresh = true;
+  disp_refresh = true; 
 
-  switch (selected_menu) {
-    case MENU_PRESET:
-      if (showOverlay) {
+  // If we're in the parameter settings (Hits, Offset, Limit, etc.) for one of the channels
+  if (selected_menu <= MENU_CH_6 && selected_setting != SETTING_TOP_MENU) {
+    // Decrement the selected menu to allow back navigation
+    selected_setting = static_cast<Setting>((selected_setting - 1 + SETTING_LAST) % SETTING_LAST);
+  } else if (showOverlay) {
+    // Handle specific overlay actions
+    switch (selected_menu) {
+      case MENU_PRESET:
         loadDefaultConfig(&currentConfig, selected_preset);
-        currentConfig.lastLoadedFromPreset = true;
-        tempo = currentConfig.tempo;
-        period = 60000 / tempo / 4;
-        showOverlay = false;
-      }
-      break;
-
-    case MENU_SAVE:
-      if (showOverlay) {
-        saveToEEPROM(selected_slot);
-        showOverlay = false;
-      } else {
-        saveToEEPROM(lastUsedSlot);  // fast save option
-      }
-      break;
-
-    case MENU_LOAD:
-      if (showOverlay) {
+        currentConfig.lastLoadedFromPreset = true;  // Indicates that the current config was loaded from a preset
+        tempo = currentConfig.tempo;                // Use the preset's tempo
+        period = 60000 / tempo / 4;                 // Update period with loaded tempo
+        showOverlay = false;                        // Turn off the overlay
+        break;
+      case MENU_SAVE:
+        saveToEEPROM(selected_slot); // Save to selected slot
+        showOverlay = false;  // Turn off the overlay
+        break;
+      case MENU_LOAD:
         loadFromEEPROM(selected_slot);
-        currentConfig.lastLoadedFromPreset = false;
-        showOverlay = false;
-      } else {
-        loadFromEEPROM(lastUsedSlot);  // fast reload option
-      }
-      break;
-
-    case MENU_TEMPO:
-      if (!showOverlay) {
-        internalClock = !internalClock;
-        showOverlay = true;
-        if (internalClock) period = 60000 / tempo / 4;
-      }
-      break;
-
-    case MENU_CH_1:
-    case MENU_CH_2:
-    case MENU_CH_3:
-    case MENU_CH_4:
-    case MENU_CH_5:
-    case MENU_CH_6:
-      if (selected_setting == SETTING_TOP_MENU) {
-        int channelIndex = selected_menu - MENU_CH_1;
-        currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
-      }
-      break;
-  }
+        currentConfig.lastLoadedFromPreset = false;  // Indicates that the current config was loaded from a save slot
+        showOverlay = false;                         // Turn off the overlay
+        break;
+    }
+  } else if (selected_menu == MENU_TEMPO) {
+    internalClock = !internalClock;  // Toggle the internal clock state
+    showOverlay = true;              // Show overlay to indicate clock state change
+    if (internalClock) period = 60000 / tempo / 4;
+  } else if (selected_setting == SETTING_TOP_MENU && selected_menu <= MENU_CH_6) {
+    // Mute the selected channel
+    int channelIndex = selected_menu - MENU_CH_1;
+    currentConfig.mute[channelIndex] = !currentConfig.mute[channelIndex];
+  } 
 }
 
 
