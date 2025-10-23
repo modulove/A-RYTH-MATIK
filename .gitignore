@@ -10,3 +10,7 @@ sym-lib-table
 *.dcm
 *.bck
 *-backups
+.vscode/extensions.json
+.gitignore
+.vscode/tasks.json
+.vscode/launch.json

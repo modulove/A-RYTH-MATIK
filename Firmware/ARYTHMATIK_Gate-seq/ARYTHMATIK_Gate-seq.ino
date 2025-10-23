@@ -40,7 +40,7 @@
  * Libs : U8g2 (U8x8), EncoderButton
  */
 
-#include <Arduino.h>
+//#include <Arduino.h>
 #include <EEPROM.h>
 #include <Wire.h>
 #include <U8x8lib.h>
@@ -51,12 +51,18 @@
 U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/*reset=*/U8X8_PIN_NONE);
 volatile bool uiDirty = true;
 unsigned long nextOledMs = 0;
-const uint16_t OLED_INTERVAL_MS = 20;  // ~50 Hz
+const uint16_t OLED_INTERVAL_MS = 40;  // 25 Hz (reduced from 50 Hz for performance)
 
 // --------------- Encoder+Button ---------------
 EncoderButton encBtn(3, 2, 12);  // A=D3, B=D2, SW=D12
 unsigned long lastEncHandledMs = 0;
-const uint8_t ENC_RATE_MS = 8;
+const uint8_t ENC_RATE_MS = 8;  // Encoder debounce interval
+
+// --------------- Timing Constants ---------------
+const uint16_t SECRET_MENU_BOOT_HOLD_MS = 3000;   // Hold button on boot to enter secret menu
+const uint16_t SECRET_MENU_RUNTIME_HOLD_MS = 5000; // Hold button during runtime to enter secret menu
+const uint16_t SECRET_MENU_SAVE_HOLD_MS = 1500;    // Hold to save in secret menu
+const uint16_t SECRET_MENU_FACTORY_HOLD_MS = 4000; // Hold to factory reset in secret menu
 
 // --------------- EEPROM layout ----------------
 #define EE_SIG_ADDR 0
@@ -76,9 +82,28 @@ const uint8_t ENC_RATE_MS = 8;
 #define EE_RST      25  // default RST action (0=Reset,1=Fill,2=Gen,3=Mut)
 #define EE_FPER     26  // fill-period index 0..4 => 1/2/4/8/16 repeats
 #define EE_OMODE    27  // output mode 0=TRG,1=GAT,2=FF
+#define EE_TIMEOUT  28  // menu timeout in seconds (1..30)
 
 // --- Globals ---
 uint8_t oledFlip = 0;
+
+// Pin mapping helpers (for OLED rotation support)
+// When rotated, physical I/O needs logical remapping:
+// CLK<->RST, CH1<->CH4, CH2<->CH5, CH3<->CH6
+static inline uint8_t mapClkPin() { return oledFlip ? RST_PB_BIT : CLK_PB_BIT; }
+static inline uint8_t mapRstPin() { return oledFlip ? CLK_PB_BIT : RST_PB_BIT; }
+static inline uint8_t mapOutputChannel(uint8_t ch) {
+  if (!oledFlip) return ch;
+  switch(ch) {
+    case 0: return 3; // CH1->CH4
+    case 1: return 4; // CH2->CH5
+    case 2: return 5; // CH3->CH6
+    case 3: return 0; // CH4->CH1
+    case 4: return 1; // CH5->CH2
+    case 5: return 2; // CH6->CH3
+    default: return ch;
+  }
+}
 
 // ---------- debug + timeout UI ----------
 #define DEBUG 1
@@ -88,9 +113,14 @@ volatile uint8_t dbg_rst_evt = 255;  // last RST action seen (0..3), 255 = none
 #endif
 
 // ---------- idle timeout bar (bottom line) ----------
-uint8_t menuTimeoutSec = 5;  // fixed timeout (bar view)
+uint8_t menuTimeoutSec = 5;  // configurable timeout (bar view) - saved in secret menu
 unsigned long lastUIActivityMs = 0;
 bool hideUI = false;
+
+// ---------- deferred EEPROM writes (performance optimization) ----------
+bool eepromDirty = false;
+unsigned long lastEepromWriteMs = 0;
+const uint16_t EEPROM_WRITE_DELAY_MS = 2000;  // 2 seconds after last change
 
 // ---------------- Clock/Timing -----------------
 #define TRIG_US 10000UL
@@ -141,7 +171,7 @@ int16_t menuScrollCol = 0;
 
 // -------------- Secret menu state --------------
 bool  secretMenuActive = false;
-uint8_t secretIndex    = 0;  // 0 OLED, 1 ENC, 2 CLK, 3 RIN (default), 4 SAVE, 5 FACT
+uint8_t secretIndex    = 0;  // 0 OLED, 1 ENC, 2 CLK, 3 RIN (default), 4 TIMEOUT, 5 SAVE, 6 FACT
 long secretEncOld      = 0;
 bool secWasPressed     = false;
 unsigned long secPressStart = 0;
@@ -299,24 +329,38 @@ void onRotate(EncoderButton& eb);
 void onRotatePressed(EncoderButton& eb);
 void onClick(EncoderButton& eb);
 
+// -------- Fast LFSR random (optimized replacement for random()) --------
+static uint16_t lfsr = 0xACE1;  // seed
+static inline uint8_t fastRandom8() {
+  lfsr = (lfsr >> 1) ^ (-(int16_t)(lfsr & 1) & 0xB400);
+  return (uint8_t)lfsr;
+}
+static inline uint16_t fastRandom16() {
+  fastRandom8();
+  return lfsr;
+}
+static inline bool fastRandomChance(uint8_t percent) {
+  return (fastRandom8() % 100) < percent;
+}
+
 // -------- GEN + MUT (compact musical) --------
 static void genRandomPattern(uint16_t& a, uint16_t& b, uint16_t& c, uint16_t& d, uint16_t& e, uint16_t& f) {
   a = (1u << 15) | (1u << 11) | (1u << 7) | (1u << 3);
-  if (random(100) < 40) a |= (1u << 13);
-  if (random(100) < 25) a |= (1u << 1);
-  b = 0; for (uint8_t i=0;i<16;i++) if (random(100)<50) b |= (1u<<(15-i));
-  c = 0; if (random(100)<80) c |= (1u<<11); if (random(100)<65) c |= (1u<<3);
-  d = 0; for (uint8_t i=0;i<5;i++)  if (random(100)<30) d |= (1u<<random(16));
-  e = 0; for (uint8_t i=0;i<3;i++)  if (random(100)<25) e |= (1u<<random(16));
-  f = (random(100) < 30) ? 0xF000 : 0x0000;
+  if (fastRandomChance(40)) a |= (1u << 13);
+  if (fastRandomChance(25)) a |= (1u << 1);
+  b = 0; for (uint8_t i=0;i<16;i++) if (fastRandomChance(50)) b |= (1u<<(15-i));
+  c = 0; if (fastRandomChance(80)) c |= (1u<<11); if (fastRandomChance(65)) c |= (1u<<3);
+  d = 0; for (uint8_t i=0;i<5;i++)  if (fastRandomChance(30)) d |= (1u<<(fastRandom8()&15));
+  e = 0; for (uint8_t i=0;i<3;i++)  if (fastRandomChance(25)) e |= (1u<<(fastRandom8()&15));
+  f = fastRandomChance(30) ? 0xF000 : 0x0000;
 }
 static inline void mutateMask(uint16_t& m, uint16_t anchorMask) {
-  uint8_t changes = 1 + (uint8_t)random(3);
+  uint8_t changes = 1 + (fastRandom8() % 3);
   for (uint8_t i=0;i<changes;i++){
-    uint8_t pos = (uint8_t)random(16);
+    uint8_t pos = fastRandom8() & 15;
     uint16_t bit = (uint16_t)(1u<<pos);
     if (anchorMask & bit) continue;
-    uint8_t r = random(100);
+    uint8_t r = fastRandom8() % 100;
     if (r<60) m ^= bit;
     else if (r<80) m |= bit;
     else m &= ~bit;
@@ -359,18 +403,28 @@ static void internalClockStop() {
   interrupts();
 }
 static void writeOutputsFast(uint8_t mask) {
-  if (mask & (1<<0)) PORTD |= _BV(CH1_PD_BIT); else PORTD &= ~_BV(CH1_PD_BIT);
-  if (mask & (1<<1)) PORTD |= _BV(CH2_PD_BIT); else PORTD &= ~_BV(CH2_PD_BIT);
-  if (mask & (1<<2)) PORTD |= _BV(CH3_PD_BIT); else PORTD &= ~_BV(CH3_PD_BIT);
-  if (mask & (1<<3)) PORTB |= _BV(CH4_PB_BIT); else PORTB &= ~_BV(CH4_PB_BIT);
-  if (mask & (1<<4)) PORTB |= _BV(CH5_PB_BIT); else PORTB &= ~_BV(CH5_PB_BIT);
-  if (mask & (1<<5)) PORTB |= _BV(CH6_PB_BIT); else PORTB &= ~_BV(CH6_PB_BIT);
+  // Apply channel mapping for OLED rotation
+  uint8_t mapped = 0;
+  for (uint8_t i=0; i<6; i++) {
+    if (mask & (1<<i)) mapped |= (1 << mapOutputChannel(i));
+  }
+  if (mapped & (1<<0)) PORTD |= _BV(CH1_PD_BIT); else PORTD &= ~_BV(CH1_PD_BIT);
+  if (mapped & (1<<1)) PORTD |= _BV(CH2_PD_BIT); else PORTD &= ~_BV(CH2_PD_BIT);
+  if (mapped & (1<<2)) PORTD |= _BV(CH3_PD_BIT); else PORTD &= ~_BV(CH3_PD_BIT);
+  if (mapped & (1<<3)) PORTB |= _BV(CH4_PB_BIT); else PORTB &= ~_BV(CH4_PB_BIT);
+  if (mapped & (1<<4)) PORTB |= _BV(CH5_PB_BIT); else PORTB &= ~_BV(CH5_PB_BIT);
+  if (mapped & (1<<5)) PORTB |= _BV(CH6_PB_BIT); else PORTB &= ~_BV(CH6_PB_BIT);
 }
 static void writeLEDsFast(uint8_t mask) {
-  if (mask & (1<<0)) PORTC |= _BV(LED1_PC_BIT); else PORTC &= ~_BV(LED1_PC_BIT);
-  if (mask & (1<<1)) PORTC |= _BV(LED2_PC_BIT); else PORTC &= ~_BV(LED2_PC_BIT);
-  if (mask & (1<<2)) PORTC |= _BV(LED3_PC_BIT); else PORTC &= ~_BV(LED3_PC_BIT);
-  if (mask & (1<<5)) PORTC |= _BV(LED6_PC_BIT); else PORTC &= ~_BV(LED6_PC_BIT);
+  // Apply channel mapping for OLED rotation
+  uint8_t mapped = 0;
+  for (uint8_t i=0; i<6; i++) {
+    if (mask & (1<<i)) mapped |= (1 << mapOutputChannel(i));
+  }
+  if (mapped & (1<<0)) PORTC |= _BV(LED1_PC_BIT); else PORTC &= ~_BV(LED1_PC_BIT);
+  if (mapped & (1<<1)) PORTC |= _BV(LED2_PC_BIT); else PORTC &= ~_BV(LED2_PC_BIT);
+  if (mapped & (1<<2)) PORTC |= _BV(LED3_PC_BIT); else PORTC &= ~_BV(LED3_PC_BIT);
+  if (mapped & (1<<5)) PORTC |= _BV(LED6_PC_BIT); else PORTC &= ~_BV(LED6_PC_BIT);
 }
 
 // ====== tiny serial (pattern + config) ======
@@ -413,7 +467,7 @@ static void serialPoll() {
     int v = atoi(&sBuf[1]);
     v = constrain(v,0,2);
     outMode = (uint8_t)v;
-    EEPROM.update(EE_OMODE, outMode);
+    markDirty();
     Serial.println(F("OK")); return;
   }
 
@@ -445,14 +499,14 @@ static void serialPoll() {
   // B### : BPM
   if (sBuf[0]=='B'){
     int v = atoi(&sBuf[1]); v = constrain(v,60,240);
-    if (v != bpm){ bpm=v; EEPROM.update(EE_TEMPO,bpm); recalcTimer1(); }
+    if (v != bpm){ bpm=v; markDirty(); recalcTimer1(); }
     Serial.println(F("OK")); return;
   }
 
   // K0/1 : Clock
   if (sBuf[0]=='K'){
     clkSource = (sBuf[1]=='1') ? 1 : 0;
-    EEPROM.update(EE_CLK_SRC, clkSource);
+    markDirty();
     if (clkSource==CLK_INT) internalClockStart(); else internalClockStop();
     Serial.println(F("OK")); return;
   }
@@ -460,7 +514,7 @@ static void serialPoll() {
   // M0/1 : Mode
   if (sBuf[0]=='M'){
     mode = (sBuf[1]=='1') ? 1 : 0;
-    EEPROM.update(EE_MODE, mode);
+    markDirty();
     Serial.println(F("OK")); return;
   }
 
@@ -468,14 +522,14 @@ static void serialPoll() {
   if (sBuf[0]=='S'){
     int v = atoi(&sBuf[1]);
     genre = constrain(v,0,4);
-    EEPROM.update(EE_GENRE, genre);
+    markDirty();
     Serial.println(F("OK")); return;
   }
 
   // F0/1 : Fill enable
   if (sBuf[0]=='F'){
     fillin = (sBuf[1]=='1');
-    EEPROM.update(EE_FILLIN, fillin?1:0);
+    markDirty();
     Serial.println(F("OK")); return;
   }
 
@@ -483,7 +537,7 @@ static void serialPoll() {
   if (sBuf[0]=='R'){
     int v = atoi(&sBuf[1]);
     repeat = constrain(v,0,4);
-    EEPROM.update(EE_REPEAT, repeat);
+    markDirty();
     Serial.println(F("OK")); return;
   }
 
@@ -491,7 +545,7 @@ static void serialPoll() {
   if (sBuf[0]=='W'){
     int v = atoi(&sBuf[1]);
     sw = constrain(v,0,4);
-    EEPROM.update(EE_SW, sw);
+    markDirty();
     Serial.println(F("OK")); return;
   }
 
@@ -575,6 +629,7 @@ static void serialPoll() {
     EEPROM.update(EE_RST,RIN_RESET);
     EEPROM.update(EE_FPER,2);
     EEPROM.update(EE_OMODE,OUT_TRG);
+    EEPROM.update(EE_TIMEOUT,5);
     Serial.println(F("OK")); return;
   }
 }
@@ -626,6 +681,7 @@ void setup() {
     EEPROM.update(EE_RST, RIN_RESET);
     EEPROM.update(EE_FPER, 2);
     EEPROM.update(EE_OMODE, OUT_TRG);
+    EEPROM.update(EE_TIMEOUT, 5);
     // initialize current pattern to first entry of bank1 base
     const uint16_t* p = &bnk1_ptn[0][0];
     uint16_t v;
@@ -655,6 +711,7 @@ void setup() {
   rstAction= constrain(EEPROM.read(EE_RST),0,3);   // runtime starts with default
   fillPeriodIdx = constrain(EEPROM.read(EE_FPER),0,4);
   outMode  = constrain(EEPROM.read(EE_OMODE),0,2);
+  menuTimeoutSec = constrain(EEPROM.read(EE_TIMEOUT),1,30);
 
   // PCINT for CLK/RESET (PINB)
   PCICR |= _BV(PCIE0);
@@ -669,11 +726,11 @@ void setup() {
   encBtn.setEncoderPressedHandler(onRotatePressed);
   encBtn.setClickHandler(onClick);
 
-  // Secret menu on boot-hold (~3s)
+  // Secret menu on boot-hold
   pinMode(12, INPUT_PULLUP);
   unsigned long t0 = millis();
   while (digitalRead(12) == LOW) {
-    if (millis() - t0 >= 3000UL) {
+    if (millis() - t0 >= SECRET_MENU_BOOT_HOLD_MS) {
       secretMenuActive = true;
       secretIndex = 0;
       secretEncOld = encBtn.position();
@@ -682,7 +739,10 @@ void setup() {
     }
   }
 
-  randomSeed(analogRead(A0));  // for GEN/MUT
+  // Seed LFSR with analog noise for variety
+  lfsr = analogRead(A0) ^ (analogRead(A1) << 8);
+  if (lfsr == 0) lfsr = 0xACE1;  // ensure non-zero
+
   uiDirty = true;
   lastUIActivityMs = millis();
 }
@@ -728,21 +788,23 @@ static inline void stepEnc(int incRaw) {
 // ---------------- loop -----------------
 void loop() {
   #if DEBUG
-  if (dbg && dbg_rst_evt != 255){
-    Serial.print(F("D:RST action="));
-    Serial.println((int)dbg_rst_evt);
-    dbg_rst_evt = 255;
+  if (dbg) {
+    if (dbg_rst_evt != 255) {
+      Serial.print(F("D:RST action="));
+      Serial.println((int)dbg_rst_evt);
+      dbg_rst_evt = 255;
+    }
   }
   #endif
 
   encBtn.update();
 
-  // enter secret menu by long-hold (~5s)
+  // enter secret menu by long-hold during runtime
   static bool rtWasPressed = false;
   static unsigned long rtStart = 0;
   bool p = encBtn.isPressed();
   if (p && !rtWasPressed) { rtStart = millis(); }
-  if (p && !secretMenuActive && (millis() - rtStart) >= 5000UL) {
+  if (p && !secretMenuActive && (millis() - rtStart) >= SECRET_MENU_RUNTIME_HOLD_MS) {
     secretMenuActive = true;
     secretIndex = 0;
     secretEncOld = encBtn.position();
@@ -842,6 +904,11 @@ void loop() {
     OLED_display();
     uiDirty = false;
     nextOledMs = millis() + OLED_INTERVAL_MS;
+  }
+
+  // Deferred EEPROM writes (avoid blocking during clock processing)
+  if (eepromDirty && (millis() - lastEepromWriteMs) >= EEPROM_WRITE_DELAY_MS) {
+    save_data();
   }
 }
 
@@ -1025,31 +1092,29 @@ void OLED_display() {
   if (hideUI) drawIdleBar(); else drawBottomMenu();
 }
 
-// ------------- preset loaders -------------
-void loadPresetBase(uint8_t bank, uint8_t idx){
+// ------------- preset loaders (consolidated) -------------
+void loadPreset(uint8_t bank, uint8_t idx, bool isFill){
   const uint16_t* p = nullptr;
+  uint8_t offset = isFill ? 6 : 0;
   switch (bank){
-    case 0: p = &bnk1_ptn[idx][0]; break;
-    case 1: p = &bnk2_ptn[idx][0]; break;
-    case 2: p = &bnk3_ptn[idx][0]; break;
-    default: p = &bnk4_ptn[idx][0]; break;
+    case 0: p = &bnk1_ptn[idx][offset]; break;
+    case 1: p = &bnk2_ptn[idx][offset]; break;
+    case 2: p = &bnk3_ptn[idx][offset]; break;
+    default: p = &bnk4_ptn[idx][offset]; break;
   }
   ch1_step=pgm_read_word(&p[0]); ch2_step=pgm_read_word(&p[1]); ch3_step=pgm_read_word(&p[2]);
   ch4_step=pgm_read_word(&p[3]); ch5_step=pgm_read_word(&p[4]); ch6_step=pgm_read_word(&p[5]);
 }
-void loadPresetFill(uint8_t bank, uint8_t idx){
-  const uint16_t* p = nullptr;
-  switch (bank){
-    case 0: p = &bnk1_ptn[idx][6]; break;
-    case 1: p = &bnk2_ptn[idx][6]; break;
-    case 2: p = &bnk3_ptn[idx][6]; break;
-    default: p = &bnk4_ptn[idx][6]; break;
-  }
-  ch1_step=pgm_read_word(&p[0]); ch2_step=pgm_read_word(&p[1]); ch3_step=pgm_read_word(&p[2]);
-  ch4_step=pgm_read_word(&p[3]); ch5_step=pgm_read_word(&p[4]); ch6_step=pgm_read_word(&p[5]);
-}
+// Convenience wrappers
+static inline void loadPresetBase(uint8_t bank, uint8_t idx) { loadPreset(bank, idx, false); }
+static inline void loadPresetFill(uint8_t bank, uint8_t idx) { loadPreset(bank, idx, true); }
 
 // ------------- save/pattern ops -------------
+static inline void markDirty() {
+  eepromDirty = true;
+  lastEepromWriteMs = millis();
+}
+
 void save_data() {
   EEPROM.update(1, highByte(ch1_step));  EEPROM.update(2, lowByte(ch1_step));
   EEPROM.update(3, highByte(ch2_step));  EEPROM.update(4, lowByte(ch2_step));
@@ -1066,6 +1131,7 @@ void save_data() {
   EEPROM.update(EE_CLK_SRC,clkSource);
   EEPROM.update(EE_FPER,   fillPeriodIdx);
   EEPROM.update(EE_OMODE,  outMode);
+  eepromDirty = false;  // clear flag after write
 }
 
 // --------- AUTO change logic -------------
@@ -1075,10 +1141,10 @@ void change_step() {
     return;
   }
   uint8_t idx;
-  if (genre==0){ if (sw_done >= sw_max) change_bnk1 = random(0, 8); idx = change_bnk1; }
-  else if (genre==1){ if (sw_done >= sw_max) change_bnk2 = random(0, 8); idx = change_bnk2; }
-  else if (genre==2){ if (sw_done >= sw_max) change_bnk3 = random(0, 8); idx = change_bnk3; }
-  else { if (sw_done >= sw_max) change_bnk4 = random(0, 8); idx = change_bnk4; }
+  if (genre==0){ if (sw_done >= sw_max) change_bnk1 = fastRandom8() & 7; idx = change_bnk1; }
+  else if (genre==1){ if (sw_done >= sw_max) change_bnk2 = fastRandom8() & 7; idx = change_bnk2; }
+  else if (genre==2){ if (sw_done >= sw_max) change_bnk3 = fastRandom8() & 7; idx = change_bnk3; }
+  else { if (sw_done >= sw_max) change_bnk4 = fastRandom8() & 7; idx = change_bnk4; }
   loadPresetBase(genre, idx);
 }
 
@@ -1087,13 +1153,13 @@ static inline void makeFillFromBase() {
   ch2_step = (uint16_t)(ch2_step | (ch2_step >> 1) | (ch2_step << 15));  // denser hats
   ch3_step ^= (uint16_t)((1u<<11)|(1u<<3));                               // snare flip
   ch4_step ^= (uint16_t)(ch4_step >> 2);                                  // light roll
-  if (random(100) < 30) ch5_step |= (uint16_t)((1u<<15)|(1u<<7));         // accents
+  if (fastRandomChance(30)) ch5_step |= (uint16_t)((1u<<15)|(1u<<7));     // accents
 }
 static inline void makeFillFromBase2() {
   ch2_step ^= (uint16_t)((ch2_step<<1) | (ch2_step>>15)); // shift hats
   ch3_step |= (uint16_t)((1u<<12)|(1u<<2));               // ghost snare
   ch4_step ^= (uint16_t)((ch4_step>>1) & 0x3333u);        // alt roll
-  if (random(100) < 25) ch5_step ^= (uint16_t)(0x00F0u);  // transient burst
+  if (fastRandomChance(25)) ch5_step ^= (uint16_t)(0x00F0u);  // transient burst
 }
 void fillin_step() {
   if (genre == 4) { // generative style -> mutate/expand
@@ -1132,7 +1198,7 @@ void onRotatePressed(EncoderButton& eb) {
   if (enc == ENC_BPM) {
     int newBpm = (int)bpm + inc * (encDir > 0 ? +1 : -1);
     newBpm = constrain(newBpm, 60, 240);
-    if (newBpm != (int)bpm) { bpm = (uint16_t)newBpm; EEPROM.update(EE_TEMPO,bpm); recalcTimer1(); }
+    if (newBpm != (int)bpm) { bpm = (uint16_t)newBpm; markDirty(); recalcTimer1(); }
     uiDirty = true;
   } else stepEnc(inc);
 }
@@ -1149,37 +1215,40 @@ void onClick(EncoderButton& eb) {
     else if (enc <= 64) ch4_step ^= bit;
     else if (enc <= 80) ch5_step ^= bit;
     else                ch6_step ^= bit;
+    markDirty();
   } else {
     if (enc == ENC_MODE) {
-      mode = (mode==0)?1:0; EEPROM.update(EE_MODE, mode);
+      mode = (mode==0)?1:0; markDirty();
       if (mode==1) change_step();
       wrapToValid();
     } else if (enc == ENC_RESET) {
       hardResetSequencerLikeISR();
     } else if (enc == ENC_STYLE && mode==1) {
-      genre = (genre+1); if (genre>4) genre=0; EEPROM.update(EE_GENRE,genre);
+      genre = (genre+1); if (genre>4) genre=0; markDirty();
       if (genre==4) genRandomPattern(ch1_step,ch2_step,ch3_step,ch4_step,ch5_step,ch6_step);
     } else if (enc == ENC_FILLIN) {
-      fillin = !fillin; EEPROM.update(EE_FILLIN, fillin?1:0);
+      fillin = !fillin; markDirty();
     } else if (enc == ENC_FPER) {
-      fillPeriodIdx = (fillPeriodIdx + 1) % 5; EEPROM.update(EE_FPER, fillPeriodIdx);
+      fillPeriodIdx = (fillPeriodIdx + 1) % 5; markDirty();
     } else if (enc == ENC_CLK) {
-      clkSource = (clkSource==CLK_EXT)?CLK_INT:CLK_EXT; EEPROM.update(EE_CLK_SRC,clkSource);
+      clkSource = (clkSource==CLK_EXT)?CLK_INT:CLK_EXT; markDirty();
       if (clkSource==CLK_INT) internalClockStart(); else internalClockStop();
     } else if (enc == ENC_BPM) {
-      bpm = 120; EEPROM.update(EE_TEMPO,bpm); recalcTimer1();
+      bpm = 120; markDirty(); recalcTimer1();
     } else if (enc == ENC_REP) {
-      repeat++; if (repeat>4) repeat=0; EEPROM.update(EE_REPEAT,repeat);
+      repeat++; if (repeat>4) repeat=0; markDirty();
     } else if (enc == ENC_SW) {
-      sw++; if (sw>4) sw=0; EEPROM.update(EE_SW,sw);
+      sw++; if (sw>4) sw=0; markDirty();
     } else if (enc == ENC_RIN) {
-      rstAction = (rstAction + 1) & 0x03; // live only
+      rstAction = (rstAction + 1) & 0x03; // live only, not persisted
     } else if (enc == ENC_GEN) {
       genRandomPattern(ch1_step,ch2_step,ch3_step,ch4_step,ch5_step,ch6_step);
+      markDirty();
     } else if (enc == ENC_MUT) {
       mutatePatternAll();
+      markDirty();
     } else if (enc == ENC_OMODE) {
-      outMode = (outMode + 1) % 3; EEPROM.update(EE_OMODE, outMode);
+      outMode = (outMode + 1) % 3; markDirty();
     }
   }
   uiDirty = true;
@@ -1198,8 +1267,9 @@ void secretMenuLoop() {
       case 2: { clkSource = (step>0)?CLK_INT:CLK_EXT; EEPROM.update(EE_CLK_SRC,clkSource);
                 if (clkSource==CLK_INT) internalClockStart(); else internalClockStop(); } break;
       case 3: { int v = (int)EEPROM.read(EE_RST) + step; if (v<0) v=3; if (v>3) v=0; EEPROM.update(EE_RST,(uint8_t)v); } break;
-      case 4: /* SAVE/EXIT hold */ break;
-      case 5: /* FACT hold */ break;
+      case 4: { int v = (int)menuTimeoutSec + step; v = constrain(v,1,30); menuTimeoutSec = (uint8_t)v; EEPROM.update(EE_TIMEOUT,menuTimeoutSec); } break;
+      case 5: /* SAVE/EXIT hold */ break;
+      case 6: /* FACT hold */ break;
     }
     drawSecretMenu(0);
   }
@@ -1207,14 +1277,14 @@ void secretMenuLoop() {
   bool p = encBtn.isPressed();
   if (p && !secWasPressed) { secPressStart = millis(); }
   if (!p && secWasPressed) {  // short press -> next item
-    secretIndex = (secretIndex + 1) % 6;
+    secretIndex = (secretIndex + 1) % 7;
     drawSecretMenu(0);
   }
   secWasPressed = p;
 
   if (p) {
     unsigned long held = millis() - secPressStart;
-    if (secretIndex == 5 && held >= 4000UL) {
+    if (secretIndex == 6 && held >= SECRET_MENU_FACTORY_HOLD_MS) {
       EEPROM.update(EE_OLED_ROT,0);
       EEPROM.update(EE_ENC_DIR,0);
       EEPROM.update(EE_CLK_SRC,CLK_EXT);
@@ -1227,12 +1297,14 @@ void secretMenuLoop() {
       EEPROM.update(EE_RST,RIN_RESET);
       EEPROM.update(EE_FPER,2);
       EEPROM.update(EE_OMODE,OUT_TRG);
+      EEPROM.update(EE_TIMEOUT,5);
       u8x8.clear(); u8x8.setCursor(5,3); u8x8.print(F("OK")); delay(500);
       secretMenuActive=false; uiDirty=true; return;
     }
-    if (secretIndex == 4 && held >= 1500UL) {
+    if (secretIndex == 5 && held >= SECRET_MENU_SAVE_HOLD_MS) {
       EEPROM.update(EE_FPER, fillPeriodIdx);
       EEPROM.update(EE_OMODE, outMode);
+      EEPROM.update(EE_TIMEOUT, menuTimeoutSec);
       u8x8.clear(); u8x8.setCursor(5,3); u8x8.print(F("OK")); delay(400);
       secretMenuActive=false; uiDirty=true; return;
     }
@@ -1249,8 +1321,10 @@ void drawSecretMenu(uint8_t) {
   u8x8.setInverseFont(secretIndex == 3);
   u8x8.setCursor(0, 3); u8x8.print(F("RIN ")); u8x8.print(rinChar(EEPROM.read(EE_RST)));
   u8x8.setInverseFont(secretIndex == 4);
-  u8x8.setCursor(0, 5); u8x8.print(F("SAVE(Hold)"));
+  u8x8.setCursor(0, 4); u8x8.print(F("TMO ")); u8x8.print((unsigned)menuTimeoutSec); u8x8.print(F("s"));
   u8x8.setInverseFont(secretIndex == 5);
+  u8x8.setCursor(0, 5); u8x8.print(F("SAVE(Hold)"));
+  u8x8.setInverseFont(secretIndex == 6);
   u8x8.setCursor(0, 6); u8x8.print(F("FACT(Hold)"));
   u8x8.setInverseFont(0);
 }
@@ -1318,8 +1392,9 @@ ISR(PCINT0_vect) {
   uint8_t rising  = (~lastB) & b;
 
   if (changed) {
-    if (rising & _BV(CLK_PB_BIT)) handleStepEdgeISR();
-    if (rising & _BV(RST_PB_BIT)) {
+    // Use mapped pins for CLK/RST based on OLED rotation
+    if (rising & _BV(mapClkPin())) handleStepEdgeISR();
+    if (rising & _BV(mapRstPin())) {
       if (rstAction == RIN_RESET) {
         handleResetEdgeISR();
       } else {
