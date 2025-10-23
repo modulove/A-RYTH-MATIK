@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ARYTHMATIK Gate Sequencer — WebSerial Editor</title>
+<style>
+  :root{
+    --bg:#0b0d10; --fg:#e8e9eb; --muted:#9aa1a9; --card:#14171c; --accent:#5dd0ff;
+    --good:#2ecc71; --bad:#ff6b6b; --grid-on:#e8e9eb; --grid-off:#3a4047; --grid-sel:#5dd0ff44; --btn:#20262d; --btnfg:#e8e9eb; --border:#2a3037;
+  }
+  .light{
+    --bg:#f7f9fb; --fg:#1f2328; --muted:#5b6774; --card:#ffffff; --accent:#0078d4;
+    --good:#1e824c; --bad:#c0392b; --grid-on:#1f2328; --grid-off:#cfd7df; --grid-sel:#0078d422; --btn:#f1f4f8; --btnfg:#1f2328; --border:#e3e8ef;
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .title{font-size:18px;font-weight:700;margin:0 0 10px}
+  .muted{color:var(--muted);font-size:12px}
+  .btn{background:var(--btn);color:var(--btnfg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;cursor:pointer}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .btn.primary{border-color:var(--accent)}
+  .switch{display:inline-flex;gap:8px;align-items:center}
+  .switch input{transform:scale(1.1)}
+  .status-dot{width:10px;height:10px;border-radius:50%;background:var(--bad);display:inline-block;margin-right:6px}
+  .ok{background:var(--good)}
+  .accent{color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(16, minmax(16px,1fr));gap:4px;user-select:none}
+  .grid .cell{aspect-ratio:1/1;border-radius:6px;border:1px solid var(--border);display:grid;place-items:center;font-size:12px;cursor:pointer;background:var(--grid-off)}
+  .grid .cell.on{background:var(--grid-on);color:var(--bg)}
+  .grid .cell.sel{box-shadow:0 0 0 2px var(--grid-sel) inset}
+  .grid-wrap{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center}
+  .rowlabels{display:grid;grid-template-rows:repeat(6,1fr);gap:4px}
+  .rowlabels .lab{height:100%;display:flex;align-items:center;gap:8px}
+  .code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .kv{display:grid;grid-template-columns:repeat(2, minmax(180px,1fr));gap:10px}
+  @media (max-width:780px){ .kv{grid-template-columns:1fr} .grid-wrap{grid-template-columns:1fr} .rowlabels{grid-template-rows:none;grid-template-columns:repeat(6,1fr)} .rowlabels .lab{justify-content:center}}
+  .ctrl{display:flex;flex-direction:column;gap:6px}
+  .ctrl label{font-size:12px;color:var(--muted)}
+  select,input[type=number],input[type=text]{background:var(--btn);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px}
+  input[type=range]{width:100%}
+  .console{height:150px;overflow:auto;background:var(--bg);border:1px dashed var(--border);border-radius:10px;padding:8px;font-size:12px}
+  .pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 8px}
+  .right{margin-left:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="row">
+      <span id="connDot" class="status-dot" title="Disconnected"></span>
+      <strong>ARYTHMATIK Web Editor</strong>
+      <span class="muted">ATmega328P • U8x8 • WebSerial</span>
+    </div>
+    <div class="row">
+      <button id="connectBtn" class="btn primary">Connect</button>
+      <button id="disconnectBtn" class="btn" disabled>Disconnect</button>
+      <div class="switch">
+        <input id="themeToggle" type="checkbox" />
+        <label for="themeToggle">Light theme</label>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONFIG -->
+  <section class="card">
+    <h3 class="title">Configuration</h3>
+    <div class="kv">
+      <div class="ctrl">
+        <label for="bpm">BPM <span id="bpmVal" class="pill">120</span></label>
+        <input id="bpm" type="range" min="60" max="240" step="1" value="120" />
+      </div>
+      <div class="ctrl">
+        <label for="clk">Clock Source</label>
+        <select id="clk"><option value="0">External</option><option value="1">Internal</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="mode">Mode</label>
+        <select id="mode"><option value="0">Manual</option><option value="1">Auto</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="style">Style (Auto)</label>
+        <select id="style"><option value="0">TECH</option><option value="1">DUB</option><option value="2">HOUSE</option><option value="3">HALF</option><option value="4">GEN</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="fill">Fill (Auto)</label>
+        <select id="fill"><option value="0">Off</option><option value="1">On</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="rep">Repeat (Auto)</label>
+        <select id="rep"><option value="0">4</option><option value="1">8</option><option value="2">16</option><option value="3">32</option><option value="4">ET</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="sw">Switch interval (Auto)</label>
+        <select id="sw"><option value="0">2</option><option value="1">4</option><option value="2">8</option><option value="3">16</option><option value="4">ET</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="rin">Reset Input Action</label>
+        <select id="rin"><option value="0">Reset sequence</option><option value="1">Trigger Fill-in</option><option value="2">Generate pattern</option><option value="3">Mutate pattern</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="encdir">Encoder Direction</label>
+        <select id="encdir"><option value="0">CW</option><option value="1">CCW</option></select>
+      </div>
+      <div class="ctrl">
+        <label for="oled">OLED Rotation</label>
+        <select id="oled"><option value="0">0°</option><option value="1">180°</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="refreshCfg" class="btn">Load Config</button>
+      <button id="oneshotGen" class="btn">One-shot GEN</button>
+      <button id="oneshotMut" class="btn">One-shot MUT</button>
+      <span class="muted">Changes send immediately and store in EEPROM.</span>
+    </div>
+  </section>
+
+  <!-- PRESETS -->
+  <section class="card">
+    <h3 class="title">Presets</h3>
+    <div class="row">
+      <select id="presetSel"></select>
+      <button id="applyPreset" class="btn">Apply to Grid</button>
+      <button id="applyPresetAndSend" class="btn primary">Apply + Send</button>
+      <span class="muted">Local apply; use “Send” to write to module.</span>
+    </div>
+  </section>
+
+  <!-- PATTERN -->
+  <section class="card">
+    <h3 class="title">Pattern (6×16)</h3>
+    <div class="grid-wrap">
+      <div class="rowlabels" id="rowlabels"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="loadPat" class="btn">Load from Module</button>
+      <button id="sendPat" class="btn primary">Send to Module (saves)</button>
+      <span class="muted">Sends <span class="code">P=hhhh,...</span></span>
+      <span id="hexOut" class="pill right code">P=????,????,????,????,????,????</span>
+    </div>
+  </section>
+
+  <!-- DOCS -->
+  <section class="card">
+    <h3 class="title">Module Notes</h3>
+    <div class="kv">
+      <div>
+        <p><strong>Basics</strong></p>
+        <ul>
+          <li>6 channels × 16 steps (bit masks per channel).</li>
+          <li>Clock: External (rising @ D13) or Internal (Timer1).</li>
+          <li>Outputs: ~10 ms triggers.</li>
+        </ul>
+      </div>
+      <div>
+        <p><strong>Reset Input (D11)</strong></p>
+        <ul>
+          <li><b>Reset</b> (step=0), <b>Fill-in</b>, <b>Generate</b>, <b>Mutate</b> — selectable.</li>
+        </ul>
+        <p><strong>WebSerial</strong></p>
+        <div class="code muted">
+          P? / P=hhhh,...<br/>
+          C?  → C=bpm,clk,mode,style,fill,rep,sw,enc,oled,rin<br/>
+          B### K0/1 M0/1 S0..4 F0/1 R0..4 W0..4 E0/1 O0/1 N0..3 Q<br/>
+          G (one-shot GEN), U (one-shot MUT)
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONSOLE -->
+  <section class="card">
+    <h3 class="title">Console</h3>
+    <div id="console" class="console"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // THEME
+  const themeToggle = document.getElementById('themeToggle');
+  const savedTheme = localStorage.getItem('ary_theme') || 'dark';
+  if (savedTheme === 'light'){ document.body.classList.add('light'); themeToggle.checked = true; }
+  themeToggle.addEventListener('change', () => {
+    document.body.classList.toggle('light', themeToggle.checked);
+    localStorage.setItem('ary_theme', themeToggle.checked ? 'light' : 'dark');
+  });
+
+  // DOM
+  const connDot = document.getElementById('connDot');
+  const connectBtn = document.createElement('button');
+  const disconnectBtn = document.createElement('button');
+})();
+</script>
+
+<script>
+(() => {
+  // reselect real elements (previous script stubbed them)
+  const connDot = document.getElementById('connDot');
+  const connectBtn = document.getElementById('connectBtn');
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  const consoleEl = document.getElementById('console');
+  const gridEl = document.getElementById('grid');
+  const rowlabels = document.getElementById('rowlabels');
+  const hexOut = document.getElementById('hexOut');
+
+  // Config controls
+  const bpm = document.getElementById('bpm'); const bpmVal = document.getElementById('bpmVal');
+  const clk = document.getElementById('clk'); const mode = document.getElementById('mode');
+  const style = document.getElementById('style'); const fill = document.getElementById('fill');
+  const rep = document.getElementById('rep'); const sw = document.getElementById('sw');
+  const encdir = document.getElementById('encdir'); const oled = document.getElementById('oled');
+  const rin = document.getElementById('rin');
+  const refreshCfg = document.getElementById('refreshCfg');
+  const oneshotGen = document.getElementById('oneshotGen');
+  const oneshotMut = document.getElementById('oneshotMut');
+
+  const presetSel = document.getElementById('presetSel');
+  const applyPreset = document.getElementById('applyPreset');
+  const applyPresetAndSend = document.getElementById('applyPresetAndSend');
+
+  const loadPat = document.getElementById('loadPat'); const sendPat = document.getElementById('sendPat');
+
+  // PATTERN STATE (6 x 16 bits)
+  const pat = new Uint16Array(6); // big-endian bit 15 = step 1
+  function setHexBadge(){ hexOut.textContent = 'P=' + [...pat].map(v => v.toString(16).toUpperCase().padStart(4,'0')).join(','); }
+
+  // PRESETS (taken from firmware banks, compact)
+  const PRESETS = {
+    'TECH — 1': ['8888','0808','DDDD','2222','1000','0022'],
+    'TECH — 2': ['8888','0808','FFFF','2222','1000','0022'],
+    'TECH — 3': ['8888','0808','CCCC','2222','1000','0022'],
+    'TECH — 4': ['88AF','0808','4545','2222','1000','0022'],
+
+    'DUB — 1' : ['8888','0809','DDDD','2222','1240','0022'],
+    'DUB — 2' : ['000A','0849','DDDD','2222','1000','0022'],
+    'DUB — 3' : ['8888','0000','CCCC','2222','1240','0022'],
+    'DUB — 4' : ['8888','8888','FFFF','2222','1240','0022'],
+
+    'HOUSE — 1':['8888','88AF','2222','0000','0040','0101'],
+    'HOUSE — 2':['8888','88AF','2323','0000','0040','0101'],
+    'HOUSE — 3':['8888','88AF','CCCC','2222','0040','0101'],
+    'HOUSE — 4':['0000','0808','FFFF','2222','0040','0101'],
+
+    'HALF — 1' :['8888','88AF','2222','0040','0000','0101'],
+    'HALF — 2' :['8888','88AF','2323','0000','0040','0101'],
+    'HALF — 3' :['8888','88AF','CCCC','2222','0040','0101'],
+    'HALF — 4' :['0000','0808','FFFF','2222','0040','0101'],
+  };
+  // Fill select
+  (function(){
+    const opts = [];
+    for (const k of Object.keys(PRESETS)){
+      const o = document.createElement('option'); o.value = k; o.textContent = k; opts.push(o);
+    }
+    opts.forEach(o => presetSel.appendChild(o));
+  })();
+
+  // BUILD GRID
+  const chNames = ['CH1','CH2','CH3','CH4','CH5','CH6'];
+  function buildGrid(){
+    rowlabels.innerHTML = '';
+    for (let r=0;r<6;r++){
+      const lab = document.createElement('div'); lab.className='lab';
+      const tag = document.createElement('strong'); tag.textContent=chNames[r];
+      const hex = document.createElement('span'); hex.className='muted code'; hex.id='hex'+r; hex.textContent='0000';
+      lab.appendChild(tag); lab.appendChild(hex); rowlabels.appendChild(lab);
+    }
+    gridEl.innerHTML = '';
+    for (let r=0;r<6;r++){
+      for (let c=0;c<16;c++){
+        const d = document.createElement('div');
+        d.className = 'cell'; d.dataset.r=r; d.dataset.c=c;
+        d.title = `${chNames[r]} step ${c+1}`;
+        d.addEventListener('click', () => toggleCell(r,c));
+        gridEl.appendChild(d);
+      }
+    }
+    renderGrid();
+  }
+  function toggleCell(r,c){
+    const bit = 15 - c;
+    pat[r] ^= (1<<bit);
+    renderRow(r);
+    setHexBadge();
+  }
+  function renderRow(r){
+    for (let c=0;c<16;c++){
+      const idx = r*16 + c;
+      const cell = gridEl.children[idx];
+      const bit = 15 - c;
+      const on = (pat[r] >> bit) & 1;
+      cell.classList.toggle('on', !!on);
+    }
+    document.getElementById('hex'+r).textContent = pat[r].toString(16).toUpperCase().padStart(4,'0');
+  }
+  function renderGrid(){ for (let r=0;r<6;r++) renderRow(r); setHexBadge(); }
+
+  // SERIAL
+  let port, reader, writer, textDecoder, textEncoder, readLoopAbort;
+  const waiters = [];
+  function log(msg){ const at = new Date().toLocaleTimeString(); consoleEl.textContent += `[${at}] ${msg}\n`; consoleEl.scrollTop = consoleEl.scrollHeight; }
+  function setConnected(on){
+    connDot.classList.toggle('ok', on);
+    connectBtn.disabled = on; disconnectBtn.disabled = !on;
+    [loadPat,sendPat,refreshCfg,oneshotGen,oneshotMut,applyPreset,applyPresetAndSend,presetSel,
+     bpm,clk,mode,style,fill,rep,sw,encdir,oled,rin].forEach(el => el.disabled = !on);
+    connDot.title = on ? 'Connected' : 'Disconnected';
+  }
+  function once(prefix){ return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('Timeout waiting '+prefix)), 1500);
+    waiters.push({prefix, done: (line)=>{ clearTimeout(t); resolve(line); }});
+  });}
+  async function send(line, quiet=false){
+    if (!writer) throw new Error('Not connected');
+    if (!quiet) log('> '+line);
+    await writer.write(line + '\n');
+  }
+  async function sendAndWait(prefix, line){ const p=once(prefix); await send(line); return p; }
+  async function connect(){
+    if (!('serial' in navigator)){ alert('Web Serial not supported. Use Chrome/Edge.'); return; }
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate:115200, bufferSize:255 });
+    textDecoder = new TextDecoderStream(); textEncoder = new TextEncoderStream();
+    readLoopAbort = new AbortController();
+    port.readable.pipeTo(textDecoder.writable); textEncoder.readable.pipeTo(port.writable);
+    reader = textDecoder.readable.getReader(); writer = textEncoder.writable.getWriter();
+    setConnected(true);
+    readLoop().catch(()=>{});
+    await loadConfig(); await loadPattern();
+  }
+  async function disconnect(){
+    try{ readLoopAbort?.abort(); reader?.releaseLock(); writer?.releaseLock(); await port?.close(); }catch(e){}
+    setConnected(false);
+  }
+  async function readLoop(){
+    let buf = '';
+    while (true){
+      const { value, done } = await reader.read(); if (done) break;
+      buf += value; let idx;
+      while ((idx = buf.indexOf('\n')) >= 0){
+        let line = buf.slice(0, idx).replace(/\r$/, ''); buf = buf.slice(idx+1);
+        if (!line) continue;
+        let matched = false;
+        for (let i=0;i<waiters.length;i++){
+          const w = waiters[i];
+          if (line.startsWith(w.prefix)){ waiters.splice(i,1); w.done(line); matched=true; break; }
+        }
+        if (!matched) log(line);
+      }
+    }
+  }
+
+  // CONFIG IO
+  async function loadConfig(){
+    const line = await sendAndWait('C=', 'C?');
+    // C=bpm,clk,mode,style,fill,rep,sw,enc,oled,rin
+    const parts = line.slice(2).split(',').map(s=>parseInt(s,10));
+    if (parts.length >= 10){
+      bpm.value = parts[0]; bpmVal.textContent = parts[0];
+      clk.value = parts[1]; mode.value = parts[2];
+      style.value = parts[3]; fill.value = parts[4];
+      rep.value = parts[5]; sw.value = parts[6];
+      encdir.value = parts[7]; oled.value = parts[8];
+      rin.value = parts[9]; updateModeLock();
+      log('Config loaded');
+    }
+  }
+  async function loadPattern(){
+    const line = await sendAndWait('P=', 'P?');
+    const hex = line.slice(2).trim().split(',');
+    if (hex.length === 6){
+      for (let r=0;r<6;r++) pat[r] = parseInt(hex[r],16) & 0xFFFF;
+      renderGrid(); log('Pattern loaded');
+    }
+  }
+  async function sendPattern(){
+    const cmd = 'P=' + [...pat].map(v => v.toString(16).toUpperCase().padStart(4,'0')).join(',');
+    const p = once('OK'); await send(cmd); await p.catch(()=>{});
+  }
+
+  // CONFIG events
+  bpm.addEventListener('input', ()=> bpmVal.textContent = bpm.value);
+  bpm.addEventListener('change', async ()=> { try{ await send(`B${bpm.value}`);}catch(e){log(e.message);} });
+  clk.addEventListener('change', async ()=> { try{ await send(`K${clk.value}`);}catch(e){log(e.message);} });
+  mode.addEventListener('change', async ()=> { try{ await send(`M${mode.value}`); updateModeLock(); }catch(e){log(e.message);} });
+  style.addEventListener('change', async ()=> { try{ await send(`S${style.value}`);}catch(e){log(e.message);} });
+  fill.addEventListener('change', async ()=> { try{ await send(`F${fill.value}`);}catch(e){log(e.message);} });
+  rep.addEventListener('change', async ()=> { try{ await send(`R${rep.value}`);}catch(e){log(e.message);} });
+  sw.addEventListener('change', async ()=> { try{ await send(`W${sw.value}`);}catch(e){log(e.message);} });
+  encdir.addEventListener('change', async ()=> { try{ await send(`E${encdir.value}`);}catch(e){log(e.message);} });
+  oled.addEventListener('change', async ()=> { try{ await send(`O${oled.value}`);}catch(e){log(e.message);} });
+  rin.addEventListener('change', async ()=> { try{ await send(`N${rin.value}`);}catch(e){log(e.message);} });
+
+  oneshotGen.addEventListener('click', async ()=> {
+    try{ await send('G'); await once('OK'); await loadPattern(); }catch(e){ log(e.message); }
+  });
+  oneshotMut.addEventListener('click', async ()=> {
+    try{ await send('U'); await once('OK'); await loadPattern(); }catch(e){ log(e.message); }
+  });
+
+  function updateModeLock(){
+    const manual = mode.value === '0';
+    style.disabled = manual; fill.disabled = manual; rep.disabled = manual; sw.disabled = manual;
+  }
+
+  // PRESET actions
+  function applyPresetToPat(name){
+    const rows = PRESETS[name]; if (!rows) return;
+    for (let r=0;r<6;r++) pat[r] = parseInt(rows[r],16) & 0xFFFF;
+    renderGrid();
+  }
+  applyPreset.addEventListener('click', ()=> applyPresetToPat(presetSel.value));
+  applyPresetAndSend.addEventListener('click', async ()=>{
+    applyPresetToPat(presetSel.value); try{ await sendPattern(); }catch(e){ log(e.message); }
+  });
+
+  // BUTTONS
+  connectBtn.addEventListener('click', connect);
+  disconnectBtn.addEventListener('click', disconnect);
+  refreshCfg.addEventListener('click', loadConfig);
+  loadPat.addEventListener('click', loadPattern);
+  sendPat.addEventListener('click', sendPattern);
+
+  // INIT
+  function setConnected(on){
+    connDot.classList.toggle('ok', on);
+    connectBtn.disabled = on; disconnectBtn.disabled = !on;
+    [loadPat,sendPat,refreshCfg,oneshotGen,oneshotMut,applyPreset,applyPresetAndSend,presetSel,
+     bpm,clk,mode,style,fill,rep,sw,encdir,oled,rin].forEach(el => el.disabled = !on);
+    connDot.title = on ? 'Connected' : 'Disconnected';
+  }
+  function buildGrid(){
+    rowlabels.innerHTML=''; gridEl.innerHTML='';
+    const chNames=['CH1','CH2','CH3','CH4','CH5','CH6'];
+    for (let r=0;r<6;r++){
+      const lab=document.createElement('div'); lab.className='lab';
+      const tag=document.createElement('strong'); tag.textContent=chNames[r];
+      const hex=document.createElement('span'); hex.className='muted code'; hex.id='hex'+r; hex.textContent='0000';
+      lab.appendChild(tag); lab.appendChild(hex); rowlabels.appendChild(lab);
+      for (let c=0;c<16;c++){
+        const d=document.createElement('div'); d.className='cell'; d.dataset.r=r; d.dataset.c=c;
+        d.addEventListener('click',()=>{ const bit=15-c; pat[r]^=(1<<bit); renderRow(r); setHexBadge(); });
+        gridEl.appendChild(d);
+      }
+    }
+    renderGrid();
+  }
+  function renderRow(r){ for (let c=0;c<16;c++){ const cell=gridEl.children[r*16+c]; const bit=15-c; cell.classList.toggle('on', !!((pat[r]>>bit)&1)); } document.getElementById('hex'+r).textContent=pat[r].toString(16).toUpperCase().padStart(4,'0'); }
+  function renderGrid(){ for (let r=0;r<6;r++) renderRow(r); setHexBadge(); }
+
+  setConnected(false);
+  buildGrid();
+  // Default preset shown
+  presetSel.value = 'TECH — 1';
+})();
+</script>
+</body>
+</html>
