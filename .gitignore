@@ -14,3 +14,4 @@ sym-lib-table
 .gitignore
 .vscode/tasks.json
 .vscode/launch.json
+.vscode/arduino.json

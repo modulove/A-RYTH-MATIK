@@ -40,7 +40,7 @@
  * Libs : U8g2 (U8x8), EncoderButton
  */
 
-//#include <Arduino.h>
+#include <Arduino.h>
 #include <EEPROM.h>
 #include <Wire.h>
 #include <U8x8lib.h>
