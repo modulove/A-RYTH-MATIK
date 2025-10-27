@@ -1,0 +1,96 @@
+name: Build and Release Firmware
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  # Workflow executes on semantic version tag
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build_arythmatik:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        firmware: ["ARYTHMATIK_Buds", "ARYTHMATIK_Euclid", "ARYTHMATIK_Gate-seq", "ARYTHMATIK_Labor", "ARYTHMATIK_Pong"]
+        board: ["arduino:avr:nano", "arduino:avr:nano:cpu=atmega328old"]
+        include:
+          - board: arduino:avr:nano
+            boardpath: nano
+          - board: arduino:avr:nano:cpu=atmega328old
+            boardpath: nanoOldBootloader
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v1.1.1
+
+      - name: Install Arduino platform and libraries
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+          arduino-cli config init
+          arduino-cli config set library.enable_unsafe_install true
+          arduino-cli lib install --git-url https://github.com/modulove/libModulove.git
+          arduino-cli lib install --git-url https://github.com/wimleers/flexitimer2.git
+          arduino-cli lib install "Adafruit GFX Library"
+          arduino-cli lib install "Adafruit SSD1306"
+          arduino-cli lib install EncoderButton
+          arduino-cli lib install FastLED
+
+      - name: Compile sketch and rename output file for release
+        working-directory: ./Firmware
+        run: |
+          arduino-cli compile -v -b ${{ matrix.board}} ${{ matrix.firmware}} -e --output-dir=./build/${{ matrix.boardpath }}
+          arduino-cli compile -v -b ${{ matrix.board}} --build-property "build.extra_flags=-DENCODER_REVERSED" ${{ matrix.firmware}} -e --output-dir=./build_reversed/${{ matrix.boardpath }}
+          mkdir -p ./release
+          cp ./build/${{ matrix.boardpath }}/${{ matrix.firmware }}.ino.hex ./release/${{ matrix.firmware }}.${{ matrix.boardpath }}.hex
+          cp ./build_reversed/${{ matrix.boardpath }}/${{ matrix.firmware }}.ino.hex ./release/${{ matrix.firmware }}.${{ matrix.boardpath }}.reversed.hex
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.boardpath }}-${{ matrix.firmware }}
+          path: ./Firmware/release/*.hex
+
+  release:
+    needs: [build_arythmatik]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases/
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Create Release and attach files
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: releases/**/*.hex
+          generate_release_notes: true
+
+  # Trigger the Hugo deployment on modulove.github.io after successful release
+  trigger_hugo_deploy:
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Trigger Hugo deployment workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.MODULOVE_DEPLOY_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: 'modulove',
+              repo: 'modulove.github.io',
+              workflow_id: 'hugo.yml',
+              ref: 'main'
+            });
