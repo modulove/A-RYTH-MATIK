@@ -67,12 +67,12 @@ The build system automatically installs:
 
 - Arduino CLI
 - Arduino AVR core
-- libModulove (from modulove/libModulove)
-- FlexiTimer2
 - Adafruit GFX Library
 - Adafruit SSD1306
 - EncoderButton
 - FastLED
+
+**Note:** libModulove is embedded in each firmware's `src/libmodulove` directory and does not need to be installed separately.
 
 ## Build Configuration
 

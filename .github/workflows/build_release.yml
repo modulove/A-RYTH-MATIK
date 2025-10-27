@@ -34,10 +34,6 @@ jobs:
         run: |
           arduino-cli core update-index
           arduino-cli core install arduino:avr
-          arduino-cli config init
-          arduino-cli config set library.enable_unsafe_install true
-          arduino-cli lib install --git-url https://github.com/modulove/libModulove.git
-          arduino-cli lib install --git-url https://github.com/wimleers/flexitimer2.git
           arduino-cli lib install "Adafruit GFX Library"
           arduino-cli lib install "Adafruit SSD1306"
           arduino-cli lib install EncoderButton
