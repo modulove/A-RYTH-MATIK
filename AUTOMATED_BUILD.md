@@ -67,12 +67,14 @@ The build system automatically installs:
 
 - Arduino CLI
 - Arduino AVR core
+- FastGPIO (from pololu/fastgpio-arduino)
 - Adafruit GFX Library
 - Adafruit SSD1306
+- Encoder (PJRC Encoder library)
 - EncoderButton
 - FastLED
 
-**Note:** libModulove is embedded in each firmware's `src/libmodulove` directory and does not need to be installed separately.
+**Note:** libModulove is included as a git submodule from awonak/libModulove and is automatically cloned when checking out the repository with `submodules: recursive`.
 
 ## Build Configuration
 
