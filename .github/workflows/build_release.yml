@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        firmware: ["ARYTHMATIK_Buds", "ARYTHMATIK_Euclid", "ARYTHMATIK_Gate-seq", "ARYTHMATIK_Labor", "ARYTHMATIK_Pong"]
+        firmware: ["ARYTHMATIK_Buds", "ARYTHMATIK_Euclid", "ARYTHMATIK_Gate-seq", "ARYTHMATIK_Labor", "ARYTHMATIK_Pong", "ARYTHMATIK_Stitch"]
         board: ["arduino:avr:nano", "arduino:avr:nano:cpu=atmega328old"]
         include:
           - board: arduino:avr:nano
