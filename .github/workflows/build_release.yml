@@ -45,6 +45,7 @@ jobs:
           arduino-cli lib install Encoder
           arduino-cli lib install EncoderButton
           arduino-cli lib install FastLED
+          arduino-cli lib install U8glib
 
       - name: Compile sketch and rename output file for release
         working-directory: ./Firmware
