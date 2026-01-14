@@ -1,5 +1,10 @@
 # STITCH — A-RYTH-MATIK Gate / Trigger Sequencer Firmware
 
+## Download firmware / Update your module
+
+https://dl.modulove.io/arythmatik/#stitch-sequencer
+
+
 **STITCH** is a fast, text-only, performance-oriented 6-track / 16-step trigger & gate sequencer firmware for the **Modulove A-RYTH-MATIK** hardware (Arduino Nano / ATmega328P).
 
 It combines **classic step programming** with **preset banks**, **repeat/switch automation**, **fill scheduling**, and **one-shot generative tools**—while keeping timing tight (PCINT external clock + Timer1 internal clock) and the UI extremely lightweight (U8x8, no framebuffer).
