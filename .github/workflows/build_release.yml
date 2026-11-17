@@ -7,6 +7,9 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  # Pull requests are built and checked too (no release); the .hex files are attached
+  # to the workflow run as artifacts
+  pull_request:
 
 permissions:
   contents: write
@@ -47,11 +50,20 @@ jobs:
           arduino-cli lib install FastLED
           arduino-cli lib install U8g2
 
+      - name: Check LGT8F_Compat.h copies are identical
+        working-directory: ./Firmware
+        run: |
+          # Every sketch carries its own copy (Arduino IDE sketch folders cannot share files).
+          for f in */LGT8F_Compat.h; do cmp "$f" ARYTHMATIK_Euclid/LGT8F_Compat.h || { echo "::error::$f differs from ARYTHMATIK_Euclid/LGT8F_Compat.h"; exit 1; }; done
+
       - name: Compile sketch and rename output file for release
         working-directory: ./Firmware
         run: |
-          arduino-cli compile -v -b ${{ matrix.board}} ${{ matrix.firmware}} -e --output-dir=./build/${{ matrix.boardpath }}
-          arduino-cli compile -v -b ${{ matrix.board}} --build-property "build.extra_flags=-DENCODER_REVERSED" ${{ matrix.firmware}} -e --output-dir=./build_reversed/${{ matrix.boardpath }}
+          # Each .hex also runs on LGT8F328P boards (LGT8F_Compat.h), so it has to fit
+          # below the LGT8F bootloader at 0x7400 (29,696 bytes); the build fails if not.
+          SIZE_LIMIT="--build-property upload.maximum_size=29696"
+          arduino-cli compile -v -b ${{ matrix.board}} $SIZE_LIMIT ${{ matrix.firmware}} -e --output-dir=./build/${{ matrix.boardpath }}
+          arduino-cli compile -v -b ${{ matrix.board}} $SIZE_LIMIT --build-property "build.extra_flags=-DENCODER_REVERSED" ${{ matrix.firmware}} -e --output-dir=./build_reversed/${{ matrix.boardpath }}
           mkdir -p ./release
           cp ./build/${{ matrix.boardpath }}/${{ matrix.firmware }}.ino.hex ./release/${{ matrix.firmware }}.${{ matrix.boardpath }}.hex
           cp ./build_reversed/${{ matrix.boardpath }}/${{ matrix.firmware }}.ino.hex ./release/${{ matrix.firmware }}.${{ matrix.boardpath }}.reversed.hex

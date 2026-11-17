@@ -1,3 +1,4 @@
+#include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM) - must be the first include
 #include "src/libmodulove/arythmatik.h"
 #include <avr/pgmspace.h>
 #include <FastGPIO.h>
@@ -409,8 +410,7 @@ void setup() {
 
     hw.Init();
 
-    // boot logo animation only on nano for now
-#if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
+#if !defined(DISABLE_BOOT_LOGO)
   drawAnimation();
   delay(1200);
 #endif

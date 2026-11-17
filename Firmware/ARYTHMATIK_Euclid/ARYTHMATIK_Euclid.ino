@@ -27,12 +27,18 @@
  * - rotate CW: dial in individual channel values for Hits, Offset, Limit, Mute. Reset channel, randomize channel
  * - rotate CCW: quick access menue for sequence Reset & Mute
  *
+ * Boards:
+ * - One .hex for the Arduino Nano (ATmega328P) and LGT8F328P Nano boards:
+ *   build for "Arduino Nano", the chip is detected at power-up (LGT8F_Compat.h).
+ * - Building with the lgt8fx core (Board "LGT8F328") also works (32 MHz).
+ *
  */
 
 #include <avr/pgmspace.h>
 #include <FastGPIO.h>
 #include <EncoderButton.h>
-#include <EEPROM.h>
+#include <util/atomic.h>
+#include "LGT8F_Compat.h"  // instead of <EEPROM.h>: Nano + LGT8F328P from one .hex
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -42,17 +48,8 @@
 //#define ROTATE_PANEL
 //#define DISABLE_BOOT_LOGO
 
-#if defined(__LGT8FX8P__)
-#define LGT8FX_BOARD
-#endif
-
-#ifdef LGT8FX_BOARD
-#define NUM_MEMORY_SLOTS 10
-#define NUM_PRESETS 10  // 10 for LGT8FX8P
-#else
 #define NUM_MEMORY_SLOTS 20
-#define NUM_PRESETS 20  // All presets for Nano
-#endif
+#define NUM_PRESETS 20
 
 #ifdef ROTATE_PANEL
 // When panel is rotated
@@ -146,7 +143,7 @@ enum Setting {
 // Timing
 bool trg_in = false, old_trg_in = false, rst_in = false, old_rst_in = false;
 
-byte playing_step[6] = { 0 };
+volatile byte playing_step[6] = { 0 };  // advanced by the clock interrupts
 
 // display Menu and UI
 // Select settings menu and channel menu
@@ -180,9 +177,17 @@ constexpr uint8_t MAX_CHANNELS = 6;
 constexpr uint8_t MAX_STEPS = 16;
 constexpr uint8_t MAX_PATTERNS = 17;
 const int MIN_REFRESH_DURATION = 375;  // 250;  // 125;  // Used by fast inputs like encoder rotation to throttle the display refresh. (3 steps)
-unsigned long gate_timer = 0;
-unsigned long last_clock_input = 0;
-unsigned long internalClockTimer = 0;
+volatile unsigned long last_clock_input = 0;
+
+// Gate timing: the clock interrupts play the steps (clockStep()), so gates are
+// on time even while the main loop is busy sending a frame to the OLED.
+// Timer1 runs free at F_CPU / 256 (16 us per tick at 16 MHz):
+// compare A = internal clock, compare B = gates off 10 ms after a step.
+const uint16_t GATE_TICKS = F_CPU / 256 / 100;              // 10 ms gate
+volatile uint16_t intClockTicks = F_CPU / 256 * 15 / 120;   // 16th note at 120 BPM
+volatile uint8_t beatCount = 0;        // steps played; the main loop follows it
+volatile unsigned long ledTimer = 0;   // channel LEDs go off 30 ms after a step
+uint16_t isrRandom = 1;                // xorshift state for the probability (interrupt only)
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -245,33 +250,38 @@ struct SlotConfiguration {
   bool lastLoadedFromPreset;       // Flag to indicate last load source
 };
 
-// Updated default (preset) configuration with names and rhythm patterns
-// presets with conditional size
-const SlotConfiguration defaultSlots[NUM_PRESETS] PROGMEM = {
-  // Define only the first 10 presets for LGT8FX_BOARD
-  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { false, false, false, false, false, false }, { 16, 16, 12, 8, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Techno", 130 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Funk", 110 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Swing", 140 },
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Samba", 100 },
-  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Waltz", 90 },
-  { { 2, 2, 3, 3, 3, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "BossaN", 120 },
-  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Bell", 100 },
-  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { false, false, false, false, false, false }, { 24, 18, 24, 21, 16, 30 }, { 100, 100, 100, 100, 100, 100 }, "Gen", 80 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 2, 0, 3 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Gahu", 120 },
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 1, 0, 1, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Threes", 120 },
-// Additional presets for Arduino Nano
-#ifndef LGT8FX_BOARD
-  { { 9, 9, 9, 9, 9, 9 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Aksak", 120 },
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 4, 6, 8, 10 }, { false, false, false, false, false, false }, { 8, 8, 8, 8, 8, 8 }, { 100, 100, 100, 100, 100, 100 }, "Rumba", 120 },
-  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Clave", 120 },
-    { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Zarbi", 120 },
-  { { 5, 5, 5, 5, 5, 5 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Nawkht", 120 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "FumeF", 120 },
-  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { false, false, false, false, false, false }, { 12, 12, 12, 12, 12, 12 }, { 100, 100, 100, 100, 100, 100 }, "Djembe", 120 },
-  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 2, 3, 4, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Gahu44", 120 },
-  { { 3, 3, 3, 3, 3, 3 }, { 0, 2, 4, 1, 3, 5 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "Takita", 120 },
-  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { false, false, false, false, false, false }, { 16, 16, 16, 16, 16, 16 }, { 100, 100, 100, 100, 100, 100 }, "ClkDiv", 120 },
-#endif
+// Default presets with names and rhythm patterns. All presets start unmuted with
+// 100 % probability, so only hits/offset/limit/name/tempo are stored (saves ~400 bytes
+// of flash); loadDefaultConfig() expands them to a SlotConfiguration.
+struct PresetPattern {
+  byte hits[MAX_CHANNELS];
+  byte offset[MAX_CHANNELS];
+  byte limit[MAX_CHANNELS];
+  char name[7];
+  byte tempo;
+};
+
+const PresetPattern defaultSlots[NUM_PRESETS] PROGMEM = {
+  { { 4, 4, 7, 4, 4, 4 }, { 0, 2, 3, 2, 1, 0 }, { 16, 16, 12, 8, 16, 16 }, "Techno", 130 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { 16, 16, 16, 16, 16, 16 }, "Funk", 110 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 3, 1, 0, 2 }, { 12, 12, 12, 12, 12, 12 }, "Swing", 140 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 3, 2, 0, 2 }, { 8, 8, 8, 8, 8, 8 }, "Samba", 100 },
+  { { 4, 3, 4, 3, 4, 3 }, { 0, 2, 0, 2, 0, 2 }, { 12, 12, 12, 12, 12, 12 }, "Waltz", 90 },
+  { { 2, 2, 3, 3, 3, 3 }, { 0, 2, 0, 2, 0, 2 }, { 16, 16, 16, 16, 16, 16 }, "BossaN", 120 },
+  { { 7, 7, 7, 7, 7, 7 }, { 0, 2, 4, 6, 8, 10 }, { 12, 12, 12, 12, 12, 12 }, "Bell", 100 },
+  { { 2, 2, 3, 1, 2, 1 }, { 0, 1, 0, 2, 1, 0 }, { 24, 18, 24, 21, 16, 30 }, "Gen", 80 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 2, 0, 3 }, { 16, 16, 16, 16, 16, 16 }, "Gahu", 120 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 1, 0, 1, 0, 2 }, { 12, 12, 12, 12, 12, 12 }, "Threes", 120 },
+  { { 9, 9, 9, 9, 9, 9 }, { 0, 1, 2, 3, 4, 5 }, { 8, 8, 8, 8, 8, 8 }, "Aksak", 120 },
+  { { 5, 5, 5, 5, 5, 5 }, { 0, 2, 4, 6, 8, 10 }, { 8, 8, 8, 8, 8, 8 }, "Rumba", 120 },
+  { { 3, 4, 3, 4, 3, 4 }, { 0, 2, 1, 3, 2, 4 }, { 16, 16, 16, 16, 16, 16 }, "Clave", 120 },
+  { { 3, 3, 3, 3, 3, 3 }, { 0, 1, 2, 3, 4, 5 }, { 16, 16, 16, 16, 16, 16 }, "Zarbi", 120 },
+  { { 5, 5, 5, 5, 5, 5 }, { 0, 1, 2, 3, 4, 5 }, { 12, 12, 12, 12, 12, 12 }, "Nawkht", 120 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 0, 1, 0, 1 }, { 16, 16, 16, 16, 16, 16 }, "FumeF", 120 },
+  { { 5, 3, 5, 3, 5, 3 }, { 0, 2, 0, 2, 0, 2 }, { 12, 12, 12, 12, 12, 12 }, "Djembe", 120 },
+  { { 4, 4, 4, 4, 4, 4 }, { 0, 1, 2, 3, 4, 5 }, { 16, 16, 16, 16, 16, 16 }, "Gahu44", 120 },
+  { { 3, 3, 3, 3, 3, 3 }, { 0, 2, 4, 1, 3, 5 }, { 16, 16, 16, 16, 16, 16 }, "Takita", 120 },
+  { { 16, 8, 4, 2, 1, 1 }, { 0, 0, 0, 0, 0, 0 }, { 16, 16, 16, 16, 16, 16 }, "ClkDiv", 120 },
 };
 
 SlotConfiguration memorySlots[NUM_MEMORY_SLOTS], currentConfig;
@@ -338,8 +348,7 @@ void drawAnimation() {  // Boot Logo
 void (*ClockHandler)() = NULL;
 void (*ResetHandler)() = NULL;
 
-// Interrupt flags - set by ISR, cleared by main loop
-volatile bool clockTriggerFlag = false;
+// Interrupt flag - set by ISR, cleared by main loop (display refresh after a reset)
 volatile bool resetTriggerFlag = false;
 
 // Previous pin states for edge detection in ISR
@@ -353,7 +362,6 @@ void noop() {
 
 // Clock interrupt handler - called when clock rising edge is detected
 void handleClockInterrupt() {
-  clockTriggerFlag = true;
   last_clock_input = millis();
   
   // Calculate external BPM from pulse timing
@@ -368,10 +376,12 @@ void handleClockInterrupt() {
     period = 60000 / externalBPM / 4;
   }
   lastPulseTime = currentTime;
+  if (!internalClock) clockStep();
 }
 
 // Reset interrupt handler - called when reset rising edge is detected
 void handleResetInterrupt() {
+  resetSeq();
   resetTriggerFlag = true;
 }
 
@@ -479,9 +489,12 @@ void setup() {
   setupPinChangeInterrupts();
   initDisplay();
 
-// boot logo animation only on nano for now
-#if !defined(LGT8FX_BOARD) && !defined(DISABLE_BOOT_LOGO)
+#if !defined(DISABLE_BOOT_LOGO)
   drawAnimation();
+  // Show which chip was detected, so a board swap can be checked at a glance.
+  display.setCursor(IS_LGT ? 37 : 34, 54);
+  display.print(chipName());
+  display.display();
   delay(1200);
 #endif
 
@@ -502,60 +515,43 @@ void setup() {
   updateRythm();
   OLED_display();
 
-  unsigned long seed = analogRead(A0);
-  randomSeed(seed);
+  // analogRead(A0) gave the same seed on every power-up: A0 drives LED1 low.
+  randomSeed(chipRandomSeed());
 
   // Initialize the last external clock time to the current time
   last_clock_input = millis();
-  internalClockTimer = millis();
+  isrRandom = random(1, 65536);  // never 0
+  setupGateTimer();
 }
 
 void loop() {
   encoder.update();  // Process Encoder & button updates
-  //display.fillScreen(BLACK);
 
   updateRythm();
 
-  //-----------------trigger detect, reset & output----------------------
+  // Internal clock: 16th-note period for the Timer1 interrupt.
+  static int tickTempo = 0;
+  if (tempo != tickTempo) {
+    tickTempo = tempo;
+    uint16_t ticks = (uint32_t)(F_CPU / 256) * 15 / tempo;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      intClockTicks = ticks;
+    }
+  }
 
-  bool beat_start = false;
-
-  // Handle reset interrupt flag
+  // Reset is done in the interrupt, only the display follows here.
   if (resetTriggerFlag) {
-    resetTriggerFlag = false;  // Clear the flag
-    resetSeq();
+    resetTriggerFlag = false;
     disp_refresh = true;
   }
 
-  // Handle clock interrupt flag (external clock)
-  if (!internalClock && clockTriggerFlag) {
-    clockTriggerFlag = false;  // Clear the flag
-    beat_start = true;
-  }
-
-  // Handle internal clock
-  if (internalClock && (millis() - internalClockTimer >= period)) {
-    beat_start = true;
-    internalClockTimer = millis();
-    last_clock_input = millis();  // Update for clock detection
-  }
-
-  if (beat_start) {
-    gate_timer = millis();
+  // Follow the steps the clock interrupts have played.
+  static uint8_t beatsSeen = 0;
+  while (beatsSeen != beatCount) {
+    beatsSeen++;
     force_refresh = true;
-    CLK_LED::setOutput(1);
-    debug = 0;
-    for (int i = 0; i < MAX_CHANNELS; i++) {
-      playing_step[i]++;
-      if (playing_step[i] >= currentConfig.limit[i]) {
-        playing_step[i] = 0;  // Step limit is reached
-      }
-    }
-
-    // Output gate signal
-    outputGateSignals();
-
     disp_refresh = true;  // Updates the display where the trigger was entered.
+    debug = 0;
 
     // Random advance mode (mode 6)
     if (selected_menu == MENU_RANDOM_ADVANCE) {  // random mode setting
@@ -571,22 +567,16 @@ void loop() {
     }
   }
 
-  if (gate_timer + 10 <= millis()) {  //off all gate , gate time is 10msec
-    OUTPUT1::setOutput(0);
-    OUTPUT2::setOutput(0);
-    OUTPUT3::setOutput(0);
-    OUTPUT4::setOutput(0);
-    OUTPUT5::setOutput(0);
-    OUTPUT6::setOutput(0);
-    CLK_LED::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
-  }
-  if (gate_timer + 30 <= millis()) {  //off all gate , gate time is 10msec, reduced from 100 ms to 30 ms
-    LED1::setOutput(0);
-    LED2::setOutput(0);
-    LED3::setOutput(0);
-    LED4::setOutput(0);
-    LED5::setOutput(0);
-    LED6::setOutput(0);
+  // Channel LEDs stay on for 30 ms (the gates end in the Timer1 interrupt after 10 ms).
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    if (millis() - ledTimer >= 30) {
+      LED1::setOutput(0);
+      LED2::setOutput(0);
+      LED3::setOutput(0);
+      LED4::setOutput(0);
+      LED5::setOutput(0);
+      LED6::setOutput(0);
+    }
   }
 
   OLED_display();  // refresh display
@@ -648,9 +638,64 @@ void initDisplay() {
 #endif
 }
 
+// Timer1 free-running at F_CPU / 256; compare A = internal clock, compare B = gate end.
+void setupGateTimer() {
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    TCCR1A = 0;
+    TCCR1B = (1 << CS12);
+    OCR1A = TCNT1 + intClockTicks;
+    TIFR1 = (1 << OCF1A) | (1 << OCF1B);
+    TIMSK1 = (1 << OCIE1A);
+  }
+}
+
+// Play one step on all channels. Called from the clock interrupts only.
+void clockStep() {
+  for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
+    playing_step[i]++;
+    if (playing_step[i] >= currentConfig.limit[i]) {
+      playing_step[i] = 0;  // Step limit is reached
+    }
+  }
+  CLK_LED::setOutput(1);
+  outputGateSignals();
+  OCR1B = TCNT1 + GATE_TICKS;  // gates off in 10 ms
+  TIFR1 = (1 << OCF1B);
+  TIMSK1 |= (1 << OCIE1B);
+  ledTimer = millis();
+  last_clock_input = ledTimer;
+  beatCount++;
+}
+
+// Internal clock
+ISR(TIMER1_COMPA_vect) {
+  OCR1A += intClockTicks;
+  if (internalClock) clockStep();
+}
+
+// End of the 10 ms gate
+ISR(TIMER1_COMPB_vect) {
+  OUTPUT1::setOutput(0);
+  OUTPUT2::setOutput(0);
+  OUTPUT3::setOutput(0);
+  OUTPUT4::setOutput(0);
+  OUTPUT5::setOutput(0);
+  OUTPUT6::setOutput(0);
+  CLK_LED::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
+  TIMSK1 &= ~(1 << OCIE1B);
+}
+
+// 0..99 for the probability check (xorshift16, safe to use in the interrupt).
+uint8_t isrRandom100() {
+  isrRandom ^= isrRandom << 7;
+  isrRandom ^= isrRandom >> 9;
+  isrRandom ^= isrRandom << 8;
+  return ((uint16_t)(isrRandom >> 8) * 100) >> 8;
+}
+
 void outputGateSignals() {
   for (int i = 0; i < MAX_CHANNELS; i++) {
-    if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && random(100) < currentConfig.probability[i]) {
+    if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && isrRandom100() < currentConfig.probability[i]) {
       switch (i) {
         case 0:
           OUTPUT1::setOutput(1);
@@ -682,7 +727,11 @@ void outputGateSignals() {
 }
 
 bool isClockRunning() {
-  return internalClock || (millis() - last_clock_input < period);
+  unsigned long last;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    last = last_clock_input;
+  }
+  return internalClock || (millis() - last < period);
 }
 
 void onEncoderClicked(EncoderButton &eb) {
@@ -790,7 +839,7 @@ void onEncoderRotation(EncoderButton &eb) {
     switch (selected_menu) {
       case MENU_PRESET:
         // Handle preset selection
-        selected_preset = (selected_preset + increment + sizeof(defaultSlots) / sizeof(SlotConfiguration)) % (sizeof(defaultSlots) / sizeof(SlotConfiguration));
+        selected_preset = (selected_preset + increment + NUM_PRESETS) % NUM_PRESETS;
         break;
 
       case MENU_TEMPO:
@@ -917,7 +966,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 void initializeCurrentConfig(bool loadDefaults = false) {
   if (loadDefaults) {
     // Load default configuration from PROGMEM
-    memcpy_P(&currentConfig, &defaultSlots[0], sizeof(SlotConfiguration));  // Load the first default slot as the initial configuration
+    loadDefaultConfig(&currentConfig, 0);  // Load the first default slot as the initial configuration
   } else {
     // Load configuration from EEPROM
     int baseAddress = EEPROM_START_ADDRESS;  // Start address for the first slot
@@ -966,7 +1015,17 @@ void handleSettingNavigation(int changeDirection) {
 // Loading SlotConfiguration from PROGMEM
 void loadDefaultConfig(SlotConfiguration *config, int index) {
   if (index >= NUM_PRESETS) index = 0;
-  memcpy_P(config, &defaultSlots[index], sizeof(SlotConfiguration));
+  PresetPattern preset;
+  memcpy_P(&preset, &defaultSlots[index], sizeof(preset));
+  memset(config, 0, sizeof(*config));  // unmuted, internal clock off, name zero-padded
+  for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
+    config->hits[i] = preset.hits[i];
+    config->offset[i] = preset.offset[i];
+    config->limit[i] = preset.limit[i];
+    config->probability[i] = 100;
+  }
+  memcpy(config->name, preset.name, sizeof(preset.name));
+  config->tempo = preset.tempo;
   disp_refresh = true;
 }
 
@@ -981,10 +1040,6 @@ void saveToEEPROM(int slot) {
     EEPROM.put(baseAddress, currentConfig);
     // Save the last used slot
     EEPROM.put(LAST_USED_SLOT_ADDRESS, slot);
-  } else {
-    // Handle error
-    printDebugMessage("EEPROM Save Error");
-    return;
   }
 }
 
@@ -998,14 +1053,11 @@ void loadFromEEPROM(int slot) {
     selected_preset = currentConfig.selectedPreset;
     period = 60000 / tempo / 4;  // Update period with loaded tempo
     updateRythm();               // Refresh
-  } else {
-    // Handle the error
-    printDebugMessage("EEPROM Load Error");
-  }
+  }  // an invalid slot (garbage EEPROM data) is ignored
 }
 
 void loadFromPreset(int preset) {
-  if (preset >= sizeof(defaultSlots) / sizeof(SlotConfiguration)) preset = 0;
+  if (preset >= NUM_PRESETS) preset = 0;
   loadDefaultConfig(&currentConfig, preset);
   tempo = currentConfig.tempo;
   internalClock = currentConfig.internalClock;
@@ -1016,7 +1068,7 @@ void loadFromPreset(int preset) {
 void initializeDefaultRhythms() {
   for (int i = 0; i < NUM_PRESETS; i++) {
     SlotConfiguration config;
-    memcpy_P(&config, &defaultSlots[i % (sizeof(defaultSlots) / sizeof(SlotConfiguration))], sizeof(SlotConfiguration));
+    loadDefaultConfig(&config, i);
     EEPROM.put(EEPROM_START_ADDRESS + i * CONFIG_SIZE, config);
   }
 }
@@ -1075,61 +1127,36 @@ void rightMenu(char c1, char c2, char c3, char c4) {
   display.print(c4);
 }
 
+// Menu labels as 4 letters per entry (saves flash compared to a switch per menu)
+const char topMenuLabels[] PROGMEM = "RND X   S   L   P   EXT R   M   ";  // MENU_RANDOM_ADVANCE .. MENU_ALL_MUTE
+const char modeMenuLabels[] PROGMEM = "RANDSAVELOADPRST*CLKRSETMUTE";    // MENU_RAND .. MENU_ALL_MUTE
+const char settingLabels[] PROGMEM = "HITSOFFSLIMIMUTERSETRANDPROB";     // SETTING_HITS .. SETTING_PROB
+
+void leftMenuP(const char *label) {
+  leftMenu(pgm_read_byte(label), pgm_read_byte(label + 1), pgm_read_byte(label + 2), pgm_read_byte(label + 3));
+}
+
 void drawTopMenuRight(TopMenu select_ch) {
   if (showOverlay) return;  // Exit
-  switch (select_ch) {
-    case MENU_CH_1: rightMenu('1', 'H', 'O', ' '); break;
-    case MENU_CH_2: rightMenu('2', 'H', 'O', ' '); break;
-    case MENU_CH_3: rightMenu('3', 'H', 'O', ' '); break;
-    case MENU_CH_4: rightMenu('4', 'H', 'O', ' '); break;
-    case MENU_CH_5: rightMenu('5', 'H', 'O', ' '); break;
-    case MENU_CH_6: rightMenu('6', 'H', 'O', ' '); break;
-    case MENU_RANDOM_ADVANCE: rightMenu('R', 'N', 'D', ' '); break;
-    case MENU_SAVE: rightMenu('S', ' ', ' ', ' '); break;
-    case MENU_LOAD: rightMenu('L', ' ', ' ', ' '); break;
-    case MENU_PRESET: rightMenu('P', ' ', ' ', ' '); break;
-    case MENU_ALL_RESET: rightMenu('R', ' ', ' ', ' '); break;
-    case MENU_ALL_MUTE: rightMenu('M', ' ', ' ', ' '); break;
-    case MENU_RAND: rightMenu('X', ' ', ' ', ' '); break;
-    case MENU_TEMPO:
-      if (internalClock) {
-        rightMenu('I', 'N', 'T', ' ');
-      } else {
-        rightMenu('E', 'X', 'T', ' ');
-      }
-      break;
-    default: break;
+  if (select_ch <= MENU_CH_6) {
+    rightMenu('1' + select_ch, 'H', 'O', ' ');
+    return;
   }
+  const char *label = topMenuLabels + 4 * (select_ch - MENU_RANDOM_ADVANCE);
+  if (select_ch == MENU_TEMPO && internalClock) label = PSTR("INT ");
+  rightMenu(pgm_read_byte(label), pgm_read_byte(label + 1), pgm_read_byte(label + 2), pgm_read_byte(label + 3));
 }
 
 // left side menue - Channel Settings
 void drawChannelEditMenu(TopMenu select_ch, Setting select_menu) {
-  if (showOverlay) return;  // Exit
-  switch (select_menu) {
-    case SETTING_HITS: leftMenu('H', 'I', 'T', 'S'); break;
-    case SETTING_OFFSET: leftMenu('O', 'F', 'F', 'S'); break;
-    case SETTING_LIMIT: leftMenu('L', 'I', 'M', 'I'); break;
-    case SETTING_MUTE: leftMenu('M', 'U', 'T', 'E'); break;
-    case SETTING_RESET: leftMenu('R', 'S', 'E', 'T'); break;
-    case SETTING_RANDOM: leftMenu('R', 'A', 'N', 'D'); break;
-    case SETTING_PROB: leftMenu('P', 'R', 'O', 'B'); break;
-    default: break;
-  }
+  if (showOverlay || select_menu < SETTING_HITS || select_menu > SETTING_PROB) return;  // Exit
+  leftMenuP(settingLabels + 4 * (select_menu - SETTING_HITS));
 }
 
 // left side menue - Menu Options
 void drawModeMenu(TopMenu select_ch) {
-  if (showOverlay) return;  // Exit
-  switch (select_ch) {
-    case MENU_SAVE: leftMenu('S', 'A', 'V', 'E'); break;
-    case MENU_LOAD: leftMenu('L', 'O', 'A', 'D'); break;
-    case MENU_ALL_RESET: leftMenu('R', 'S', 'E', 'T'); break;
-    case MENU_ALL_MUTE: leftMenu('M', 'U', 'T', 'E'); break;
-    case MENU_PRESET: leftMenu('P', 'R', 'S', 'T'); break;
-    case MENU_TEMPO: leftMenu('*', 'C', 'L', 'K'); break;
-    case MENU_RAND: leftMenu('R', 'A', 'N', 'D'); break;
-    default: break;
-  }
+  if (showOverlay || select_ch < MENU_RAND || select_ch > MENU_ALL_MUTE) return;  // Exit
+  leftMenuP(modeMenuLabels + 4 * (select_ch - MENU_RAND));
 }
 
 void checkAndInitializeSettings() {
@@ -1157,15 +1184,14 @@ void drawRandomModeAdvanceSquare(int bar_select, int bar_now, const int *bar_max
 
 void drawSelectionIndicator(Setting select_menu) {
   if (showOverlay) return;
-  if (select_menu == SETTING_TOP_MENU) display.drawTriangle(113, 0, 113, 6, 118, 3, WHITE);
-  else if (select_menu == SETTING_HITS) display.drawTriangle(113, 9, 113, 15, 118, 12, WHITE);
-  else if (select_menu == SETTING_OFFSET) display.drawTriangle(113, 18, 113, 24, 118, 21, WHITE);
-
-  if (select_menu == SETTING_LIMIT) display.drawTriangle(12, 34, 12, 41, 7, 37, WHITE);
-  else if (select_menu == SETTING_MUTE) display.drawTriangle(12, 42, 12, 49, 7, 45, WHITE);
-  else if (select_menu == SETTING_RESET) display.drawTriangle(12, 50, 12, 57, 7, 53, WHITE);
-  else if (select_menu == SETTING_RANDOM) display.drawTriangle(12, 58, 12, 65, 7, 61, WHITE);
-  else if (select_menu == SETTING_PROB) display.drawTriangle(12, 66, 12, 73, 7, 69, WHITE);
+  // Right side (top menu, hits, offset): 9 px rows; left side (limit .. prob): 8 px rows.
+  if (select_menu <= SETTING_OFFSET) {
+    int y = 9 * select_menu;
+    display.drawTriangle(113, y, 113, y + 6, 118, y + 3, WHITE);
+  } else {
+    int y = 34 + 8 * (select_menu - SETTING_LIMIT);
+    display.drawTriangle(12, y, 12, y + 7, 7, y + 3, WHITE);
+  }
 }
 
 void drawStepDots(const SlotConfiguration &currentConfig) {
@@ -1406,7 +1432,7 @@ void drawSaveLoadSelection() {
 }
 
 void drawPresetSelection() {
-  char presetName[10];
+  char presetName[sizeof(PresetPattern::name)];
   memcpy_P(&presetName, &defaultSlots[selected_preset].name, sizeof(presetName));
   display.setCursor(24, 2);
   display.println(F("Select Preset"));
@@ -1433,8 +1459,8 @@ void drawTempo() {
     display.print(F("Dial in Tempo"));
 
     // Calculate the width of the filled portion based on the tempo
-    float tempoRatio = (float)(tempo - 40) / (240 - 40);
-    int filledWidth = tempoRatio * (w - 22);  // margin on each side
+    // Integer math: this was the only float use and pulled ~1 KB of float code in.
+    int filledWidth = (long)(tempo - 40) * (w - 22) / (240 - 40);  // margin on each side
 
     // Draw the rounded rectangle
     display.drawRoundRect(x1 + 10, y1 + h / 2 - 5, w - 20, 10, 2, WHITE);
