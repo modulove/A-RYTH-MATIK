@@ -197,3 +197,66 @@ struct ChipEEPROM {
 };
 
 static ChipEEPROM EEPROM __attribute__((unused));
+
+// ---------- I2C bus guard (all firmware, Nano and LGT8F) ----------
+// The Arduino Wire library waits forever when the display bus is stuck (a display that browns
+// out, or a reset in the middle of a transfer leaves the display holding SDA low). That froze
+// the whole module. i2cGuardBegin() frees a stuck bus and makes every I2C call give up after
+// 25 ms; call it before the first display call (before hw.Init() / display.begin()).
+// i2cGuardShow(display) sends a frame; after a timeout it frees the bus, re-initialises the
+// display and pauses display updates for 1 s, so the rest of the firmware keeps running.
+#include <Wire.h>
+// SDA = A4 = PC4, SCL = A5 = PC5 on both chips. Single-bit port writes only (sbi/cbi), so LED
+// pins on the same port changed by interrupts are never disturbed.
+static void __attribute__((unused)) i2cGuardBegin() {
+  TWCR = 0;
+  DDRC &= ~(1 << 4);  // inputs with pull-ups
+  DDRC &= ~(1 << 5);
+  PORTC |= (1 << 4);
+  PORTC |= (1 << 5);
+  delayMicroseconds(10);
+  for (uint8_t i = 0; i < 18 && !(PINC & (1 << 4)); i++) {  // clock out a half-sent byte
+    PORTC &= ~(1 << 5);
+    DDRC |= (1 << 5);  // SCL low
+    delayMicroseconds(5);
+    DDRC &= ~(1 << 5);
+    PORTC |= (1 << 5);  // SCL released
+    delayMicroseconds(5);
+  }
+  PORTC &= ~(1 << 4);
+  DDRC |= (1 << 4);  // SDA low ...
+  delayMicroseconds(5);
+  DDRC &= ~(1 << 4);
+  PORTC |= (1 << 4);  // ... and released while SCL is high: STOP
+  Wire.setWireTimeout(25000, true);
+}
+static inline bool __attribute__((unused)) i2cGuardTimedOut() {
+  if (!Wire.getWireTimeoutFlag()) return false;
+  Wire.clearWireTimeoutFlag();
+  return true;
+}
+// 1 s display pause after a timeout. Unsigned time difference: safe across the millis() wrap
+// (49.7 days) and at any uptime.
+static bool i2cGuardHold __attribute__((unused));
+static uint32_t i2cGuardHoldStart __attribute__((unused));
+static inline void __attribute__((unused)) i2cGuardPause() {
+  i2cGuardHold = true;
+  i2cGuardHoldStart = millis();
+}
+static inline bool __attribute__((unused)) i2cGuardPaused() {
+  if (i2cGuardHold && millis() - i2cGuardHoldStart >= 1000) i2cGuardHold = false;
+  return i2cGuardHold;
+}
+// D = Adafruit_SSD1306 (anything with display() and begin(vcc, address)), 0x3C. Returns false
+// when the frame was skipped or failed. Re-init keeps the frame buffer (begin() doesn't
+// allocate it again).
+template<class D> static bool __attribute__((unused)) i2cGuardShow(D &d) {
+  if (i2cGuardPaused()) return false;
+  d.display();
+  if (!i2cGuardTimedOut()) return true;
+  i2cGuardBegin();
+  d.begin(0x02 /* SSD1306_SWITCHCAPVCC */, 0x3C);
+  i2cGuardTimedOut();
+  i2cGuardPause();
+  return false;
+}

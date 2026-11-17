@@ -163,14 +163,17 @@ int period = 60000 / tempo / 4;  // one minute in ms divided by tempo divided by
 // BPM derived from the external clock pulses
 int externalBPM = 0;
 
-//const byte graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
-const byte graph_x[6] = { 0, 40, 80, 15, 55, 95 }, graph_y[6] = { 0, 0, 0, 32, 32, 32 };
+// drawing tables in flash (RAM is the tightest resource of this firmware)
+const byte pgm_graph_x[6] PROGMEM = { 0, 40, 80, 15, 55, 95 }, pgm_graph_y[6] PROGMEM = { 0, 0, 0, 32, 32, 32 };
 
 byte line_xbuf[17];
 byte line_ybuf[17];
 
-//const byte x16[16] PROGMEM = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] PROGMEM = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
-const byte x16[16] = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, y16[16] = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
+const byte pgm_x16[16] PROGMEM = { 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1, 0, 1, 4, 9 }, pgm_y16[16] PROGMEM = { 0, 1, 4, 9, 15, 21, 26, 29, 30, 29, 26, 21, 15, 9, 4, 1 };
+#define GX(k) ((int)pgm_read_byte(&pgm_graph_x[k]))
+#define GY(k) ((int)pgm_read_byte(&pgm_graph_y[k]))
+#define X16(i) ((int)pgm_read_byte(&pgm_x16[i]))
+#define Y16(i) ((int)pgm_read_byte(&pgm_y16[i]))
 
 //Sequence variables
 constexpr uint8_t MAX_CHANNELS = 6;
@@ -188,6 +191,8 @@ volatile uint16_t intClockTicks = F_CPU / 256 * 15 / 120;   // 16th note at 120 
 volatile uint8_t beatCount = 0;        // steps played; the main loop follows it
 volatile unsigned long ledTimer = 0;   // channel LEDs go off 30 ms after a step
 uint16_t isrRandom = 1;                // xorshift state for the probability (interrupt only)
+uint16_t mainRandom = 1;               // xorshift state for the random mode (main loop only)
+
 
 const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -208,7 +213,15 @@ const static byte euc16[MAX_PATTERNS][MAX_STEPS] PROGMEM = {  //euclidian rythm
   { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0 },
   { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 };
-bool offset_buf[MAX_CHANNELS][MAX_STEPS];  //offset buffer , Stores the offset result
+// What the clock interrupt plays. updateRythm() (main loop) prepares it and copies it in one
+// atomic block, so the interrupt never sees a half-changed pattern and needs no table lookups.
+volatile uint16_t stepMask[MAX_CHANNELS];  // bit n = step n has a hit (pattern with offset)
+volatile uint8_t stepLimit[MAX_CHANNELS];  // pattern length 1..16
+volatile uint8_t stepProb[MAX_CHANNELS];   // probability 0..100
+volatile uint8_t muteMask;                 // bit i = channel i muted
+#define STEP_ON(ch, step) ((stepMask[ch] >> (step)) & 1)
+volatile uint16_t clkPeriodTicks;          // Timer1 ticks between the last two clock edges
+uint16_t lastClkTick;
 
 // random assign
 const PROGMEM uint8_t hit_occ[MAX_CHANNELS] = { 5, 1, 20, 20, 40, 80 };
@@ -340,86 +353,45 @@ void drawAnimation() {  // Boot Logo
         // Apply the wipe effect
         display.fillRect(x, yOffset, logoWidth - x, logoHeight, BLACK);
         
-        display.display();
+        i2cGuardShow(display);
     }
 }
 
-// Function pointers for interrupt handlers
-void (*ClockHandler)() = NULL;
-void (*ResetHandler)() = NULL;
-
-// Interrupt flag - set by ISR, cleared by main loop (display refresh after a reset)
+// Reset flag - set in the interrupt, the main loop refreshes the display
 volatile bool resetTriggerFlag = false;
 
-// Previous pin states for edge detection in ISR
+// Previous pin states for edge detection in the interrupt
 volatile bool prev_clk_state = false;
 volatile bool prev_rst_state = false;
 
-// No-operation function for default handlers
-void noop() {
-  // Do nothing
-}
+static void clockStep();
 
-// Clock interrupt handler - called when clock rising edge is detected
-void handleClockInterrupt() {
-  last_clock_input = millis();
-  
-  // Calculate external BPM from pulse timing
-  static unsigned long lastPulseTime = 0;
-  unsigned long currentTime = millis();
-  unsigned long pulseInterval = currentTime - lastPulseTime;
-  if (pulseInterval > 0 && lastPulseTime > 0) {
-    externalBPM = 60000 / (pulseInterval * 4);  // Convert 16th note pulse interval to BPM
-    if (externalBPM > 360) {                    // Limit BPM to avoid high speed issues
-      externalBPM = 360;
-    }
-    period = 60000 / externalBPM / 4;
-  }
-  lastPulseTime = currentTime;
-  if (!internalClock) clockStep();
-}
-
-// Reset interrupt handler - called when reset rising edge is detected
-void handleResetInterrupt() {
-  resetSeq();
-  resetTriggerFlag = true;
-}
-
-// Pin Change Interrupt Service Routine for Port B (pins 8-13)
+// CLK / RST pin change interrupt. Kept small on purpose: RAM is so tight in this firmware that a
+// deep interrupt (function pointer, divisions, millis()) let the stack run into the display
+// buffer and crash the module under fast clocks. BPM and timers are handled in the main loop.
 ISR(PCINT0_vect) {
-  // Read current pin states
-  bool current_clk_state, current_rst_state;
-  
+  uint8_t pins = PINB;
 #ifdef ROTATE_PANEL
-  // When panel is rotated: CLK=Pin11(PCINT3), RESET=Pin13(PCINT5)
-  current_clk_state = (PINB & (1 << PINB3)) != 0;   // Pin 11
-  current_rst_state = (PINB & (1 << PINB5)) != 0;   // Pin 13
+  bool clk = pins & (1 << PINB3), rst = pins & (1 << PINB5);  // CLK = pin 11, RST = pin 13
 #else
-  // Normal orientation: CLK=Pin13(PCINT5), RESET=Pin11(PCINT3)
-  current_clk_state = (PINB & (1 << PINB5)) != 0;   // Pin 13
-  current_rst_state = (PINB & (1 << PINB3)) != 0;   // Pin 11
+  bool clk = pins & (1 << PINB5), rst = pins & (1 << PINB3);  // CLK = pin 13, RST = pin 11
 #endif
-
-  // Detect rising edges and call appropriate handlers
-  if (!prev_clk_state && current_clk_state && ClockHandler) {
-    ClockHandler();
+  if (rst && !prev_rst_state) {  // reset first: a clock arriving with it plays step 0
+    for (uint8_t k = 0; k < MAX_CHANNELS; k++) playing_step[k] = 15;
+    resetTriggerFlag = true;
   }
-  
-  if (!prev_rst_state && current_rst_state && ResetHandler) {
-    ResetHandler();
+  if (clk && !prev_clk_state) {
+    uint16_t t = TCNT1;
+    clkPeriodTicks = t - lastClkTick;
+    lastClkTick = t;
+    if (!internalClock) clockStep();
   }
-  
-  // Update previous states
-  prev_clk_state = current_clk_state;
-  prev_rst_state = current_rst_state;
+  prev_clk_state = clk;
+  prev_rst_state = rst;
 }
 
 // Function to setup pin change interrupts
 void setupPinChangeInterrupts() {
-  // Assign interrupt handlers
-  if (ClockHandler == NULL) ClockHandler = handleClockInterrupt;
-  if (ResetHandler == NULL) ResetHandler = handleResetInterrupt;
-
   // Disable interrupts during setup
   cli();
   
@@ -456,17 +428,26 @@ void printDebugMessage(const char *message) {
   delay(100);
 }
 
+// 0 .. n-1 (replaces Arduino random(), which costs ~300 bytes of flash)
+static uint16_t rnd(uint16_t n) {
+  mainRandom ^= mainRandom << 7;
+  mainRandom ^= mainRandom >> 9;
+  mainRandom ^= mainRandom << 8;
+  return mainRandom % n;
+}
+
 void Random_change(bool includeMute, bool allChannels, byte select_ch = 0) {
   static constexpr uint8_t MAX_RANDOM = 100;
   for (uint8_t k = 0; k < MAX_CHANNELS; k++) {
     if (!allChannels && k != select_ch) continue;
 
-    uint8_t random_value = random(1, MAX_RANDOM);
+    uint8_t random_value = 1 + rnd(MAX_RANDOM - 1);
     if (pgm_read_byte(&hit_occ[k]) >= random_value) {
-      currentConfig.hits[k] = random(pgm_read_byte(&hit_rng_min[k]), pgm_read_byte(&hit_rng_max[k]) + 1);
+      uint8_t lo = pgm_read_byte(&hit_rng_min[k]);
+      currentConfig.hits[k] = lo + rnd(pgm_read_byte(&hit_rng_max[k]) + 1 - lo);
     }
     if (pgm_read_byte(&off_occ[k]) >= random_value) {
-      currentConfig.offset[k] = random(0, MAX_STEPS);
+      currentConfig.offset[k] = rnd(MAX_STEPS);
     }
     if (includeMute && k > 0) {
       currentConfig.mute[k] = pgm_read_byte(&mute_occ[k]) >= random_value;
@@ -494,7 +475,7 @@ void setup() {
   // Show which chip was detected, so a board swap can be checked at a glance.
   display.setCursor(IS_LGT ? 37 : 34, 54);
   display.print(chipName());
-  display.display();
+  i2cGuardShow(display);
   delay(1200);
 #endif
 
@@ -516,11 +497,12 @@ void setup() {
   OLED_display();
 
   // analogRead(A0) gave the same seed on every power-up: A0 drives LED1 low.
-  randomSeed(chipRandomSeed());
+  uint32_t seed = chipRandomSeed();
+  mainRandom = (uint16_t)seed | 1;  // xorshift states must never be 0
 
   // Initialize the last external clock time to the current time
   last_clock_input = millis();
-  isrRandom = random(1, 65536);  // never 0
+  isrRandom = (uint16_t)(seed >> 16) | 1;
   setupGateTimer();
 }
 
@@ -547,6 +529,26 @@ void loop() {
 
   // Follow the steps the clock interrupts have played.
   static uint8_t beatsSeen = 0;
+  if (beatsSeen != beatCount) {
+    unsigned long now = millis();
+    static unsigned long lastBeatMs = 0;
+    if (!internalClock) {  // BPM of the external clock (16th notes), from Timer1 ticks
+      uint16_t ticks;
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        ticks = clkPeriodTicks;
+      }
+      // under 1 s between pulses: exact from Timer1 (wraps after 1.05 s); slower shows as 14
+      uint32_t bpm = (now - lastBeatMs < 1000 && ticks) ? (uint32_t)(F_CPU / 256) * 15 / ticks : 14;
+      if (bpm > 360) bpm = 360;
+      externalBPM = bpm;
+      period = 60000 / externalBPM / 4;
+    }
+    lastBeatMs = now;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ledTimer = now;
+      last_clock_input = now;
+    }
+  }
   while (beatsSeen != beatCount) {
     beatsSeen++;
     force_refresh = true;
@@ -617,8 +619,8 @@ void initIO() {
 
 void initDisplay() {
   delay(1000);  // Screen needs a sec to initialize ? How to fix ?
+  i2cGuardBegin();  // free a stuck bus; every I2C call gives up after 25 ms instead of hanging
   display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS);
-  Wire.setClock(400000L);  // Set I2C clock to 400kHz to see if this improves perfomance ToDo: measure this!
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -649,21 +651,35 @@ void setupGateTimer() {
   }
 }
 
-// Play one step on all channels. Called from the clock interrupts only.
-void clockStep() {
+// 0..99 for the probability check (xorshift16, interrupt only).
+static inline __attribute__((always_inline)) uint8_t isrRandom100() {
+  isrRandom ^= isrRandom << 7;
+  isrRandom ^= isrRandom >> 9;
+  isrRandom ^= isrRandom << 8;
+  return ((uint16_t)(isrRandom >> 8) * 100) >> 8;
+}
+
+// Play one step on all channels. Called from the clock interrupts only; one shared copy, free of
+// further calls and lookups, so the interrupt needs little stack.
+static void __attribute__((noinline)) clockStep() {
+  uint8_t on = 0;
+  uint8_t mutes = muteMask;
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
-    playing_step[i]++;
-    if (playing_step[i] >= currentConfig.limit[i]) {
-      playing_step[i] = 0;  // Step limit is reached
-    }
+    uint8_t st = playing_step[i] + 1;
+    if (st >= stepLimit[i]) st = 0;  // step limit reached
+    playing_step[i] = st;
+    if (STEP_ON(i, st) && !(mutes & (1 << i)) && isrRandom100() < stepProb[i]) on |= 1 << i;
   }
   CLK_LED::setOutput(1);
-  outputGateSignals();
+  if (on & 0x01) { OUTPUT1::setOutput(1); LED1::setOutput(1); }
+  if (on & 0x02) { OUTPUT2::setOutput(1); LED2::setOutput(1); }
+  if (on & 0x04) { OUTPUT3::setOutput(1); LED3::setOutput(1); }
+  if (on & 0x08) { OUTPUT4::setOutput(1); LED4::setOutput(1); }
+  if (on & 0x10) { OUTPUT5::setOutput(1); LED5::setOutput(1); }
+  if (on & 0x20) { OUTPUT6::setOutput(1); LED6::setOutput(1); }
   OCR1B = TCNT1 + GATE_TICKS;  // gates off in 10 ms
   TIFR1 = (1 << OCF1B);
   TIMSK1 |= (1 << OCIE1B);
-  ledTimer = millis();
-  last_clock_input = ledTimer;
   beatCount++;
 }
 
@@ -683,47 +699,6 @@ ISR(TIMER1_COMPB_vect) {
   OUTPUT6::setOutput(0);
   CLK_LED::setOutput(0);  // Turn off the clock LED, so only on briefly after a clock impulse is received
   TIMSK1 &= ~(1 << OCIE1B);
-}
-
-// 0..99 for the probability check (xorshift16, safe to use in the interrupt).
-uint8_t isrRandom100() {
-  isrRandom ^= isrRandom << 7;
-  isrRandom ^= isrRandom >> 9;
-  isrRandom ^= isrRandom << 8;
-  return ((uint16_t)(isrRandom >> 8) * 100) >> 8;
-}
-
-void outputGateSignals() {
-  for (int i = 0; i < MAX_CHANNELS; i++) {
-    if (offset_buf[i][playing_step[i]] == 1 && currentConfig.mute[i] == 0 && isrRandom100() < currentConfig.probability[i]) {
-      switch (i) {
-        case 0:
-          OUTPUT1::setOutput(1);
-          LED1::setOutput(1);
-          break;
-        case 1:
-          OUTPUT2::setOutput(1);
-          LED2::setOutput(1);
-          break;
-        case 2:
-          OUTPUT3::setOutput(1);
-          LED3::setOutput(1);
-          break;
-        case 3:
-          OUTPUT4::setOutput(1);
-          LED4::setOutput(1);
-          break;
-        case 4:
-          OUTPUT5::setOutput(1);
-          LED5::setOutput(1);
-          break;
-        case 5:
-          OUTPUT6::setOutput(1);
-          LED6::setOutput(1);
-          break;
-      }
-    }
-  }
 }
 
 bool isClockRunning() {
@@ -1198,8 +1173,8 @@ void drawStepDots(const SlotConfiguration &currentConfig) {
   if (showOverlay) return;
   for (int k = 0; k < MAX_CHANNELS; k++) {
     for (int j = 0; j < currentConfig.limit[k]; j++) {
-      int x_pos = x16[j % 16] + graph_x[k];
-      int y_pos = y16[j % 16] + graph_y[k];
+      int x_pos = X16(j % 16) + GX(k);
+      int y_pos = Y16(j % 16) + GY(k);
       if (x_pos < 128 && y_pos < 64 && currentConfig.mute[k] == 0) {
         display.drawPixel(x_pos, y_pos, WHITE);
       }
@@ -1231,7 +1206,7 @@ void OLED_display() {
     drawOverlay();
   }
 
-  display.display();
+  i2cGuardShow(display);  // a stuck display bus no longer freezes the module
 }
 
 
@@ -1287,9 +1262,9 @@ void drawEuclideanRhythms() {
     buf_count = 0;
     // Collect the hit points
     for (int m = 0; m < MAX_STEPS; m++) {
-      if (currentConfig.mute[k] == 0 && offset_buf[k][m] == 1) {
-        int x_pos = x16[m] + graph_x[k];
-        int y_pos = y16[m] + graph_y[k];
+      if (currentConfig.mute[k] == 0 && STEP_ON(k, m)) {
+        int x_pos = X16(m) + GX(k);
+        int y_pos = Y16(m) + GY(k);
         if (x_pos < 128 && y_pos < 64) {
           line_xbuf[buf_count] = x_pos;
           line_ybuf[buf_count] = y_pos;
@@ -1316,10 +1291,10 @@ void drawEuclideanRhythms() {
   for (int k = 0; k < MAX_CHANNELS; k++) {  // Channel count
     if (currentConfig.mute[k] == 0) {       // don't draw when muted
       if (currentConfig.hits[k] == 1) {
-        int x1 = 15 + graph_x[k];
-        int y1 = 15 + graph_y[k];
-        int x2 = x16[(currentConfig.offset[k] + 8) % 16] + graph_x[k];  // Adjust the offset to draw in the correct direction
-        int y2 = y16[currentConfig.offset[k]] + graph_y[k];
+        int x1 = 15 + GX(k);
+        int y1 = 15 + GY(k);
+        int x2 = X16((currentConfig.offset[k] + 8) % 16) + GX(k);  // Adjust the offset to draw in the correct direction
+        int y2 = Y16(currentConfig.offset[k]) + GY(k);
         if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
           display.drawLine(x1, y1, x2, y2, WHITE);
         }
@@ -1330,11 +1305,11 @@ void drawEuclideanRhythms() {
   //draw play step circle
   for (int k = 0; k < MAX_CHANNELS; k++) {                                 //ch count
     if (currentConfig.mute[k] == 0 && selected_setting != SETTING_PROB) {  //mute on = no display circle
-      if (offset_buf[k][playing_step[k]] == 0) {
-        display.drawCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 2, WHITE);
+      if (!STEP_ON(k, playing_step[k])) {
+        display.drawCircle(X16(playing_step[k]) + GX(k), Y16(playing_step[k]) + GY(k), 2, WHITE);
       }
-      if (offset_buf[k][playing_step[k]] == 1) {
-        display.fillCircle(x16[playing_step[k]] + graph_x[k], y16[playing_step[k]] + graph_y[k], 3, WHITE);
+      if (STEP_ON(k, playing_step[k])) {
+        display.fillCircle(X16(playing_step[k]) + GX(k), Y16(playing_step[k]) + GY(k), 3, WHITE);
       }
     }
   }
@@ -1342,8 +1317,8 @@ void drawEuclideanRhythms() {
   // Draw 'M' for muted channels
   for (int k = 0; k < MAX_CHANNELS; k++) {
     if (currentConfig.mute[k]) {
-      int centerX = graph_x[k] + 15;  // Center of the channel's area
-      int centerY = graph_y[k] + 15;
+      int centerX = GX(k) + 15;  // Center of the channel's area
+      int centerY = GY(k) + 15;
       display.setCursor(centerX - 3, centerY - 4);  // Adjust cursor to center the 'M'
       display.print('M');
     }
@@ -1351,8 +1326,8 @@ void drawEuclideanRhythms() {
 
   // draw channel info in edit mode, should be helpful while editing.
   for (int ch = 0; ch < MAX_CHANNELS; ch++) {
-    int x_base = graph_x[ch];
-    int y_base = graph_y[ch] + 8;
+    int x_base = GX(ch);
+    int y_base = GY(ch) + 8;
 
 
     // Draw hits info if not muted only
@@ -1373,10 +1348,10 @@ void drawEuclideanRhythms() {
         case SETTING_LIMIT:
           if (currentConfig.limit[ch] > 0 && currentConfig.hits[ch] > 6) {
             // draw line indicator from center to limit point
-            int x1 = 15 + graph_x[ch];
-            int y1 = 15 + graph_y[ch];
-            int x2 = x16[currentConfig.limit[ch] % 16] + graph_x[ch];
-            int y2 = y16[currentConfig.limit[ch] % 16] + graph_y[ch];
+            int x1 = 15 + GX(ch);
+            int y1 = 15 + GY(ch);
+            int x2 = X16(currentConfig.limit[ch] % 16) + GX(ch);
+            int y2 = Y16(currentConfig.limit[ch] % 16) + GY(ch);
             if (x1 < 128 && y1 < 64 && x2 < 128 && y2 < 64) {
               display.drawLine(x1, y1, x2, y2, WHITE);
             }
@@ -1394,8 +1369,8 @@ void drawProbabilityConfig() {
     int maxHeight = 15;
     int margin = 2;
 
-    int bar_x = graph_x[ch] + 12;
-    int bar_y = graph_y[ch] + 30;
+    int bar_x = GX(ch) + 12;
+    int bar_y = GY(ch) + 30;
 
     int barHeight = map(currentConfig.probability[ch], 0, 100, 0, maxHeight);
     int startY = bar_y - barHeight;
@@ -1498,11 +1473,26 @@ void drawTempo() {
 }
 
 void updateRythm() {
+  uint16_t m[MAX_CHANNELS];
+  uint8_t lim[MAX_CHANNELS], pr[MAX_CHANNELS], mutes = 0;
   for (uint8_t i = 0; i < MAX_CHANNELS; ++i) {
-    uint8_t hits = currentConfig.hits[i];
-    uint8_t offset = currentConfig.offset[i];
+    uint8_t hits = currentConfig.hits[i] < MAX_PATTERNS ? currentConfig.hits[i] : MAX_PATTERNS - 1;
+    uint8_t offset = currentConfig.offset[i] % MAX_STEPS;
+    uint16_t mask = 0;
     for (uint8_t j = 0; j < MAX_STEPS; ++j) {
-      offset_buf[i][j] = pgm_read_byte(&euc16[hits][(j + offset) % MAX_STEPS]);
+      if (pgm_read_byte(&euc16[hits][(j + offset) % MAX_STEPS])) mask |= 1u << j;
     }
+    m[i] = mask;
+    lim[i] = constrain(currentConfig.limit[i], 1, MAX_STEPS);
+    pr[i] = currentConfig.probability[i];
+    if (currentConfig.mute[i]) mutes |= 1 << i;
+  }
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    for (uint8_t i = 0; i < MAX_CHANNELS; ++i) {
+      stepMask[i] = m[i];
+      stepLimit[i] = lim[i];
+      stepProb[i] = pr[i];
+    }
+    muteMask = mutes;
   }
 }
