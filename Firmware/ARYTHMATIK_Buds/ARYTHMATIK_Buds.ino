@@ -1,7 +1,7 @@
+#include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM) - must be the first include
 #include "src/libmodulove/arythmatik.h"
 #include <avr/pgmspace.h>
 #include <FastGPIO.h>
-#include <EEPROM.h>
 #include "EncoderButton.h"
 
 //#define ENCODER_REVERSED
@@ -69,6 +69,7 @@ void setup() {
 
   // Initialize the A-RYTH-MATIK peripherals.
   hw.Init();
+  randomSeed(chipRandomSeed());  // random() was never seeded: same sequence after every power-up
 
   // Set up encoder parameters
   encoder.setDebounceInterval(5);

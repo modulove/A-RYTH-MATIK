@@ -55,6 +55,10 @@ Assembly Instructions (Quickstart) is here: [A-RYTH-MATIK QuickStart](https://gi
 
 To update / load the firmware on to your Arduino Nano or LGT8F328P you can just use the [A-RYTH-MATIK Firmware uploader in Chrome Browser here:](https://dl.modulove.de/module/arythmatik/ "A-RYTH-MATIK Firmware uploader").
 
+To check a module (power, display, inputs, outputs, signal path), flash the ARYTHMATIK_DEBUG hardware test firmware; it also reports everything over USB. See [Firmware/ARYTHMATIK_DEBUG/README.md](Firmware/ARYTHMATIK_DEBUG/README.md).
+
+All firmware files work on both boards: the module detects an LGT8F328P at power-up and sets it up. On an LGT8F328P board leave "Use new bootloader" unchecked (it uses the old-bootloader protocol, 57600 baud). In the Arduino IDE, select "Arduino Nano" with "ATmega328P (Old Bootloader)" to build and upload for an LGT8F328P board.
+
 Modulargrid: [A-RYTH-MATIK on modulargrid.net](https://www.modulargrid.net/e/modulove-a-ryth-matik "A-RYTH-MATIK on modulargrid.net").
 
 More Info:

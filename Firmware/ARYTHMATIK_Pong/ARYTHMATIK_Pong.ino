@@ -1,3 +1,4 @@
+#include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM) - must be the first include
 // Fun quick experiment with libModulove and ARYTHMATIK eurorack module
 // https://github.com/shveytank/Arduino_Pong_Game
 #include <EncoderButton.h>
@@ -68,6 +69,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
 void setup() {
     // Initialize A-RYTH-MATIK hardware
     hw.Init();
+    randomSeed(chipRandomSeed());  // the ball started the same way after every power-up
 
     // Initialize display
     hw.display.begin(SSD1306_SWITCHCAPVCC, 0x3C);

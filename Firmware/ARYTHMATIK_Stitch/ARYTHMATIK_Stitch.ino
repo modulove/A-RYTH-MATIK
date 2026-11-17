@@ -40,7 +40,7 @@
  */
 
 #include <Arduino.h>
-#include <EEPROM.h>
+#include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM)
 #include <Wire.h>
 #include <U8x8lib.h>
 #include <avr/pgmspace.h>
@@ -100,6 +100,7 @@ const uint16_t SECRET_MENU_FACTORY_HOLD_MS = 4000; // Hold to factory reset in s
 #define EE_FPER     26  // fill-period index 0..4 => 1/2/4/8/16 repeats
 #define EE_OMODE    27  // output mode 0=TRG,1=GAT,2=FF
 #define EE_TIMEOUT  28  // menu timeout in seconds (1..30)
+#define EE_IMAGE_SIZE (EE_TIMEOUT + 1)  // bytes 0..EE_TIMEOUT, saved as one block
 
 // --- Globals ---
 uint8_t oledFlip = 0;
@@ -305,6 +306,8 @@ static void handleResetEdgeISR();
 
 void OLED_display();
 void save_data();
+static void storeSteps(uint8_t *ee);
+static void setDefaultSettings(uint8_t *ee);
 void change_step();
 void loadPresetBase(uint8_t bank, uint8_t idx);
 void loadPresetFill(uint8_t bank, uint8_t idx);
@@ -616,19 +619,10 @@ static void serialPoll() {
 
   // Q : factory reset
   if (sBuf[0]=='Q' && sBuf[1]==0){
-    EEPROM.update(EE_OLED_ROT,0);
-    EEPROM.update(EE_ENC_DIR,0);
-    EEPROM.update(EE_CLK_SRC,CLK_EXT);
-    EEPROM.update(EE_TEMPO,120);
-    EEPROM.update(EE_GENRE,0);
-    EEPROM.update(EE_MODE,0);
-    EEPROM.update(EE_REPEAT,2);
-    EEPROM.update(EE_FILLIN,1);
-    EEPROM.update(EE_SW,0);
-    EEPROM.update(EE_RST,RIN_RESET);
-    EEPROM.update(EE_FPER,2);
-    EEPROM.update(EE_OMODE,OUT_TRG);
-    EEPROM.update(EE_TIMEOUT,5);
+    uint8_t ee[EE_IMAGE_SIZE];
+    EEPROM.get(0, ee);
+    setDefaultSettings(ee);
+    EEPROM.put(0, ee);  // one block write (one page swap on the LGT8F)
     Serial.println(F("OK")); return;
   }
 }
@@ -667,34 +661,20 @@ void setup() {
 
   // first-run defaults
   if (EEPROM.read(EE_SIG_ADDR) != EE_SIG_VAL) {
-    EEPROM.update(EE_SIG_ADDR, EE_SIG_VAL);
-    EEPROM.update(EE_OLED_ROT, 0);
-    EEPROM.update(EE_ENC_DIR, 0);
-    EEPROM.update(EE_CLK_SRC, CLK_EXT);
-    EEPROM.update(EE_TEMPO, 120);
-    EEPROM.update(EE_GENRE, 0);
-    EEPROM.update(EE_MODE, 0);
-    EEPROM.update(EE_REPEAT, 2);
-    EEPROM.update(EE_FILLIN, 1);
-    EEPROM.update(EE_SW, 0);
-    EEPROM.update(EE_RST, RIN_RESET);
-    EEPROM.update(EE_FPER, 2);
-    EEPROM.update(EE_OMODE, OUT_TRG);
-    EEPROM.update(EE_TIMEOUT, 5);
     // initialize current pattern to first entry of bank1 base
     const uint16_t* p = &bnk1_ptn[0][0];
-    uint16_t v;
-    for (uint8_t i=0;i<6;i++){
-      v = pgm_read_word(&p[i]);
-      EEPROM.update(1 + i*2, highByte(v));
-      EEPROM.update(2 + i*2, lowByte(v));
-    }
     ch1_step = pgm_read_word(&p[0]);
     ch2_step = pgm_read_word(&p[1]);
     ch3_step = pgm_read_word(&p[2]);
     ch4_step = pgm_read_word(&p[3]);
     ch5_step = pgm_read_word(&p[4]);
     ch6_step = pgm_read_word(&p[5]);
+    uint8_t ee[EE_IMAGE_SIZE];
+    EEPROM.get(0, ee);
+    ee[EE_SIG_ADDR] = EE_SIG_VAL;
+    setDefaultSettings(ee);
+    storeSteps(ee);
+    EEPROM.put(0, ee);  // one block write (one page swap on the LGT8F)
   }
 
   // load config/state
@@ -738,8 +718,8 @@ void setup() {
     }
   }
 
-  // Seed LFSR with analog noise for variety
-  lfsr = analogRead(A0) ^ (analogRead(A1) << 8);
+  // Seed LFSR (A0/A1 drive LEDs, so reading them gave the same seed every power-up)
+  lfsr = chipRandomSeed();
   if (lfsr == 0) lfsr = 0xACE1;  // ensure non-zero
 
   uiDirty = true;
@@ -1114,22 +1094,47 @@ static inline void markDirty() {
   lastEepromWriteMs = millis();
 }
 
+// Settings and pattern live at EEPROM addresses 0..EE_TIMEOUT. They are changed in a
+// RAM copy and written with one EEPROM.put(): on the LGT8F one flash page swap
+// (~46 ms freeze) instead of one per changed byte.
+static void storeSteps(uint8_t *ee) {
+  const uint16_t steps[6] = { ch1_step, ch2_step, ch3_step, ch4_step, ch5_step, ch6_step };
+  for (uint8_t i = 0; i < 6; i++) {
+    ee[1 + i * 2] = highByte(steps[i]);
+    ee[2 + i * 2] = lowByte(steps[i]);
+  }
+}
+
+static void setDefaultSettings(uint8_t *ee) {
+  ee[EE_OLED_ROT] = 0;
+  ee[EE_ENC_DIR] = 0;
+  ee[EE_CLK_SRC] = CLK_EXT;
+  ee[EE_TEMPO] = 120;
+  ee[EE_GENRE] = 0;
+  ee[EE_MODE] = 0;
+  ee[EE_REPEAT] = 2;
+  ee[EE_FILLIN] = 1;
+  ee[EE_SW] = 0;
+  ee[EE_RST] = RIN_RESET;
+  ee[EE_FPER] = 2;
+  ee[EE_OMODE] = OUT_TRG;
+  ee[EE_TIMEOUT] = 5;
+}
+
 void save_data() {
-  EEPROM.update(1, highByte(ch1_step));  EEPROM.update(2, lowByte(ch1_step));
-  EEPROM.update(3, highByte(ch2_step));  EEPROM.update(4, lowByte(ch2_step));
-  EEPROM.update(5, highByte(ch3_step));  EEPROM.update(6, lowByte(ch3_step));
-  EEPROM.update(7, highByte(ch4_step));  EEPROM.update(8, lowByte(ch4_step));
-  EEPROM.update(9, highByte(ch5_step));  EEPROM.update(10, lowByte(ch5_step));
-  EEPROM.update(11, highByte(ch6_step)); EEPROM.update(12, lowByte(ch6_step));
-  EEPROM.update(EE_GENRE,  genre);
-  EEPROM.update(EE_MODE,   mode);
-  EEPROM.update(EE_REPEAT, repeat);
-  EEPROM.update(EE_FILLIN, fillin?1:0);
-  EEPROM.update(EE_SW,     sw);
-  EEPROM.update(EE_TEMPO,  bpm);
-  EEPROM.update(EE_CLK_SRC,clkSource);
-  EEPROM.update(EE_FPER,   fillPeriodIdx);
-  EEPROM.update(EE_OMODE,  outMode);
+  uint8_t ee[EE_IMAGE_SIZE];
+  EEPROM.get(0, ee);
+  storeSteps(ee);
+  ee[EE_GENRE]   = genre;
+  ee[EE_MODE]    = mode;
+  ee[EE_REPEAT]  = repeat;
+  ee[EE_FILLIN]  = fillin?1:0;
+  ee[EE_SW]      = sw;
+  ee[EE_TEMPO]   = bpm;
+  ee[EE_CLK_SRC] = clkSource;
+  ee[EE_FPER]    = fillPeriodIdx;
+  ee[EE_OMODE]   = outMode;
+  EEPROM.put(0, ee);
   eepromDirty = false;  // clear flag after write
 }
 

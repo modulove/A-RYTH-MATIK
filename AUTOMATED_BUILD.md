@@ -39,6 +39,11 @@ You can also trigger a build manually without creating a release:
 3. Click "Run workflow"
 4. Select the branch and click "Run workflow"
 
+### Pull Requests
+
+Every pull request is built the same way (no release). The `.hex` files are attached to the
+workflow run as artifacts: open the run from the PR's "Checks" tab and download them at the bottom.
+
 ## What Gets Built
 
 For each firmware in the `Firmware/` directory:
@@ -91,6 +96,22 @@ Reversed encoder builds add:
 ```
 -DENCODER_REVERSED
 ```
+
+### LGT8F328P boards
+
+Every firmware includes `LGT8F_Compat.h` (one copy per sketch folder), so each
+Nano `.hex` also runs on LGT8F328P Nano boards: the chip is detected at power-up,
+then the LGT8F gets its 16 MHz clock and emulated EEPROM set up. LGT8F boards are
+flashed with the `nanoOldBootloader` files (same protocol, 57600 baud).
+
+The workflow enforces two rules:
+- every program must stay below **29,696 bytes** (the LGT8F bootloader starts at
+  0x7400), so all builds pass `--build-property upload.maximum_size=29696`;
+- all `LGT8F_Compat.h` copies must be identical to `Firmware/ARYTHMATIK_Euclid/LGT8F_Compat.h`.
+
+On the LGT8F every EEPROM write freezes the chip for ~46 ms (a flash page swap).
+Save several bytes with one `EEPROM.put()` (one page swap), not with a loop of
+`EEPROM.update()` calls. Details are in the header.
 
 ## Workflow Status
 

@@ -46,7 +46,7 @@ long previousMillis = 0;
 long interval = 1000;
 
 //EEPROM
-#include <EEPROM.h>
+#include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM)
 
 //Encoder setting
 #define  ENCODER_OPTIMIZE_INTERRUPTS //エンコーダノイズ対策
@@ -289,6 +289,8 @@ old_reset_in = digitalRead(11);
 
  //開発用通信設定
  //  Serial.begin(9600);
+
+ randomSeed(chipRandomSeed());  // AUTO mode picked the same "random" patterns after every power-up
 
  OLED_display();
 }
@@ -1701,18 +1703,15 @@ void OLED_display() {
 }
 
 void save_data() {
- EEPROM.update(1, highByte(ch1_step)); //変更データをEEPROMに書き込み
- EEPROM.update(2, lowByte(ch1_step)); //変更データをEEPROMに書き込み
- EEPROM.update(3, highByte(ch2_step)); //変更データをEEPROMに書き込み
- EEPROM.update(4, lowByte(ch2_step)); //変更データをEEPROMに書き込み
- EEPROM.update(5, highByte(ch3_step)); //変更データをEEPROMに書き込み
- EEPROM.update(6, lowByte(ch3_step)); //変更データをEEPROMに書き込み
- EEPROM.update(7, highByte(ch4_step)); //変更データをEEPROMに書き込み
- EEPROM.update(8, lowByte(ch4_step)); //変更データをEEPROMに書き込み
- EEPROM.update(9, highByte(ch5_step)); //変更データをEEPROMに書き込み
- EEPROM.update(10, lowByte(ch5_step)); //変更データをEEPROMに書き込み
- EEPROM.update(11, highByte(ch6_step)); //変更データをEEPROMに書き込み
- EEPROM.update(12, lowByte(ch6_step)); //変更データをEEPROMに書き込み
+ // Addresses 1..12, high byte first, written as one block: on the LGT8F one
+ // flash page swap instead of one per changed byte (each freezes the chip ~46 ms).
+ const unsigned int steps[6] = { ch1_step, ch2_step, ch3_step, ch4_step, ch5_step, ch6_step };
+ uint8_t data[12];
+ for (uint8_t i = 0; i < 6; i++) {
+   data[i * 2] = highByte(steps[i]);
+   data[i * 2 + 1] = lowByte(steps[i]);
+ }
+ EEPROM.put(1, data); //変更データをEEPROMに書き込み
 
 }
 
