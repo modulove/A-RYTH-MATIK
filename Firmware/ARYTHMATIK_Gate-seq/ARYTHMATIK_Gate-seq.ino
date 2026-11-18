@@ -17,6 +17,10 @@
  *
  * RST: Trigger this input to reset the sequence.
  *
+ * Timing: CLK and RST are handled in the pin-change interrupt (step count, AUTO
+ * pattern changes, outputs and channel LEDs), so the gates follow the clock exactly
+ * while the OLED is redrawn. The loop does the UI and redraws the OLED after a step.
+ *
  */
 
 // Flag for enabling debug print to serial monitoring output.
@@ -47,6 +51,7 @@ long interval = 1000;
 
 //EEPROM
 #include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM)
+#include <util/atomic.h>
 
 //Encoder setting
 #define  ENCODER_OPTIMIZE_INTERRUPTS //エンコーダノイズ対策
@@ -80,59 +85,52 @@ byte button_on = 0;//チャタリング判定後のボタン状態。0=OFF,1=ON
 #define SCREEN_HEIGHT 64//64が推奨表示 
 
 //----------------変数の定義---------------------------
-byte step_count = 0; //clock in毎に1繰り上がり。17になると1に戻る。増えた時にOUTPUTをONする。
-byte clock_in = 0 ; //外部クロックの入力状態。H=1,L=0
-byte reset_in = 0 ; //外部クロックの入力状態。H=1,L=0
-byte old_clock_in = 0 ; //0→1を認識するための変数
-byte old_reset_in = 0 ; //0→1を認識するための変数
+// volatile: shared with the CLK/RST interrupt (pinChange()). The loop changes the patterns
+// only inside ATOMIC_BLOCK (16-bit values; the interrupt also replaces them in AUTO mode).
+volatile byte step_count = 0; //clock in毎に1繰り上がり。17になると1に戻る。増えた時にOUTPUTをONする。
+volatile byte clock_in = 0 ; //外部クロックの入力状態。H=1,L=0 (set by the interrupt)
 
-unsigned int ch1_step = 0x8888; //テスト用
-byte CH1_output = 0 ;
-byte CH1_mute = 0 ;//0=ミュートしない、1=ミュートする
+volatile unsigned int ch1_step = 0x8888; //テスト用
+volatile byte CH1_mute = 0 ;//0=ミュートしない、1=ミュートする
 
-unsigned int ch2_step = 0x0808; //テスト用
-byte CH2_output = 0 ;
-byte CH2_mute = 0 ;//0=ミュートしない、1=ミュートする
+volatile unsigned int ch2_step = 0x0808; //テスト用
+volatile byte CH2_mute = 0 ;//0=ミュートしない、1=ミュートする
 
-unsigned int ch3_step = 0xCCCC; //テスト用
-byte CH3_output = 0 ;
-byte CH3_mute = 0 ;//0=ミュートしない、1=ミュートする
+volatile unsigned int ch3_step = 0xCCCC; //テスト用
+volatile byte CH3_mute = 0 ;//0=ミュートしない、1=ミュートする
 
-unsigned int ch4_step = 0x2222; //テスト用
-byte CH4_output = 0 ;
-byte CH4_mute = 0 ;//0=ミュートしない、1=ミュートする
+volatile unsigned int ch4_step = 0x2222; //テスト用
+volatile byte CH4_mute = 0 ;//0=ミュートしない、1=ミュートする
 
-unsigned int ch5_step = 0xFFFF; //テスト用
-byte CH5_output = 0 ;
-byte CH5_mute = 0 ;//0=ミュートしない、1=ミュートする
+volatile unsigned int ch5_step = 0xFFFF; //テスト用
+volatile byte CH5_mute = 0 ;//0=ミュートしない、1=ミュートする
 
-unsigned int ch6_step = 0x0000; //テスト用
-byte CH6_output = 0 ;
-byte CH6_mute = 0 ;//0=ミュートしない、1=ミュートする
+volatile unsigned int ch6_step = 0x0000; //テスト用
+volatile byte CH6_mute = 0 ;//0=ミュートしない、1=ミュートする
 
 // ディスプレイ変数の宣言
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 //オプション
-byte mode = 0;//0=MANUAL,1=AUTO
+volatile byte mode = 0;//0=MANUAL,1=AUTO
 byte count_reset = 0;//1でcountが0になる
 byte save = 0;//1でseve実行しすぐに0に戻る
 
-byte genre = 0; //パターンジャンル0=techno,1=dub,2=house,3=half
-byte repeat = 2; //0=4times,1=8times,2=16times,3=32times,4=eternal
-byte fillin = 1; //0=OFF,1=ON
-byte sw = 0;//0=2,1=4,2=8,3=16,4=eternal
+volatile byte genre = 0; //パターンジャンル0=techno,1=dub,2=house,3=half
+volatile byte repeat = 2; //0=4times,1=8times,2=16times,3=32times,4=eternal
+volatile byte fillin = 1; //0=OFF,1=ON
+volatile byte sw = 0;//0=2,1=4,2=8,3=16,4=eternal
 
-//AUTOモード
-int repeat_max = 4;//repeat_doneこの値に達したらフィルイン
-int repeat_done = 0; //stepが16になったら繰り上がる。
+//AUTOモード (the counters advance in the CLK interrupt)
+volatile int repeat_max = 4;//repeat_doneこの値に達したらフィルイン
+volatile int repeat_done = 0; //stepが16になったら繰り上がる。
 byte test = 0; //開発用
-byte change_bnk1 = 1;//プリセット1
-byte change_bnk2 = 1;//プリセット2
-byte change_bnk3 = 1;//プリセット3（任意に増やしてOK）
-byte change_bnk4 = 1;
-byte sw_max = 1;//se_doneがこの値に達したらパターン変更（ランダム）
-byte sw_done = 0;//repeat_maxになったら繰り上がる
+volatile byte change_bnk1 = 1;//プリセット1
+volatile byte change_bnk2 = 1;//プリセット2
+volatile byte change_bnk3 = 1;//プリセット3（任意に増やしてOK）
+volatile byte change_bnk4 = 1;
+volatile byte sw_max = 1;//se_doneがこの値に達したらパターン変更（ランダム）
+volatile byte sw_done = 0;//repeat_maxになったら繰り上がる
 
 
 //preset step pattern
@@ -251,12 +249,164 @@ const static word bnk4_ptn[8][12]PROGMEM = {
  }
 };
 
+void change_step();
+void fillin_step();
+
+//--------------CLK / RST interrupt----------------------------------
+// CLK (D13 = PB5) and RST (D11 = PB3) are handled in the pin-change interrupt: step count,
+// AUTO pattern changes and the outputs happen at the edge. They used to be polled by the
+// loop, and an OLED redraw (45-80 ms) kept the gates high until the loop ran again.
+#define CLK_PB_BIT 5  // D13, PCINT5
+#define RST_PB_BIT 3  // D11, PCINT3
+volatile byte displayFlag = 0;  // a step or a reset happened: the loop redraws the OLED
+byte displayRetry = 0;          // the display guard skipped the last frame: redraw after the pause
+byte pinbLast = 0;              // PINB at the previous pinChange() (CLK/RST low at start)
+
+// OUT1..OUT6 = D5, D6, D7, D8, D9, D10 (PD5..PD7, PB0..PB2); channel LEDs CH1..CH6 =
+// A0, A1, A2 (PC0..PC2), D0, D1 (PD0, PD1), A3 (PC3). Bit i of m = channel i + 1.
+// Port-wide read-modify-write: call with interrupts off (interrupt or ATOMIC_BLOCK).
+static void writeOutputs(byte m) {
+ PORTD = (PORTD & 0x1C) | ((m & 0x07) << 5) | ((m >> 3) & 0x03);
+ PORTB = (PORTB & 0xF8) | ((m >> 3) & 0x07);
+ PORTC = (PORTC & 0xF0) | (m & 0x07) | ((m >> 2) & 0x08);
+}
+
+// The output rule of the old loop: an output (and its LED) follows the clock level when the
+// channel's bit for the current step is set and the channel is not muted. Step 0 (after RST,
+// before the next clock) plays nothing. Call with interrupts off.
+static void updateOutputs() {
+ byte m = 0;
+ byte s = step_count;
+ if (clock_in && s >= 1 && s <= 16) {
+   unsigned int b = 0x8000U >> (s - 1);  // bit 16 - step_count
+   if ((ch1_step & b) && CH1_mute == 0) m |= 0x01;
+   if ((ch2_step & b) && CH2_mute == 0) m |= 0x02;
+   if ((ch3_step & b) && CH3_mute == 0) m |= 0x04;
+   if ((ch4_step & b) && CH4_mute == 0) m |= 0x08;
+   if ((ch5_step & b) && CH5_mute == 0) m |= 0x10;
+   if ((ch6_step & b) && CH6_mute == 0) m |= 0x20;
+ }
+ writeOutputs(m);
+}
+
+// AUTO limits from the menu tokens (the loop also does this on every pass, for the display).
+// Call with interrupts off.
+static void autoLimits() {
+ switch (repeat) {
+   case 0:
+     repeat_max = 4;
+     break;
+
+   case 1:
+     repeat_max = 8;
+     break;
+
+   case 2:
+     repeat_max = 16;
+     break;
+
+   case 3:
+     repeat_max = 32;
+     break;
+
+   case 4:
+     repeat_max = 10000;//ETERNAL
+     break;
+ }
+
+ switch (sw) {
+   case 0:
+     sw_max = 2;
+     break;
+
+   case 1:
+     sw_max = 4;
+     break;
+
+   case 2:
+     sw_max = 8;
+     break;
+
+   case 3:
+     sw_max = 16;
+     break;
+
+   case 4:
+     sw_max = 255;//ETERNAL
+     break;
+ }
+}
+
+// Same order as the old loop pass: clock edge, RST edge, wrap at 17 (AUTO repeat / fill-in /
+// pattern switch), switch counter wrap, outputs.
+static void pinChange() {
+ byte b = PINB;
+ byte rise = b & ~pinbLast;
+ pinbLast = b;
+ clock_in = (b >> CLK_PB_BIT) & 1;
+
+ //--------------外部クロック入力検出,カウント----------------
+ if (rise & _BV(CLK_PB_BIT)) {
+   step_count++;
+   displayFlag = 1;  // OLEDの更新はクロック入ったタイミングのみ
+ }
+
+ if (rise & _BV(RST_PB_BIT)) {
+   step_count = 0;
+   displayFlag = 1;
+ }
+
+ if (step_count >= 17) {
+   step_count = 1;
+   autoLimits();
+
+   if (mode == 1) {
+     repeat_done++;
+
+     if ( fillin == 1 && repeat_done == repeat_max - 1) {
+       fillin_step();
+     }
+
+     else if (repeat_done >= repeat_max) {
+       sw_done++;
+       repeat_done = 0;
+       change_step();
+     }
+   }
+
+   if (sw_done >= sw_max) {
+     sw_done = 0;
+   }
+ }
+
+ //--------------出力----------------------------------
+ updateOutputs();
+}
+
+ISR(PCINT0_vect) {
+ pinChange();
+}
+
+// Saved pattern, EEPROM 1..12 (high byte first).
+static void loadSteps() {
+ unsigned int s[6];
+ for (byte i = 0; i < 6; i++) {
+   s[i] = word(EEPROM.read(1 + i * 2), EEPROM.read(2 + i * 2));
+ }
+ ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+   ch1_step = s[0];
+   ch2_step = s[1];
+   ch3_step = s[2];
+   ch4_step = s[3];
+   ch5_step = s[4];
+   ch6_step = s[5];
+ }
+}
+
 
 void setup() {
-// Initialization reset
-old_reset_in = digitalRead(11);
-
  // ディスプレイの初期化
+ i2cGuardBegin();  // free a stuck I2C bus, I2C calls give up after 25 ms
  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
  #ifdef PANEL_USD
  display.setRotation(2);  // 180 degree rotation for upside-down use
@@ -280,25 +430,27 @@ old_reset_in = digitalRead(11);
  pinMode(13, INPUT); //Trigger
 
  //保存データの読み出し
- ch1_step = EEPROM.read(1) * 256 + EEPROM.read(2);
- ch2_step = EEPROM.read(3) * 256 + EEPROM.read(4);
- ch3_step = EEPROM.read(5) * 256 + EEPROM.read(6);
- ch4_step = EEPROM.read(7) * 256 + EEPROM.read(8);
- ch5_step = EEPROM.read(9) * 256 + EEPROM.read(10);
- ch6_step = EEPROM.read(11) * 256 + EEPROM.read(12);
+ loadSteps();
 
  //開発用通信設定
  //  Serial.begin(9600);
 
  randomSeed(chipRandomSeed());  // AUTO mode picked the same "random" patterns after every power-up
 
+ // CLK/RST pin-change interrupt. pinbLast starts with CLK and RST low, as the first loop pass
+ // did, so a clock that is already high counts as a rising edge (step 1).
+ ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+   PCMSK0 |= _BV(CLK_PB_BIT) | _BV(RST_PB_BIT);
+   PCIFR = _BV(PCIF0);
+   PCICR |= _BV(PCIE0);
+   pinChange();
+ }
+
  OLED_display();
 }
 
 void loop() {
 
- old_clock_in = clock_in;
- old_reset_in = reset_in;
  old_button = button;
 
  //-----------モード判定----------------
@@ -357,29 +509,35 @@ void loop() {
  //-------------------MANUALモード-------------------------
  if (mode == 0) {
    if (button_on == 1) {//任意のステップを選択中にボタンを押すと、ゲートのON/OFFを切り替える
-     if ( enc <= 16) {
-       ch1_step = ch1_step ^ enc_bit;
-     }
-     else if ( enc <= 32 && enc > 16) {
-       ch2_step = ch2_step ^ enc_bit;
-     }
-     else if ( enc <= 48 && enc > 32) {
-       ch3_step = ch3_step ^ enc_bit;
-     }
-     else if ( enc <= 64 && enc > 48) {
-       ch4_step = ch4_step ^ enc_bit;
-     }
-     else if ( enc <= 80 && enc > 64) {
-       ch5_step = ch5_step ^ enc_bit;
-     }
-     else if ( enc <= 96 && enc > 80) {
-       ch6_step = ch6_step ^ enc_bit;
+     if ( enc <= 96 ) {
+       ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // the CLK interrupt reads the patterns
+         if ( enc <= 16) {
+           ch1_step = ch1_step ^ enc_bit;
+         }
+         else if ( enc <= 32 && enc > 16) {
+           ch2_step = ch2_step ^ enc_bit;
+         }
+         else if ( enc <= 48 && enc > 32) {
+           ch3_step = ch3_step ^ enc_bit;
+         }
+         else if ( enc <= 64 && enc > 48) {
+           ch4_step = ch4_step ^ enc_bit;
+         }
+         else if ( enc <= 80 && enc > 64) {
+           ch5_step = ch5_step ^ enc_bit;
+         }
+         else if ( enc <= 96 && enc > 80) {
+           ch6_step = ch6_step ^ enc_bit;
+         }
+       }
      }
 
      //AUTO選択
      else if ( enc == 97 ) {
-       mode = 1;
-       change_step();//AUTOモードのパターンに切り替え
+       ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // change_step() also runs in the CLK interrupt
+         mode = 1;
+         change_step();//AUTOモードのパターンに切り替え
+       }
      }
 
      //RESET選択
@@ -421,15 +579,10 @@ void loop() {
    if (button_on == 1) {
      //MANUAL選択
      if ( enc == 1 ) {
-       mode = 0;//MANUAL呼び出し
+       mode = 0;//MANUAL呼び出し (from now on the CLK interrupt leaves the patterns alone)
        enc = 97;//AUTOからMANUALに戻ったときに、MANUALを選択状態にする。自由に変えてOK
        //保存データの読み出し
-       ch1_step = EEPROM.read(1) * 256 + EEPROM.read(2);
-       ch2_step = EEPROM.read(3) * 256 + EEPROM.read(4);
-       ch3_step = EEPROM.read(5) * 256 + EEPROM.read(6);
-       ch4_step = EEPROM.read(7) * 256 + EEPROM.read(8);
-       ch5_step = EEPROM.read(9) * 256 + EEPROM.read(10);
-       ch6_step = EEPROM.read(11) * 256 + EEPROM.read(12);
+       loadSteps();
      }
 
 
@@ -485,153 +638,23 @@ void loop() {
    }
  }
  //-------------AUTOモード処理---------------
-
- switch (repeat) {
-   case 0:
-     repeat_max = 4;
-     break;
-
-   case 1:
-     repeat_max = 8;
-     break;
-
-   case 2:
-     repeat_max = 16;
-     break;
-
-   case 3:
-     repeat_max = 32;
-     break;
-
-   case 4:
-     repeat_max = 10000;//ETERNAL
-     break;
- }
-
- switch (sw) {
-   case 0:
-     sw_max = 2;
-     break;
-
-   case 1:
-     sw_max = 4;
-     break;
-
-   case 2:
-     sw_max = 8;
-     break;
-
-   case 3:
-     sw_max = 16;
-     break;
-
-   case 4:
-     sw_max = 255;//ETERNAL
-     break;
- }
- //--------------外部クロック入力検出,カウント----------------
-
- clock_in = digitalRead(13);
-  if (old_clock_in == 0 && clock_in == 1) {
-   step_count++;
- }
-
-
-
-reset_in = digitalRead(11);
-if (old_reset_in == 0 && reset_in == 1) {
-    step_count = 0;
-    OLED_display();
-}
-// Update old_reset_in for the next loop iteration
-old_reset_in = reset_in;
- 
-
- if (step_count >= 17) {
-   step_count = 1;
-   
-
-   if (mode == 1) {
-     repeat_done++;
-
-     if ( fillin == 1 && repeat_done == repeat_max - 1) {
-       fillin_step();
-     }
-
-     else if (repeat_done >= repeat_max) {
-       sw_done++;
-       repeat_done = 0;
-       change_step();
-     }
+ // Clock, reset, the wrap at step 17 and the outputs are in pinChange() (CLK/RST interrupt).
+ ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+   autoLimits();  // limits for the display (the interrupt recomputes them at the wrap)
+   if (sw_done >= sw_max) {
+     sw_done = 0;
+   }
+   //--------------出力----------------------------------
+   if (button_on == 1) {
+     updateOutputs();  // a step toggle, mute, AUTO/MANUAL or RESET takes effect at once, as before
    }
  }
 
- if (sw_done >= sw_max) {
-   sw_done = 0;
- }
-
-
- //--------------シーケンス------------------------------
-
- CH1_output = bitRead(ch1_step, 16 - step_count );
- CH2_output = bitRead(ch2_step, 16 - step_count );
- CH3_output = bitRead(ch3_step, 16 - step_count );
- CH4_output = bitRead(ch4_step, 16 - step_count );
- CH5_output = bitRead(ch5_step, 16 - step_count );
- CH6_output = bitRead(ch6_step, 16 - step_count );
-
- //--------------出力----------------------------------
-//--------------出力----------------------------------
-if (CH1_output == 1 && CH1_mute == 0) {
-    digitalWrite(5, clock_in);
-    digitalWrite(14, clock_in);
-} else {
-    digitalWrite(5, LOW);
-    digitalWrite(14, LOW);
-}
-
-if (CH2_output == 1 && CH2_mute == 0) {
-    digitalWrite(6, clock_in);
-    digitalWrite(15, clock_in);
-} else {
-    digitalWrite(6, LOW);
-    digitalWrite(15, LOW);
-}
-
-if (CH3_output == 1 && CH3_mute == 0) {
-    digitalWrite(7, clock_in);
-    digitalWrite(16, clock_in);
-} else {
-    digitalWrite(7, LOW);
-    digitalWrite(16, LOW);
-}
-
-if (CH4_output == 1 && CH4_mute == 0) {
-    digitalWrite(8, clock_in);
-    digitalWrite(0, clock_in);
-} else {
-    digitalWrite(8, LOW);
-    digitalWrite(0, LOW);
-}
-
-if (CH5_output == 1 && CH5_mute == 0) {
-    digitalWrite(9, clock_in);
-    digitalWrite(1, clock_in);
-} else {
-    digitalWrite(9, LOW);
-    digitalWrite(1, LOW);
-}
-
-if (CH6_output == 1 && CH6_mute == 0) {
-    digitalWrite(10, clock_in);
-    digitalWrite(17, clock_in);
-} else {
-    digitalWrite(10, LOW);
-    digitalWrite(17, LOW);
-}
  //--------------OLED出力----------------------------------
  //注意：OLEDの更新はクロック入ったタイミングのみ。Arduinoのビジー状態を避けるため。
- if (old_clock_in == 0 && clock_in == 1) {
+ // (a redraw no longer delays the outputs; displayRetry = the display guard skipped a frame)
+ if (displayFlag || (displayRetry && !i2cGuardPaused())) {
+   displayFlag = 0;
    OLED_display();
  }
 
@@ -643,6 +666,18 @@ if (CH6_output == 1 && CH6_mute == 0) {
 }
 //--------------OLED出力----------------------------------
 void OLED_display() {
+ // One consistent copy of the patterns for this frame (the CLK interrupt replaces them in AUTO
+ // mode). These locals hide the volatile globals of the same name inside this function.
+ unsigned int ch1_step, ch2_step, ch3_step, ch4_step, ch5_step, ch6_step;
+ ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+   ch1_step = ::ch1_step;
+   ch2_step = ::ch2_step;
+   ch3_step = ::ch3_step;
+   ch4_step = ::ch4_step;
+   ch5_step = ::ch5_step;
+   ch6_step = ::ch6_step;
+ }
+
  display.clearDisplay();  // ディスプレイをクリア
  display.setTextSize(1);  // 出力する文字の大きさ
  display.setTextColor(WHITE);  // 出力する文字の色
@@ -1699,7 +1734,9 @@ void OLED_display() {
  display.drawRect(step_count * 6 + 24, 0 , 6, 53, WHITE);
  display.setCursor(0, 54);  // 文字の一番端の位置
 
- display.display();  // ディスプレイへの表示
+ // ディスプレイへの表示. After an I2C timeout the guard frees the bus, re-initialises the
+ // display and skips frames for 1 s; the loop then redraws (displayRetry).
+ displayRetry = !i2cGuardShow(display);
 }
 
 void save_data() {
