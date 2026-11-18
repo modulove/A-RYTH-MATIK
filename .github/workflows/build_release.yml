@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        firmware: ["ARYTHMATIK_Buds", "ARYTHMATIK_Euclid", "ARYTHMATIK_Gate-seq", "ARYTHMATIK_Labor", "ARYTHMATIK_Pong", "ARYTHMATIK_Stitch", "ARYTHMATIK_DEBUG"]
+        firmware: ["ARYTHMATIK_Buds", "ARYTHMATIK_Euclid", "ARYTHMATIK_Gate-seq", "ARYTHMATIK_Labor", "ARYTHMATIK_Pong", "ARYTHMATIK_Stitch", "ARYTHMATIK_DEBUG", "ARYTHMATIK_Cat", "ARYTHMATIK_Fungi", "ARYTHMATIK_Kiss", "ARYTHMATIK_Walz"]
         board: ["arduino:avr:nano", "arduino:avr:nano:cpu=atmega328old"]
         include:
           - board: arduino:avr:nano
@@ -55,6 +55,21 @@ jobs:
         run: |
           # Every sketch carries its own copy (Arduino IDE sketch folders cannot share files).
           for f in */LGT8F_Compat.h; do cmp "$f" ARYTHMATIK_Euclid/LGT8F_Compat.h || { echo "::error::$f differs from ARYTHMATIK_Euclid/LGT8F_Compat.h"; exit 1; }; done
+
+      - name: Check OledRle.h copies and generated frames
+        working-directory: ./Firmware
+        run: |
+          # The animation firmware share OledRle.h (one copy per sketch folder) and draw frames.h,
+          # which tools/oled_rle.py generates from frames_src.h: both must be up to date.
+          for f in */OledRle.h; do cmp "$f" ARYTHMATIK_Cat/OledRle.h || { echo "::error::$f differs from ARYTHMATIK_Cat/OledRle.h"; exit 1; }; done
+          for f in */frames.h; do
+            d=$(dirname "$f")
+            args=$(sed -n '2s|^//   py -3 ../tools/oled_rle.py ||p' "$f" | awk '{$NF=""; print}')
+            [ -n "$args" ] || { echo "::error::$f has no generator line"; exit 1; }
+            (cd "$d" && python3 ../tools/oled_rle.py $args /tmp/frames_check.h > /dev/null) || { echo "::error::$f: oled_rle.py failed"; exit 1; }
+            tail -n +3 "$f" > /tmp/frames_a.h; tail -n +3 /tmp/frames_check.h > /tmp/frames_b.h
+            cmp /tmp/frames_a.h /tmp/frames_b.h || { echo "::error::$f is not what frames_src.h generates: run the command in its line 2"; exit 1; }
+          done
 
       - name: Compile sketch and rename output file for release
         working-directory: ./Firmware

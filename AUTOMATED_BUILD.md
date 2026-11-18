@@ -55,6 +55,10 @@ For each firmware listed in the workflow's `firmware` matrix:
 - **ARYTHMATIK_Pong**
 - **ARYTHMATIK_Stitch**
 - **ARYTHMATIK_DEBUG** (hardware test)
+- **ARYTHMATIK_Cat**
+- **ARYTHMATIK_Fungi**
+- **ARYTHMATIK_Kiss**
+- **ARYTHMATIK_Walz**
 
 A new firmware folder is only built after it has been added to that list.
 
@@ -68,7 +72,7 @@ The system creates:
 - `FIRMWARE.nano.reversed.hex` - Arduino Nano (Reversed Encoder)
 - `FIRMWARE.nanoOldBootloader.reversed.hex` - Arduino Nano Old Bootloader (Reversed Encoder)
 
-**Total**: 4 files per firmware × 7 firmware = **28 .hex files** per release
+**Total**: 4 files per firmware × 11 firmware = **44 .hex files** per release
 
 ## Dependencies
 
@@ -119,6 +123,17 @@ The workflow enforces two rules:
 - every program must stay below **29,696 bytes** (the LGT8F bootloader starts at
   0x7400), so all builds pass `--build-property upload.maximum_size=29696`;
 - all `LGT8F_Compat.h` copies must be identical to `Firmware/ARYTHMATIK_Euclid/LGT8F_Compat.h`.
+
+### Animation frames
+
+Cat, Fungi, Kiss and Walz draw their animation frames from `frames.h`: run-length coded
+display pages, about a third of the flash of plain bitmaps. `frames.h` is generated from the
+editable bitmaps in `frames_src.h` by `Firmware/tools/oled_rle.py`; the exact command is in
+line 2 of each `frames.h`. The drawing code is `OledRle.h`, one identical copy per folder.
+The workflow checks that all `OledRle.h` copies are identical and that every `frames.h` is
+what its `frames_src.h` generates.
+
+### EEPROM on the LGT8F
 
 On the LGT8F every EEPROM write freezes the chip for ~46 ms (a flash page swap).
 Save several bytes with one `EEPROM.put()` (one page swap), not with a loop of
