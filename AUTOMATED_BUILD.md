@@ -46,13 +46,17 @@ workflow run as artifacts: open the run from the PR's "Checks" tab and download 
 
 ## What Gets Built
 
-For each firmware in the `Firmware/` directory:
+For each firmware listed in the workflow's `firmware` matrix:
 
 - **ARYTHMATIK_Buds**
 - **ARYTHMATIK_Euclid**
 - **ARYTHMATIK_Gate-seq**
 - **ARYTHMATIK_Labor**
 - **ARYTHMATIK_Pong**
+- **ARYTHMATIK_Stitch**
+- **ARYTHMATIK_DEBUG** (hardware test)
+
+A new firmware folder is only built after it has been added to that list.
 
 The system creates:
 
@@ -64,7 +68,7 @@ The system creates:
 - `FIRMWARE.nano.reversed.hex` - Arduino Nano (Reversed Encoder)
 - `FIRMWARE.nanoOldBootloader.reversed.hex` - Arduino Nano Old Bootloader (Reversed Encoder)
 
-**Total**: 4 files per firmware × 5 firmware = **20 .hex files** per release
+**Total**: 4 files per firmware × 7 firmware = **28 .hex files** per release
 
 ## Dependencies
 
@@ -90,7 +94,14 @@ The workflow is defined in:
 
 ### Build Flags
 
-Standard builds use default flags.
+All builds pass:
+```
+-DSSD1306_NO_SPLASH
+```
+It leaves out the Adafruit SSD1306 library's splash logos (~1.2 KB of flash that no firmware
+shows). It only works as a compiler flag, because it has to reach the library's own source.
+Building in the Arduino IDE without it still works, but the program is ~1.2 KB bigger: on an
+LGT8F328P board use the release files or make sure the build stays below 29,696 bytes.
 
 Reversed encoder builds add:
 ```
