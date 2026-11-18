@@ -10,6 +10,8 @@
  * Existing goodies:
  * - U8x8 (U8g2) text driver (no framebuffer) -> fast & tiny
  * - Tight timing: PCINT for EXT clock, Timer1 for INT clock, direct port writes
+ *   • Steps, RST actions, AUTO repeat/switch/fill changes and the end of the 10 ms
+ *     triggers (Timer2) all happen in interrupts: OLED updates do not move any output
  * - MANUAL edit + AUTO preset banks (TECH, DUB, HOUSE, HALF) + GENERATIVE
  * - Double-length presets: BASE[0..5] + FILL[6..11]
  * - Fill system (periodic 1/2/4/8/16, one-shot via RST=Fill)
@@ -44,6 +46,7 @@
 #include <Wire.h>
 #include <U8x8lib.h>
 #include <avr/pgmspace.h>
+#include <util/atomic.h>
 #include <EncoderButton.h>
 
 // --------------- Pins / ports ------------------
@@ -143,6 +146,54 @@ const uint16_t EEPROM_WRITE_DELAY_MS = 2000;  // 2 seconds after last change
 // ---------------- Clock/Timing -----------------
 #define TRIG_US 10000UL
 #define STEPS_PER_BEAT 4
+
+// Timer1 = internal clock: CTC, one compare interrupt per step, OCR1A + 1 = T1_STEP_CONST / bpm.
+// Prescaler = the smallest one that fits 60 BPM into 16 bits: 64 at 16 MHz (3750000 / bpm,
+// as before), 256 at 32 MHz (LGT8F core, 1875000 / bpm).
+#define T1_COUNTS_PER_BPM(p) (F_CPU * (60UL / STEPS_PER_BEAT) / (p))
+#if T1_COUNTS_PER_BPM(1UL) / 60 <= 65536UL
+#define T1_PRESCALER 1UL
+#define T1_CS_BITS (_BV(CS10))
+#elif T1_COUNTS_PER_BPM(8UL) / 60 <= 65536UL
+#define T1_PRESCALER 8UL
+#define T1_CS_BITS (_BV(CS11))
+#elif T1_COUNTS_PER_BPM(64UL) / 60 <= 65536UL
+#define T1_PRESCALER 64UL
+#define T1_CS_BITS (_BV(CS11) | _BV(CS10))
+#elif T1_COUNTS_PER_BPM(256UL) / 60 <= 65536UL
+#define T1_PRESCALER 256UL
+#define T1_CS_BITS (_BV(CS12))
+#else
+#define T1_PRESCALER 1024UL
+#define T1_CS_BITS (_BV(CS12) | _BV(CS10))
+#endif
+#define T1_STEP_CONST T1_COUNTS_PER_BPM(T1_PRESCALER)
+
+// Timer2 = trigger length (TRG mode): CTC tick of 0.5 ms that runs while a trigger is high.
+// Each channel counts TRIG_TICKS ticks; the tick restarts in phase with the step when no
+// trigger was high, so a trigger lasts exactly 10 ms.
+#define T2_TICK_HZ 2000UL
+#if F_CPU / T2_TICK_HZ <= 256
+#define T2_PRESCALER 1UL
+#define T2_CS_BITS (_BV(CS20))
+#elif F_CPU / T2_TICK_HZ / 8 <= 256
+#define T2_PRESCALER 8UL
+#define T2_CS_BITS (_BV(CS21))
+#elif F_CPU / T2_TICK_HZ / 32 <= 256
+#define T2_PRESCALER 32UL
+#define T2_CS_BITS (_BV(CS21) | _BV(CS20))
+#elif F_CPU / T2_TICK_HZ / 64 <= 256
+#define T2_PRESCALER 64UL
+#define T2_CS_BITS (_BV(CS22))
+#elif F_CPU / T2_TICK_HZ / 128 <= 256
+#define T2_PRESCALER 128UL
+#define T2_CS_BITS (_BV(CS22) | _BV(CS20))
+#else
+#error "F_CPU too high for the Timer2 trigger tick"
+#endif
+#define T2_OCR (F_CPU / T2_TICK_HZ / T2_PRESCALER - 1)        // 249 at 16 and 32 MHz
+#define TRIG_TICKS ((uint8_t)(TRIG_US * T2_TICK_HZ / 1000000UL))  // 20
+
 enum ClockSrc { CLK_EXT = 0, CLK_INT = 1 };
 volatile uint8_t  clkSource = CLK_EXT;
 volatile uint16_t bpm = 120;
@@ -157,7 +208,7 @@ volatile uint8_t wrappedEdge = 0;
 volatile uint8_t stepEdgeFlag = 0;
 volatile uint8_t resetEdgeFlag = 0;
 volatile uint8_t outBits = 0;  // CH1..CH6 mask
-unsigned long trigOffAtUs[6] = { 0, 0, 0, 0, 0, 0 };
+volatile uint8_t trigTicks[6];   // TRG: Timer2 ticks until the trigger ends
 volatile uint8_t trigActiveMask = 0;
 
 // ----------------- UI / Menu -------------------
@@ -195,6 +246,9 @@ bool secWasPressed     = false;
 unsigned long secPressStart = 0;
 
 // --------------- Patterns/state ---------------
+// The step interrupt reads the patterns, and the interrupts also change them (AUTO wrap, RST
+// Fill/Gen/Mut) together with the AUTO counters and the LFSR. The loop changes any of them
+// only inside ATOMIC_BLOCK (onClick, serial commands), which is also a compiler barrier.
 uint16_t ch1_step = 0x8888, ch2_step = 0x0808, ch3_step = 0xCCCC;
 uint16_t ch4_step = 0x2222, ch5_step = 0xFFFF, ch6_step = 0x0000;
 
@@ -294,8 +348,29 @@ const static uint16_t bnk4_ptn[8][12] PROGMEM = {
    0x88AF, 0x0808, 0xCCCC, 0x2222, 0x0040, 0x4112 }
 };
 
+// --------- display guard (I2C) ----------
+// i2cGuardBegin() (LGT8F_Compat.h) frees a stuck bus and makes every I2C call give up after
+// 25 ms. After a timeout the display is re-initialised and updates pause for 1 s; the
+// sequencer runs in interrupts and does not notice.
+uint8_t oledFlipShown = 0;  // flip mode last sent to the display (sent again after a re-init)
+static void applyOLEDflip(uint8_t flip) { oledFlipShown = flip ? 1 : 0; u8x8.setFlipMode(oledFlipShown); }
+static inline bool oledPaused() { return i2cGuardPaused(); }
+static inline bool oledBusFailed() { return Wire.getWireTimeoutFlag(); }  // stop drawing this frame
+// Call after a display update. On an I2C timeout: free the bus, re-initialise the display,
+// pause updates for 1 s and request a redraw. Returns true in that case.
+static bool oledCheckGuard() {
+  if (!i2cGuardTimedOut()) return false;
+  i2cGuardBegin();
+  u8x8.begin();
+  u8x8.setFlipMode(oledFlipShown);
+  u8x8.setInverseFont(0);
+  i2cGuardTimedOut();  // a timeout during the re-init is covered by the pause
+  i2cGuardPause();
+  uiDirty = true;
+  return true;
+}
+
 // --------- fwd decls ----------
-static void applyOLEDflip(uint8_t flip) { u8x8.setFlipMode(flip ? 1 : 0); }
 static void recalcTimer1();
 static void internalClockStart();
 static void internalClockStop();
@@ -303,6 +378,7 @@ static void writeOutputsFast(uint8_t mask);
 static void writeLEDsFast(uint8_t mask);
 static void handleStepEdgeISR();
 static void handleResetEdgeISR();
+static void runRstAction(uint8_t a);
 
 void OLED_display();
 void save_data();
@@ -379,30 +455,37 @@ static inline void mutatePatternAll() {
 }
 
 // ---------- helpers ----------
+// The Timer1 helpers restore the interrupt state (they are also called inside ATOMIC_BLOCK).
 static void recalcTimer1() {
-  // OCR1A = 3750000 / BPM - 1  (16MHz, prescale 64, 4 steps/beat)
-  uint32_t ocr = 3750000UL / (uint32_t)bpm;
+  // OCR1A = F_CPU * 60 / (prescaler * 4 steps/beat * BPM) - 1  (16 MHz: 3750000 / BPM - 1)
+  uint32_t ocr = T1_STEP_CONST / (uint32_t)bpm;
   if (ocr > 0) ocr--;
   if (ocr < 1000UL)  ocr = 1000UL;
   if (ocr > 65535UL) ocr = 65535UL;
-  noInterrupts();
-  OCR1A = (uint16_t)ocr;
-  interrupts();
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    OCR1A = (uint16_t)ocr;
+  }
 }
 static void internalClockStart() {
-  noInterrupts();
-  TCCR1A = 0; TCCR1B = 0;
-  recalcTimer1();
-  TCCR1B |= _BV(WGM12);
-  TCCR1B |= _BV(CS11) | _BV(CS10);
-  TIMSK1 |= _BV(OCIE1A);
-  interrupts();
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    TCCR1A = 0; TCCR1B = 0;
+    recalcTimer1();
+    TCCR1B |= _BV(WGM12);
+    TCCR1B |= T1_CS_BITS;
+    TIMSK1 |= _BV(OCIE1A);
+  }
 }
 static void internalClockStop() {
-  noInterrupts();
-  TIMSK1 &= ~_BV(OCIE1A);
-  TCCR1B = 0;
-  interrupts();
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    TIMSK1 &= ~_BV(OCIE1A);
+    TCCR1B = 0;
+  }
+}
+// Timer2 tick for the trigger length, started in phase with the step (interrupts off).
+static inline void trigTimerStart() {
+  TCNT2 = 0;
+  TIFR2 = _BV(OCF2A);
+  TIMSK2 |= _BV(OCIE2A);
 }
 static void writeOutputsFast(uint8_t mask) {
   // Apply channel mapping for OLED rotation
@@ -475,12 +558,11 @@ static void serialPoll() {
 
   // X : simulate RST action
   if (sBuf[0]=='X' && sBuf[1]==0){
-    switch (rstAction){
-      case RIN_RESET: handleResetEdgeISR(); break;
-      case RIN_FILL:  fillin_step(); uiDirty=true; break;
-      case RIN_GEN:   genRandomPattern(ch1_step,ch2_step,ch3_step,ch4_step,ch5_step,ch6_step); uiDirty=true; break;
-      case RIN_MUT:   mutatePatternAll(); uiDirty=true; break;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // same code as the RST interrupt
+      if (rstAction == RIN_RESET) handleResetEdgeISR();
+      else runRstAction(rstAction);
     }
+    uiDirty=true;
     #if DEBUG
     if (dbg) { Serial.print(F("D:RST action=")); Serial.println((int)rstAction); }
     #endif
@@ -490,11 +572,13 @@ static void serialPoll() {
 
   // G / U : one-shots
   if (sBuf[0]=='G' && sBuf[1]==0){
-    genRandomPattern(ch1_step,ch2_step,ch3_step,ch4_step,ch5_step,ch6_step); uiDirty=true;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { runRstAction(RIN_GEN); }
+    uiDirty=true;
     Serial.println(F("OK")); return;
   }
   if (sBuf[0]=='U' && sBuf[1]==0){
-    mutatePatternAll(); uiDirty=true;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { runRstAction(RIN_MUT); }
+    uiDirty=true;
     Serial.println(F("OK")); return;
   }
 
@@ -538,7 +622,7 @@ static void serialPoll() {
   // R0..4 : Repeat token
   if (sBuf[0]=='R'){
     int v = atoi(&sBuf[1]);
-    repeat = constrain(v,0,4);
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { repeat = constrain(v,0,4); }  // 16-bit, read at the wrap
     markDirty();
     Serial.println(F("OK")); return;
   }
@@ -577,13 +661,15 @@ static void serialPoll() {
 
   // P? : dump pattern
   if (sBuf[0]=='P' && sBuf[1]=='?'){
+    uint16_t v[6];
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // one consistent pattern
+      v[0]=ch1_step; v[1]=ch2_step; v[2]=ch3_step;
+      v[3]=ch4_step; v[4]=ch5_step; v[5]=ch6_step;
+    }
     Serial.print(F("P="));
-    printHex4(ch1_step); Serial.print(',');
-    printHex4(ch2_step); Serial.print(',');
-    printHex4(ch3_step); Serial.print(',');
-    printHex4(ch4_step); Serial.print(',');
-    printHex4(ch5_step); Serial.print(',');
-    printHex4(ch6_step); Serial.print('\n');
+    for (uint8_t i=0;i<6;i++){
+      printHex4(v[i]); Serial.print((i<5) ? ',' : '\n');
+    }
     return;
   }
 
@@ -591,8 +677,10 @@ static void serialPoll() {
   if (sBuf[0]=='P' && sBuf[1]=='='){
     uint16_t v[6];
     if (parse6hex(&sBuf[2], v)){
-      ch1_step=v[0]; ch2_step=v[1]; ch3_step=v[2];
-      ch4_step=v[3]; ch5_step=v[4]; ch6_step=v[5];
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        ch1_step=v[0]; ch2_step=v[1]; ch3_step=v[2];
+        ch4_step=v[3]; ch5_step=v[4]; ch6_step=v[5];
+      }
       save_data(); uiDirty=true;
       Serial.print(F("OK\n"));
     } else Serial.print(F("ERR\n"));
@@ -645,11 +733,13 @@ void setup() {
   pinMode(16, OUTPUT);
   pinMode(17, OUTPUT);  // A3 LED6
 
+  i2cGuardBegin();  // free a stuck I2C bus, I2C calls give up after 25 ms
   Wire.begin();
   Wire.setClock(400000L);  // Fast I2C (400 kHz)
   u8x8.begin();
   u8x8.setFont(u8x8_font_chroma48medium8_r);
   u8x8.clear();
+  oledCheckGuard();
 
   // load saved pattern words (current)
   ch1_step = EEPROM.read(1)*256 + EEPROM.read(2);
@@ -692,6 +782,12 @@ void setup() {
   outMode  = constrain(EEPROM.read(EE_OMODE),0,2);
   menuTimeoutSec = constrain(EEPROM.read(EE_TIMEOUT),1,30);
 
+  // Timer2: trigger-length tick (CTC); its interrupt is on only while a trigger is high
+  TCCR2A = _BV(WGM21);
+  TCCR2B = T2_CS_BITS;
+  OCR2A = T2_OCR;
+  TIMSK2 = 0;
+
   // PCINT for CLK/RESET (PINB)
   PCICR |= _BV(PCIE0);
   PCMSK0 |= _BV(CLK_PB_BIT) | _BV(RST_PB_BIT);
@@ -719,8 +815,9 @@ void setup() {
   }
 
   // Seed LFSR (A0/A1 drive LEDs, so reading them gave the same seed every power-up)
-  lfsr = chipRandomSeed();
-  if (lfsr == 0) lfsr = 0xACE1;  // ensure non-zero
+  uint16_t seed = (uint16_t)chipRandomSeed();
+  if (seed == 0) seed = 0xACE1;  // ensure non-zero
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { lfsr = seed; }  // the CLK/RST interrupts already use it
 
   uiDirty = true;
   lastUIActivityMs = millis();
@@ -798,90 +895,30 @@ void loop() {
   // idle toggle for timeout bar
   hideUI = (millis() - lastUIActivityMs) >= (unsigned long)menuTimeoutSec * 1000UL;
 
-  // Execute deferred RST actions (from ISR)
+  // The RST actions, the steps, the AUTO wrap bookkeeping and the end of the triggers all run
+  // in the interrupts now (they were delayed here by OLED updates); the flags ask for a redraw.
   if (rstActionFlag) {
-    uint8_t a = rstActionFlag;
     rstActionFlag = 0;
-    if (a == RIN_FILL)      fillin_step();
-    else if (a == RIN_GEN)  genRandomPattern(ch1_step, ch2_step, ch3_step, ch4_step, ch5_step, ch6_step);
-    else if (a == RIN_MUT)  mutatePatternAll();
     uiDirty = true;
   }
 
   if (resetEdgeFlag) {
-    noInterrupts(); resetEdgeFlag = 0; interrupts();
-    step_count = 0;
+    // step_count is already 0 (set in the interrupt). Setting it here again undid any step
+    // that came in between, e.g. while an OLED update was running.
+    resetEdgeFlag = 0;
     uiDirty = true;
   }
 
   if (stepEdgeFlag) {
-    uint8_t wrapped;
-    noInterrupts(); stepEdgeFlag = 0; wrapped = wrappedEdge; wrappedEdge = 0; interrupts();
-
+    stepEdgeFlag = 0;
     // caret now updates EVERY step (not only on wrap)
     uiDirty = true;
-
-    if (wrapped) {
-      // bounds from tokens
-      switch (repeat){ case 0: repeat_max=4; break; case 1: repeat_max=8; break; case 2: repeat_max=16; break; case 3: repeat_max=32; break; default: repeat_max=10000; break; }
-      switch (sw)    { case 0: sw_max=2;   break; case 1: sw_max=4;  break; case 2: sw_max=8;  break; case 3: sw_max=16; break; default: sw_max=255; break; }
-
-      // revert preset FILL -> BASE
-      if (fillActive && genre<=3){
-        uint8_t idx = (genre==0)?change_bnk1:(genre==1)?change_bnk2:(genre==2)?change_bnk3:change_bnk4;
-        loadPresetBase(genre, idx);
-        fillActive = false;
-      }
-
-      if (mode == 1) {
-        repeat_done++;
-
-        if (repeat_done >= repeat_max) {
-          sw_done++;
-          repeat_done = 0;
-          change_step();
-          if (sw_done >= sw_max) sw_done = 0;
-        } else {
-          if (fillin){
-            uint8_t per = fillPeriodFromIdx(fillPeriodIdx); // 1/2/4/8/16
-            if (per>0 && (repeat_done % per)==0){
-              if (genre <= 3){
-                uint8_t idx = (genre==0)?change_bnk1:(genre==1)?change_bnk2:(genre==2)?change_bnk3:change_bnk4;
-                loadPresetFill(genre, idx);
-                fillActive = true;
-              } else {
-                fillin_step();
-              }
-            }
-          }
-        }
-      }
-    }
   }
 
-  // TRIG off scheduling (only used in TRG mode)
-  if (outMode == OUT_TRG && trigActiveMask) {
-    unsigned long us = micros();
-    uint8_t mask = trigActiveMask;
-    for (uint8_t i=0;i<6;i++){
-      if (mask & (1<<i)) {
-        if ((long)(us - trigOffAtUs[i]) >= 0) {
-          uint8_t newMask;
-          noInterrupts();
-          outBits &= ~(1<<i);
-          newMask = outBits;
-          trigActiveMask &= ~(1<<i);
-          interrupts();
-          writeOutputsFast(newMask);
-          writeLEDsFast(newMask);
-        }
-      }
-    }
-  }
-
-  if (uiDirty && (long)(millis() - nextOledMs) >= 0) {
-    OLED_display();
+  if (uiDirty && (long)(millis() - nextOledMs) >= 0 && !oledPaused()) {
     uiDirty = false;
+    OLED_display();
+    oledCheckGuard();  // I2C timeout: re-init, 1 s pause, redraw afterwards
     nextOledMs = millis() + OLED_INTERVAL_MS;
   }
 
@@ -1008,6 +1045,7 @@ void drawGrid() {
   for (uint8_t r=0;r<6;r++){
     u8x8.setCursor(0, r);
     for (uint8_t c=0;c<16;c++){
+      if (oledBusFailed()) return;  // I2C timeout: give up this frame (display guard)
       uint8_t idx = r*16 + c + 1;
       uint8_t bitIndex = 15 - c;
       uint8_t v = 0;
@@ -1027,7 +1065,10 @@ void drawGrid() {
 }
 void drawCaret() {
   u8x8.setCursor(0, 6);
-  for (uint8_t c=0;c<16;c++) u8x8.write((c == (step_count - 1)) ? '^' : ' ');
+  for (uint8_t c=0;c<16;c++) {
+    if (oledBusFailed()) return;
+    u8x8.write((c == (step_count - 1)) ? '^' : ' ');
+  }
 }
 
 // Draw bottom-row idle bar/status
@@ -1044,6 +1085,8 @@ void drawIdleBar(){
 
   const uint16_t rmax = (repeat<=3)? (4u<<repeat) : 0u; // 0=endless
   const uint8_t  segs = (sw<=3)? (uint8_t)(2u<<sw) : 0u;
+  int repeat_done;  // copy of the global (16-bit, changed by the step interrupt)
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { repeat_done = ::repeat_done; }
 
   if (rmax==0 || segs==0){
     char s[17]; sprintf(s,"SW:ET FILL:%c", fillin?'Y':'N');
@@ -1067,7 +1110,9 @@ void drawIdleBar(){
 
 void OLED_display() {
   drawGrid();
+  if (oledBusFailed()) return;  // I2C timeout: the caller re-initialises the display
   drawCaret();
+  if (oledBusFailed()) return;
   if (hideUI) drawIdleBar(); else drawBottomMenu();
 }
 
@@ -1085,8 +1130,8 @@ void loadPreset(uint8_t bank, uint8_t idx, bool isFill){
   ch4_step=pgm_read_word(&p[3]); ch5_step=pgm_read_word(&p[4]); ch6_step=pgm_read_word(&p[5]);
 }
 // Convenience wrappers
-static inline void loadPresetBase(uint8_t bank, uint8_t idx) { loadPreset(bank, idx, false); }
-static inline void loadPresetFill(uint8_t bank, uint8_t idx) { loadPreset(bank, idx, true); }
+inline void loadPresetBase(uint8_t bank, uint8_t idx) { loadPreset(bank, idx, false); }
+inline void loadPresetFill(uint8_t bank, uint8_t idx) { loadPreset(bank, idx, true); }
 
 // ------------- save/pattern ops -------------
 static inline void markDirty() {
@@ -1098,7 +1143,11 @@ static inline void markDirty() {
 // RAM copy and written with one EEPROM.put(): on the LGT8F one flash page swap
 // (~46 ms freeze) instead of one per changed byte.
 static void storeSteps(uint8_t *ee) {
-  const uint16_t steps[6] = { ch1_step, ch2_step, ch3_step, ch4_step, ch5_step, ch6_step };
+  uint16_t steps[6];
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // the interrupts change the patterns in AUTO mode
+    steps[0] = ch1_step; steps[1] = ch2_step; steps[2] = ch3_step;
+    steps[3] = ch4_step; steps[4] = ch5_step; steps[5] = ch6_step;
+  }
   for (uint8_t i = 0; i < 6; i++) {
     ee[1 + i * 2] = highByte(steps[i]);
     ee[2 + i * 2] = lowByte(steps[i]);
@@ -1178,15 +1227,15 @@ void fillin_step() {
 
 // --------- EncoderButton handlers ---------
 static void hardResetSequencerLikeISR() {
-  noInterrupts();
-  step_count = 0;
-  outBits = 0;
-  trigActiveMask = 0;
-  interrupts();
-  writeOutputsFast(0);
-  writeLEDsFast(0);
-  repeat_done = 0;
-  sw_done = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // also the outputs: a step must not come in between
+    step_count = 0;
+    outBits = 0;
+    trigActiveMask = 0;
+    writeOutputsFast(0);
+    writeLEDsFast(0);
+    repeat_done = 0;
+    sw_done = 0;
+  }
   uiDirty = true;
 }
 void onRotate(EncoderButton& eb) {
@@ -1209,6 +1258,9 @@ void onRotatePressed(EncoderButton& eb) {
 void onClick(EncoderButton& eb) {
   lastUIActivityMs = millis(); hideUI = false;
 
+  // Patterns, AUTO state and the LFSR are shared with the step/RST interrupts. The longest
+  // action (GEN) keeps interrupts off for ~0.2 ms; a clock edge in that time waits.
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
   if (enc >= STEP_MIN && enc <= STEP_MAX) {
     uint8_t col = (enc - 1) % 16;
     uint8_t bitIndex = 15 - col;
@@ -1255,11 +1307,21 @@ void onClick(EncoderButton& eb) {
       outMode = (outMode + 1) % 3; markDirty();
     }
   }
+  }
   uiDirty = true;
 }
 
 // ---------------- Secret menu ----------------
+bool secretRedraw = false;  // the display guard skipped the menu: draw it after the pause
+static void secretShowOK(uint16_t ms) {
+  if (!oledPaused()) {
+    u8x8.clear(); u8x8.setCursor(5,3); u8x8.print(F("OK"));
+    oledCheckGuard();
+  }
+  delay(ms);
+}
 void secretMenuLoop() {
+  if (secretRedraw && !oledPaused()) drawSecretMenu(0);
   long now = encBtn.position();
   long d = now - secretEncOld;
   if (d != 0) {
@@ -1302,19 +1364,21 @@ void secretMenuLoop() {
       EEPROM.update(EE_FPER,2);
       EEPROM.update(EE_OMODE,OUT_TRG);
       EEPROM.update(EE_TIMEOUT,5);
-      u8x8.clear(); u8x8.setCursor(5,3); u8x8.print(F("OK")); delay(500);
+      secretShowOK(500);
       secretMenuActive=false; uiDirty=true; return;
     }
     if (secretIndex == 5 && held >= SECRET_MENU_SAVE_HOLD_MS) {
       EEPROM.update(EE_FPER, fillPeriodIdx);
       EEPROM.update(EE_OMODE, outMode);
       EEPROM.update(EE_TIMEOUT, menuTimeoutSec);
-      u8x8.clear(); u8x8.setCursor(5,3); u8x8.print(F("OK")); delay(400);
+      secretShowOK(400);
       secretMenuActive=false; uiDirty=true; return;
     }
   }
 }
 void drawSecretMenu(uint8_t) {
+  secretRedraw = true;
+  if (oledPaused()) return;  // display guard pause: secretMenuLoop() draws it afterwards
   u8x8.clear();
   u8x8.setInverseFont(secretIndex == 0);
   u8x8.setCursor(0, 0); u8x8.print(F("ROT ")); u8x8.print(EEPROM.read(EE_OLED_ROT)?F("180"):F("0"));
@@ -1331,6 +1395,7 @@ void drawSecretMenu(uint8_t) {
   u8x8.setInverseFont(secretIndex == 6);
   u8x8.setCursor(0, 6); u8x8.print(F("FACT(Hold)"));
   u8x8.setInverseFont(0);
+  secretRedraw = oledCheckGuard();  // I2C timeout: draw again after the pause
 }
 
 // --------------- ISRs -----------------
@@ -1351,13 +1416,15 @@ static inline void handleStepEdgeISR() {
 
   if (outMode == OUT_TRG) {
     uint8_t newMask = outBits;
+    uint8_t wasActive = trigActiveMask;
     for (uint8_t ch=0; ch<6; ch++){
       if (getStepHit(ch, step_count)) {
         newMask |= (1 << ch);
         trigActiveMask |= (1 << ch);
-        trigOffAtUs[ch] = micros() + TRIG_US;  // 10 ms pulse
+        trigTicks[ch] = TRIG_TICKS;  // 10 ms pulse, ended by the Timer2 interrupt
       }
     }
+    if (!wasActive && trigActiveMask) trigTimerStart();  // tick in phase with this step
     outBits = newMask;
     writeOutputsFast(newMask);
     writeLEDsFast(newMask);
@@ -1389,6 +1456,55 @@ static inline void handleResetEdgeISR() {
   writeOutputsFast(0); writeLEDsFast(0);
   resetEdgeFlag = 1;
 }
+// RST jack Fill / Gen / Mut (also serial X, G, U). Interrupts off.
+static void runRstAction(uint8_t a) {
+  if (a == RIN_FILL)      fillin_step();
+  else if (a == RIN_GEN)  genRandomPattern(ch1_step, ch2_step, ch3_step, ch4_step, ch5_step, ch6_step);
+  else if (a == RIN_MUT)  mutatePatternAll();
+}
+// AUTO repeat / switch / fill bookkeeping when a 16-step cycle starts. It used to run in the
+// loop after the step-1 outputs had been written, and OLED updates delayed it (sometimes past
+// step 2). It now runs in the interrupt right after the step-1 outputs: same order, no delay,
+// so step 1 still plays the previous pattern and step 2 the new one, as with a fast loop.
+static void autoWrapISR() {
+  if (!wrappedEdge) return;
+  wrappedEdge = 0;
+
+  // bounds from tokens
+  switch (repeat){ case 0: repeat_max=4; break; case 1: repeat_max=8; break; case 2: repeat_max=16; break; case 3: repeat_max=32; break; default: repeat_max=10000; break; }
+  switch (sw)    { case 0: sw_max=2;   break; case 1: sw_max=4;  break; case 2: sw_max=8;  break; case 3: sw_max=16; break; default: sw_max=255; break; }
+
+  // revert preset FILL -> BASE
+  if (fillActive && genre<=3){
+    uint8_t idx = (genre==0)?change_bnk1:(genre==1)?change_bnk2:(genre==2)?change_bnk3:change_bnk4;
+    loadPresetBase(genre, idx);
+    fillActive = false;
+  }
+
+  if (mode == 1) {
+    repeat_done++;
+
+    if (repeat_done >= repeat_max) {
+      sw_done++;
+      repeat_done = 0;
+      change_step();
+      if (sw_done >= sw_max) sw_done = 0;
+    } else {
+      if (fillin){
+        uint8_t per = fillPeriodFromIdx(fillPeriodIdx); // 1/2/4/8/16
+        if (per>0 && (repeat_done % per)==0){
+          if (genre <= 3){
+            uint8_t idx = (genre==0)?change_bnk1:(genre==1)?change_bnk2:(genre==2)?change_bnk3:change_bnk4;
+            loadPresetFill(genre, idx);
+            fillActive = true;
+          } else {
+            fillin_step();
+          }
+        }
+      }
+    }
+  }
+}
 ISR(PCINT0_vect) {
   static uint8_t lastB = PINB;
   uint8_t b       = PINB;
@@ -1402,13 +1518,40 @@ ISR(PCINT0_vect) {
       if (rstAction == RIN_RESET) {
         handleResetEdgeISR();
       } else {
-        rstActionFlag = rstAction;   // defer GEN/MUT/FILL to main loop
+        runRstAction(rstAction);  // GEN/MUT/FILL (was deferred to the loop)
+        rstActionFlag = 1;        // redraw
       }
       #if DEBUG
       dbg_rst_evt = rstAction;
       #endif
     }
+    autoWrapISR();  // after the RST action: the order the loop used
   }
   lastB = b;
 }
-ISR(TIMER1_COMPA_vect) { if (clkSource == CLK_INT) handleStepEdgeISR(); }
+ISR(TIMER1_COMPA_vect) {
+  if (clkSource == CLK_INT) {
+    handleStepEdgeISR();
+    autoWrapISR();
+  }
+}
+// TRG mode: end each channel's trigger after TRIG_TICKS ticks (10 ms), whatever the loop does.
+// As in the old loop code, triggers are only switched off while the mode is TRG (after a switch
+// to GAT/FF the next step takes over the outputs). The tick stops when no trigger is left.
+ISR(TIMER2_COMPA_vect) {
+  uint8_t active = trigActiveMask, ended = 0;
+  uint8_t bit = 1;
+  for (uint8_t ch=0; ch<6; ch++, bit <<= 1){
+    if (!(active & bit)) continue;
+    if (trigTicks[ch] && --trigTicks[ch]) continue;
+    ended |= bit;
+  }
+  if (ended && outMode == OUT_TRG) {
+    uint8_t newMask = outBits & ~ended;
+    outBits = newMask;
+    trigActiveMask = active & ~ended;
+    writeOutputsFast(newMask);
+    writeLEDsFast(newMask);
+  }
+  if (!trigActiveMask) TIMSK2 &= ~_BV(OCIE2A);
+}
