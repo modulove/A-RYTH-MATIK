@@ -14,6 +14,7 @@ using namespace arythmatik;
 
 const unsigned long OLED_UPDATE_INTERVAL_NORMAL = 150;  // Normal OLED update interval in milliseconds
 const unsigned long OLED_UPDATE_INTERVAL_IDLE = 300;    // OLED update interval when idle
+const unsigned long OLED_UPDATE_INTERVAL_BOUNCE = 30;   // while a Bounce ball is in the air
 const unsigned long TRIGGER_PULSE_DURATION = 12;  // Trigger pulse duration in milliseconds
 
 // Enum for menu items
@@ -65,8 +66,8 @@ uint16_t lastUpdateTime = 0;  // low 16 bits of millis() are enough for the inte
 #define T1_US_PER_TICK (T1_PRESCALE * 1000000UL / F_CPU)
 #define PULSE_TICKS ((uint16_t)(TRIGGER_PULSE_DURATION * 1000UL / T1_US_PER_TICK))
 #define MAX_DELAY_TICKS 30000UL  // keeps the signed 16-bit time compare valid
-#define PEND_END 1      // clock output trigger ends (main and inverted too, except Toggle/Bounce)
-#define PEND_FIRE 2     // swung step / next Bounce hit
+#define PEND_END 1      // clock output trigger ends (main and inverted too, not in Toggle/Bounce)
+#define PEND_FIRE 2     // swung step / next Bounce event (impact or top of the arc)
 #define PEND_HIT_END 4  // Bounce: main output trigger ends
 // Bounce flight times in 1/256 Timer1 ticks, exact for START and MIN: 2 ms = 125 ticks of 16 us
 #if T1_US_PER_TICK == 16
@@ -97,14 +98,20 @@ struct Side {
     uint8_t count;                    // factor counter
     uint8_t bDueFrac;                 // Bounce: fireAt's fraction, in 1/256 ticks
   };
-  uint8_t phase;                      // swing: 0 = next clock is on the beat, 1 = off-beat
-  uint8_t odd;                        // swing: the off-beat step is timed by Timer1
+  union {
+    uint8_t phase;                    // swing: 0 = next clock is on the beat, 1 = off-beat
+    uint8_t bHit;                     // Bounce: arc in the air (0 = the fall after the clock)
+  };
+  union {
+    uint8_t odd;                      // swing: the off-beat step is timed by Timer1
+    uint8_t bRise;                    // Bounce: the ball rises (next event: top of the arc)
+  };
   uint8_t pend;                       // PEND_END / PEND_FIRE / PEND_HIT_END
   bool latch;                         // toggle state / last coin flip
   uint8_t level;                      // last input level
-  uint16_t endAt, fireAt;             // Timer1 ticks; Bounce: fireAt = next hit
+  uint16_t endAt, fireAt;             // Timer1 ticks; Bounce: fireAt = next event
   uint16_t hitEndAt;                  // Bounce: end of the main output trigger
-  union {                             // Bounce: flight time to the next hit, in 1/256 ticks
+  union {                             // Bounce: the arc in the air (START for the fall), 1/256 ticks
     uint32_t bFlight;
     uint8_t bFlightB[4];
   };
@@ -118,6 +125,29 @@ static inline uint16_t mul8(uint8_t a, uint8_t b) {
   __asm__("" : "+r"(p));
   return p;
 }
+
+// Bounce: the next flight = flight f x REST / 100 = round(f x r / 2^24) (f in 1/256 ticks, r =
+// bRestQ), from nine 8 x 8 bit products (both fit 24 bits): no division, no 32-bit multiply.
+// The interrupt plays these flights and the display draws the same ones.
+static inline uint32_t bounceMul(const volatile uint8_t *f, const volatile uint8_t *r) {
+  uint32_t c = mul8(f[0], r[0]) >> 8;  // column sums of the product, lowest byte first
+  c += mul8(f[1], r[0]);
+  c += mul8(f[0], r[1]);
+  c >>= 8;
+  c += mul8(f[2], r[0]);
+  c += mul8(f[1], r[1]);
+  c += mul8(f[0], r[2]);
+  c += 0x80;  // rounding: half of the 2^24 dropped below
+  c >>= 8;
+  c += mul8(f[2], r[1]);
+  c += mul8(f[1], r[2]);
+  c += (uint32_t)mul8(f[2], r[2]) << 8;
+  return c;
+}
+union Bytes32 {  // a 32-bit value and its bytes, for bounceMul()
+  uint32_t w;
+  uint8_t b[4];
+};
 volatile Side sides[2];
 volatile bool redrawA;
 uint16_t rng16 = 1;
@@ -323,23 +353,105 @@ void drawKnob(int x, int y, float value) {
   hw.display.drawLine(x, y, x1, y1, WHITE);  // knob position
 }
 
-// Bounce mode UI: START (ms), MIN (ms), REST (%); the field that turning changes is underlined
-void drawBounceUI(uint8_t s, int x) {
+// ---------- Bounce display ----------
+#define BG_W 56  // graph width, px
+#define BG_H 32  // height of the first arc, px
+#define BG_Y 50  // ground line
+
+// One arc of the ball's path, h px high, drawn from xa to xb (1/16 px right of x0): the whole
+// parabola (p0 = 0), or its falling half (p0 = 32, from the top). (Not inlined: keeps the stack
+// of drawBounceGraph() small.)
+void __attribute__((noinline)) drawArc(int x0, uint16_t xa, uint16_t xb, uint8_t h, uint8_t p0) {
+  uint16_t w = xb - xa;
+  if (w < 16) {  // narrower than a pixel: a dotted line as high as the arc (keeps the tail calm)
+    int c = x0 + ((xa + xb) >> 5);
+    for (uint8_t i = 2; i <= h; i += 2) hw.display.drawPixel(c, BG_Y - i, WHITE);
+    return;
+  }
+  uint8_t span = 64 - p0;
+  int px = x0 + (xa >> 4), py = BG_Y - (p0 ? h : 0);
+  for (uint16_t c = (xa + 15) >> 4; c <= (xb >> 4); c++) {  // the arc's pixel columns
+    uint8_t p = p0 + (((c << 4) - xa) * span) / w;          // position on the arc, 0..64
+    int y = BG_Y - (((uint16_t)h * (uint16_t)(p * (64 - p))) >> 10);
+    hw.display.drawLine(px, py, x0 + c, y, WHITE);
+    px = x0 + c;
+    py = y;
+  }
+  hw.display.drawLine(px, py, x0 + (xb >> 4), BG_Y, WHITE);
+}
+
+// Bounce graph of side s (half centred on x): the ball's path for the current START/MIN/REST,
+// with the flights the interrupt plays (same bounceMul() and MIN rule): from the top on the left
+// the fall (the second half of the START arc), then one arc per flight, width ~ time, height ~
+// flight^2 (bounce height ~ speed^2, scaled from the drop height), the whole burst across the
+// graph. During a burst the ball moves along it in real time (bHit = the arc in the air, bRise =
+// which half, fireAt = the end of that half), otherwise it lies at the end of the path.
+void __attribute__((noinline)) drawBounceGraph(uint8_t s, int x) {
   volatile Side &d = sides[s];
-  hw.display.setCursor(x - 28, 16);
-  hw.display.print(F("Start"));
-  hw.display.setCursor(x + 8, 16);
-  hw.display.print(d.bStart * 2);
-  hw.display.setCursor(x - 28, 31);
-  hw.display.print(F("Min"));
-  hw.display.setCursor(x + 8, 31);
-  hw.display.print(d.bMin);
-  hw.display.setCursor(x - 28, 46);
-  hw.display.print(F("Rest"));
-  hw.display.setCursor(x + 8, 46);
+  volatile uint8_t *r = d.bRestB;  // (only the main loop writes it: no snapshot needed)
+  uint8_t mn = d.bMin, ballK = 255, p = 0;
+  bool rise = false;
+  uint16_t fl = 0, left = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {  // a short consistent snapshot of the burst
+    if (d.pend & PEND_FIRE) {
+      ballK = d.bHit;           // the arc in the air,
+      rise = d.bRise;           // its half,
+      fl = d.bFlight >> 8;      // its length
+      left = d.fireAt - TCNT1;  // and the ticks to the end of the half
+    }
+  }
+  if (fl) {
+    if ((int16_t)left < 0) left = 0;
+    uint16_t q = ((uint32_t)left << 6) / fl;
+    uint8_t end = rise ? 32 : 64;
+    p = q < end ? end - q : 0;  // position on the arc, 0..64: x linear in time
+  }
+  int x0 = x - 28;
+  for (uint8_t i = 0; i <= BG_W; i += 2) hw.display.drawPixel(x0 + i, BG_Y, WHITE);  // ground
+  Bytes32 f;
+  f.w = START_Q8(d.bStart);
+  uint16_t f0 = f.w >> 8;  // the START arc
+  uint32_t t = f0 >> 1;    // the whole burst, in ticks: the fall,
+  for (f.w = bounceMul(f.b, r); !BELOW_MIN(f.w, mn); f.w = bounceMul(f.b, r)) t += f.w >> 8;  // + flights
+  uint32_t sx = ((uint32_t)BG_W << 24) / t;  // 1/2^24 px per tick (t x sx <= BG_W x 2^24)
+  int bx = x0 + BG_W, by = BG_Y;             // the ball at rest: at the end of the path
+  t = 0;
+  f.w = START_Q8(d.bStart);
+  for (uint8_t k = 0;; k++) {  // k = 0: the fall; then the flights
+    uint16_t ft = f.w >> 8;
+    uint16_t xa = (t * sx) >> 20;  // this arc, in 1/16 px right of x0
+    t += k ? ft : ft >> 1;
+    uint16_t xb = (t * sx) >> 20;
+    uint16_t q = ((uint32_t)ft << 8) / f0;  // flight / START, in 1/256
+    uint8_t h = ((uint32_t)BG_H * q * q) >> 16;
+    uint8_t p0 = k ? 0 : 32;
+    drawArc(x0, xa, xb, h, p0);
+    if (k == ballK && p >= p0) {  // the ball is on this arc
+      bx = x0 + ((xa + (((xb - xa) * (p - p0)) >> (k ? 6 : 5))) >> 4);
+      by = BG_Y - (((uint16_t)h * (uint16_t)(p * (64 - p))) >> 10);
+    }
+    f.w = bounceMul(f.b, r);
+    if (BELOW_MIN(f.w, mn)) break;
+  }
+  hw.display.fillCircle(bx, by - 2, 3, BLACK);  // the ball, sitting on the path
+  hw.display.fillCircle(bx, by - 2, 2, WHITE);
+}
+
+// Bounce values in one row, START (ms) MIN (ms) REST, right-aligned; the one turning changes is
+// inverted.
+void drawBounceValues(uint8_t s, int x) {
+  volatile Side &d = sides[s];
+  int x0 = x - 29;
+  uint16_t st = d.bStart * 2;
+  uint8_t mn = d.bMin, f = bounceField[s];
+  hw.display.setCursor(x0 + (st < 100 ? 6 : 0), 55);
+  hw.display.print(st);
+  hw.display.setCursor(x0 + (mn < 10 ? 30 : 24), 55);
+  hw.display.print(mn);
+  hw.display.setCursor(x0 + 42, 55);
   hw.display.print(d.bRest);
   hw.display.print(F("%"));
-  hw.display.drawFastHLine(x - 28, 25 + bounceField[s] * 15, 54, WHITE);
+  hw.display.fillRect(x0 - 1 + (f == 0 ? 0 : (f == 1 ? 24 : 42)), 54, f == 1 ? 13 : 19, 9, INVERSE);
 }
 
 void updateOLED() {
@@ -358,7 +470,8 @@ void updateOLED() {
     } else if (mode == SWING) {
       drawSwingUI(s, x);
     } else if (mode == BOUNCE) {
-      drawBounceUI(s, x);
+      drawBounceGraph(s, x);
+      drawBounceValues(s, x);
     }
   }
 
@@ -477,7 +590,7 @@ void onEncoderPressedRotation(EncoderButton &eb) {
     uint8_t mode = d.mode + 1;
     if (mode >= MENU_COUNT) mode = 0;
     if (d.mode == BOUNCE || mode == BOUNCE) {
-      // Bounce times the main output by itself and keeps the inverted output low: end both here
+      // Bounce times its main trigger and rise gate by itself: end both here
       d.pend &= ~PEND_HIT_END;
       setOut(OUT_MAIN(s), false);
       setOut(OUT_INV(s), false);
@@ -591,48 +704,69 @@ static inline __attribute__((always_inline)) void bounceHit(uint8_t s, uint16_t 
   d.pend |= PEND_HIT_END;
 }
 
-// Bounce: the ball hits the ground now and flies for `flight` (1/256 ticks) to the next hit,
-// which is due one flight after this hit was due (so interrupt delays do not add up; the due
-// time keeps its fraction, so long tails do not drift). If the flight would be shorter than
-// MIN, the ball has come to rest: this is the last hit. (Not inlined: keeps the callers lean.)
-static void __attribute__((noinline)) bounceLand(uint8_t s, uint32_t flight) {
+// Bounce: the next event (impact or top of the arc) is due q (1/256 ticks) after the last one
+// was due: interrupt delays do not add up, and the due time keeps its fraction, so long tails do
+// not drift.
+static inline __attribute__((always_inline)) void bounceAfter(uint8_t s, uint32_t q) {
   volatile Side &d = sides[s];
-  uint16_t gapToNext = 0xFFFF;  // last hit: full 12 ms trigger
-  if (BELOW_MIN(flight, d.bMin)) {
-    d.pend &= ~PEND_FIRE;
-  } else {
-    d.bFlight = flight;
-    gapToNext = flight >> 8;
-    uint16_t frac = d.bDueFrac + (uint8_t)flight;
-    d.fireAt += gapToNext + (frac >> 8);
-    d.bDueFrac = frac;
-    d.pend |= PEND_FIRE;
-  }
-  bounceHit(s, gapToNext);
+  uint16_t frac = d.bDueFrac + (uint8_t)q;
+  d.fireAt += (uint16_t)(q >> 8) + (frac >> 8);
+  d.bDueFrac = frac;
+  d.pend |= PEND_FIRE;
 }
 
-// Bounce: the next flight = this flight x REST / 100 = round(bFlight x bRestQ / 2^24), from
-// nine 8 x 8 bit products (both fit 24 bits): no division, no 32-bit multiply.
+// Bounce: the next flight = this flight x REST / 100
 static inline uint32_t bounceRest(uint8_t s) {
-  volatile uint8_t *f = sides[s].bFlightB, *r = sides[s].bRestB;
-  uint32_t c = mul8(f[0], r[0]) >> 8;  // column sums of the product, lowest byte first
-  c += mul8(f[1], r[0]);
-  c += mul8(f[0], r[1]);
-  c >>= 8;
-  c += mul8(f[2], r[0]);
-  c += mul8(f[1], r[1]);
-  c += mul8(f[0], r[2]);
-  c += 0x80;  // rounding: half of the 2^24 dropped below
-  c >>= 8;
-  c += mul8(f[2], r[1]);
-  c += mul8(f[1], r[2]);
-  c += (uint32_t)mul8(f[2], r[2]) << 8;
-  return c;
+  return bounceMul(sides[s].bFlightB, sides[s].bRestB);
 }
 
-// Bounce: the hit Timer1 timed. (Not inlined: keeps service() lean.)
+// Bounce: the clock drops the ball (picking it up first if it still bounces: what was still to
+// come is cancelled). It is released at rest from the top of a START arc and falls the second
+// half of it: the first impact is START/2 later. (Not inlined: the end of fire() jumps here.)
+static void __attribute__((noinline)) bounceDrop(uint8_t s) {
+  volatile Side &d = sides[s];
+  setOut(OUT_INV(s), false);  // no rise gate while it falls
+  d.bRise = 0;
+  d.bHit = 0;                 // (for the display: the falling half of the START arc)
+  d.fireAt = TCNT1;
+  d.bDueFrac = 128;  // + half a tick: every event lands on the nearest tick
+  d.bFlight = START_Q8(d.bStart);
+  bounceAfter(s, d.bFlight >> 1);
+}
+
+// Bounce: the ball is at the top of its arc: the rise gate ends, it falls the other half.
+static void __attribute__((noinline)) bounceTop(uint8_t s) {
+  volatile Side &d = sides[s];
+  d.bRise = 0;
+  setOut(OUT_INV(s), false);
+  bounceAfter(s, d.bFlight - (d.bFlight >> 1));
+}
+
+// Bounce: impact; bFlight already holds the next flight (the last one x REST). The ball flies it
+// up and down again, unless it is shorter than MIN: then the ball stays down (no more events) and
+// this was the last impact.
+static void __attribute__((noinline)) bounceImpact(uint8_t s) {
+  volatile Side &d = sides[s];
+  d.bHit++;
+  if (BELOW_MIN(d.bFlight, d.bMin)) {
+    bounceHit(s, 0xFFFF);  // full 12 ms trigger
+    return;
+  }
+  d.bRise = 1;
+  setOut(OUT_INV(s), true);  // rise gate: until the top of the arc, half the flight
+  bounceAfter(s, d.bFlight >> 1);
+  bounceHit(s, d.bFlight >> 8);
+}
+
+// Bounce: the event Timer1 timed: the top of the arc or an impact. (Not inlined, and it only
+// branches and multiplies before its tail jumps: keeps the interrupt stack small.)
 static void __attribute__((noinline)) bounceNext(uint8_t s) {
-  bounceLand(s, bounceRest(s));
+  if (sides[s].bRise) {
+    bounceTop(s);
+  } else {
+    sides[s].bFlight = bounceRest(s);
+    bounceImpact(s);
+  }
 }
 
 // One step: set the outputs and start the 12 ms pulse.
@@ -667,11 +801,7 @@ static void fire(uint8_t s) {
   d.endAt = TCNT1 + PULSE_TICKS;
   d.pend |= PEND_END;
   if (s == 0) redrawA = true;
-  if (d.mode == BOUNCE) {  // the clock throws the ball (again, if it still bounces): a hit now
-    d.fireAt = TCNT1;
-    d.bDueFrac = 128;  // + half a tick: every hit lands on the nearest tick
-    bounceLand(s, START_Q8(d.bStart));  // the first flight is START (last call: a tail jump)
-  }
+  if (d.mode == BOUNCE) bounceDrop(s);  // (last call: a tail jump)
 }
 
 static void pulseEnd(uint8_t s) {
@@ -782,6 +912,9 @@ void loop() {
   // depends on the display, the outputs run in the interrupts)
   uint16_t currentTime = millis();
   unsigned long updateInterval = isEncoderIdle ? OLED_UPDATE_INTERVAL_IDLE : OLED_UPDATE_INTERVAL_NORMAL;
+  for (uint8_t s = 0; s < 2; s++) {  // a Bounce ball in the air: move it smoothly
+    if (sides[s].mode == BOUNCE && (sides[s].pend & PEND_FIRE)) updateInterval = OLED_UPDATE_INTERVAL_BOUNCE;
+  }
   if ((uint16_t)(currentTime - lastUpdateTime) >= updateInterval || redrawA) {
     redrawA = false;
     lastUpdateTime = currentTime;
