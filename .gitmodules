@@ -7,3 +7,15 @@
 [submodule "Firmware/ARYTHMATIK_Labor/src/libmodulove"]
 	path = Firmware/ARYTHMATIK_Labor/src/libmodulove
 	url = https://github.com/awonak/libModulove.git
+[submodule "Firmware/ARYTHMATIK_Cat/src/libmodulove"]
+	path = Firmware/ARYTHMATIK_Cat/src/libmodulove
+	url = https://github.com/awonak/libModulove.git
+[submodule "Firmware/ARYTHMATIK_Funghi/src/libmodulove"]
+	path = Firmware/ARYTHMATIK_Funghi/src/libmodulove
+	url = https://github.com/awonak/libModulove.git
+[submodule "Firmware/ARYTHMATIK_Kiss/src/libmodulove"]
+	path = Firmware/ARYTHMATIK_Kiss/src/libmodulove
+	url = https://github.com/awonak/libModulove.git
+[submodule "Firmware/ARYTHMATIK_Walz/src/libmodulove"]
+	path = Firmware/ARYTHMATIK_Walz/src/libmodulove
+	url = https://github.com/awonak/libModulove.git
