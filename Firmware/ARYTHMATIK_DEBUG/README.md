@@ -1,5 +1,7 @@
 # A-RYTH-MATIK hardware test (DEBUG firmware v2)
 
+![DEBUG on the A-RYTH-MATIK display](img/DEBUG_OLED.gif)
+
 Checks a module step by step: board, power, display, inputs, outputs and the complete
 output-to-input signal path. The same `.hex` runs on an Arduino Nano and on an LGT8F328P board.
 Works with and without a working display: everything is also reported over USB.

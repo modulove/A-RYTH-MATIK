@@ -259,15 +259,23 @@ static void setLeds(uint8_t mask) {
   }
 }
 
+static uint8_t loopRiseOk;  // bit per input: its last rise was caused by our pulse
 static void loopEdge(uint8_t input, bool rise, uint32_t t) {
   volatile LoopStat &s = loopStat;
+  uint8_t bit = 1 << input;
   if (rise) {
     uint32_t d = t - loopT0;
-    if (d > 2000) return;  // not caused by our pulse (input delay is a few us)
+    if (d > 2000) {  // not caused by our pulse (input delay is a few us)
+      loopRiseOk &= ~bit;
+      return;
+    }
+    loopRiseOk |= bit;
     s.hits[input][loopOut]++;
     if (d < s.latMin) s.latMin = d;
     if (d > s.latMax) s.latMax = d;
   } else {
+    if (!(loopRiseOk & bit)) return;  // width only of our own pulses, not of a clock on the jack
+    loopRiseOk &= ~bit;
     volatile InputStat &in = input ? inRst : inClk;
     uint32_t w = (t - in.tRise) / 10;
     if (w > 6000) return;
@@ -762,7 +770,7 @@ static void drawPage() {
       line(4);
       display.print(F("EEPROM "));
       display.print(EEPROM.length());
-      display.print(eepromResult == 1 ? F(" ok") : eepromResult == 2 ? F(" FAIL") : F(" click=test"));
+      display.print(eepromResult == 1 ? F(" ok") : eepromResult == 2 ? F(" FAIL") : F(" (click)"));  // 21 chars max
       break;
     case PAGE_I2C:
       line(0);
@@ -779,12 +787,12 @@ static void drawPage() {
         display.print(' ');
       }
       line(3);
-      display.print(F("frame "));
-      printFixed(display, ((uint32_t)drawUs + sendUs) / 100, 1);
+      display.print(F("frame "));  // whole ms: the line holds 21 characters
+      display.print(((uint32_t)drawUs + sendUs + 500) / 1000);
       display.print(F("ms d"));
-      printFixed(display, drawUs / 100, 1);
+      display.print((drawUs + 500) / 1000);
       display.print(F(" s"));
-      printFixed(display, sendUs / 100, 1);
+      display.print((sendUs + 500) / 1000);
       line(4);
       display.print(F("tmo "));
       display.print(i2cTimeouts);
@@ -803,12 +811,13 @@ static void drawPage() {
       display.print(F("CLK "));
       display.print(PINB & CLK_BIT ? F("HI ") : F("lo "));
       display.print(c.count);
-      display.print(F(" bpm "));
-      printBpm(display, fresh ? c.period : 0);
-      line(1);
-      display.print(F("    width "));
+      display.print(F(" w "));
       printFixed(display, c.width / 100, 1);
       display.print(F("ms"));
+      line(1);
+      display.print(F("    "));
+      printBpm(display, fresh ? c.period : 0);
+      display.print(F(" bpm (1/16)"));
       line(2);
       display.print(F("RST "));
       display.print(PINB & RST_BIT ? F("HI ") : F("lo "));
@@ -834,7 +843,7 @@ static void drawPage() {
       line(2);
       display.print(F("follow: outs = CLK in"));
       line(3);
-      display.print(F("LED4+5: serial off 10s"));
+      display.print(F("LED4+5 pauses serial"));
       break;
     case PAGE_LOOP: {
       volatile LoopStat &s = loopStat;

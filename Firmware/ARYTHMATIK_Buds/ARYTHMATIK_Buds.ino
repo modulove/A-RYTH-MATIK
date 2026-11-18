@@ -3,6 +3,7 @@
 #include <avr/pgmspace.h>
 #include <FastGPIO.h>
 #include "EncoderButton.h"
+#include <util/atomic.h>
 
 //#define ENCODER_REVERSED
 //#define ROTATE_PANEL
@@ -27,25 +28,17 @@ enum Menu {
 // Declare A-RYTH-MATIK hardware variable.
 Arythmatik hw;
 
-// reverse encoder
-#ifdef ENCODER_REVERSED
-EncoderButton encoder(ENCODER_PIN1, ENCODER_PIN2, ENCODER_SW_PIN);
-#else
-EncoderButton encoder(ENCODER_PIN2, ENCODER_PIN1, ENCODER_SW_PIN);
-#endif
+// The encoder is libmodulove's hw.eb (pins in the ENCODER_REVERSED order of this sketch):
+// a second EncoderButton on the same pins cost ~80 bytes of RAM and handled every pulse twice.
+#define encoder hw.eb
 
-// channel configuration Struct
+// channel configuration Struct (what the UI edits; the interrupts work on a copy in sides[])
 struct ChannelConfig {
   float probability = 0.5;
-  bool state = false;
+  bool state = false;       // toggle state / last coin flip, copied from the interrupts for the display
   float swingAmount = 0.5;  // 0.5 means no swing, range 0.0 to 0.7
-  unsigned long lastSwingTime = 0;
-  bool swingState = false;
   Menu currentMenu = PROB;  // current menu mode
-  unsigned long lastTriggerTime = 0;
-  bool triggerActive = false;
   int factor = 1;  // clock divider factor
-  int triggerCount = 0;  // trigger counter for factor mode
 };
 
 // create configuration for both channels
@@ -57,10 +50,52 @@ bool isEncoderIdle = false;
 
 unsigned long lastUpdateTime = 0;
 
+// ---------- trigger engine ----------
+// Side A = RST input, side B = CLK input. Both inputs are read by the pin-change interrupt and
+// each side owns one Timer1 compare channel (side A: OCR1A, side B: OCR1B) for its 12 ms pulse
+// end and its swung step. So the two sides run at any tempo, independent of each other and of
+// the display (before, a display refresh blocked both sides for 25-47 ms).
+#if F_CPU > 20000000UL
+#define T1_CS ((1 << CS12) | (1 << CS10))  // /1024: 32 us per tick at 32 MHz
+#define T1_PRESCALE 1024UL
+#else
+#define T1_CS (1 << CS12)  // /256: 16 us per tick at 16 MHz
+#define T1_PRESCALE 256UL
+#endif
+#define T1_US_PER_TICK (T1_PRESCALE * 1000000UL / F_CPU)
+#define PULSE_TICKS ((uint16_t)(TRIGGER_PULSE_DURATION * 1000UL / T1_US_PER_TICK))
+#define MAX_DELAY_TICKS 30000UL  // keeps the signed 16-bit time compare valid
+#define PEND_END 1
+#define PEND_FIRE 2
+
+struct Side {
+  uint8_t mode, prob, swing, factor;  // copied from the UI: prob 0..100, swing 0..70 (%)
+  uint8_t count;                      // factor counter
+  uint8_t phase;                      // swing: 0 = next clock is on the beat, 1 = off-beat
+  uint8_t odd;                        // swing: the off-beat step is timed by Timer1
+  uint8_t pend;                       // PEND_END / PEND_FIRE
+  bool latch;                         // toggle state / last coin flip
+  uint8_t level;                      // last input level
+  uint16_t endAt, fireAt;             // Timer1 ticks
+  uint32_t lastEdgeUs, periodUs;
+  uint8_t outMain, outInv, outClk;
+};
+volatile Side sides[2];
+volatile bool redrawA;
+uint16_t rng16 = 1;
+
+// settings in EEPROM (saved 3 s after the last change)
+struct SavedSettings {
+  char magic[4];
+  uint8_t menu[2], prob[2], swing[2], factor[2];
+};
+bool settingsDirty = false;
+unsigned long settingsChangedAt = 0;
+
 void setup() {
 
 #ifdef ROTATE_PANEL
-  hw.config.RotatePanel = false;
+  hw.config.RotatePanel = true;
 #endif
 
 #ifdef REVERSE_ENCODER
@@ -68,8 +103,29 @@ void setup() {
 #endif
 
   // Initialize the A-RYTH-MATIK peripherals.
+  i2cGuardBegin();  // a stuck display bus can no longer freeze the module
   hw.Init();
-  randomSeed(chipRandomSeed());  // random() was never seeded: same sequence after every power-up
+  rng16 = (uint16_t)chipRandomSeed() | 1;  // coin flips differ after every power-up
+
+  loadSettings();
+  sides[0].outMain = 1;
+  sides[0].outInv = 0;
+  sides[0].outClk = 2;
+  sides[1].outMain = 4;
+  sides[1].outInv = 3;
+  sides[1].outClk = 5;
+  applySettings();
+  for (uint8_t o = 0; o < 6; o++) setOut(o, false);
+  DDRD |= (1 << 0) | (1 << 1) | (1 << 5) | (1 << 6) | (1 << 7);  // D0 D1 D5 D6 D7
+  DDRB |= (1 << 0) | (1 << 1) | (1 << 2);                       // D8 D9 D10
+  DDRC |= (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);            // A0..A3
+  TCCR1A = 0;  // Timer1 free-running (Arduino set it up for PWM, Buds doesn't use that)
+  TCCR1B = T1_CS;
+  TIMSK1 = 0;
+  TIFR1 = (1 << OCF1A) | (1 << OCF1B) | (1 << TOV1);
+  sides[0].level = hw.rst.Read();
+  sides[1].level = hw.clk.Read();
+  hw.AttachClockHandler(onInputChange);  // libmodulove calls it on every CLK/RST pin change
 
   // Set up encoder parameters
   encoder.setDebounceInterval(5);
@@ -249,56 +305,112 @@ void updateOLED() {
   } 
 
   drawBottomBar();
-  hw.display.display();
+  i2cGuardShow(hw.display);
 }
 
-// save state to EEPROM
-void saveState() {
-  EEPROM.put(0, channelA);
-  EEPROM.put(sizeof(ChannelConfig), channelB);
+// ---------- settings ----------
+void settingsChanged() {
+  applySettings();
+  settingsDirty = true;
+  settingsChangedAt = millis();
 }
 
-// load state
-void loadState() {
-  EEPROM.get(0, channelA);
-  EEPROM.get(sizeof(ChannelConfig), channelB);
+void saveSettings() {
+  SavedSettings st = { { 'B', 'U', 'D', '1' } };
+  ChannelConfig *c[2] = { &channelA, &channelB };
+  for (uint8_t i = 0; i < 2; i++) {
+    st.menu[i] = c[i]->currentMenu;
+    st.prob[i] = (uint8_t)(c[i]->probability * 100 + 0.5);
+    st.swing[i] = (uint8_t)(c[i]->swingAmount * 100 + 0.5);
+    st.factor[i] = c[i]->factor;
+  }
+  EEPROM.put(0, st);  // one block (an LGT8F stalls ~46 ms per EEPROM write)
+  settingsDirty = false;
 }
 
-void onEncoderIdle() {
+void loadSettings() {
+  SavedSettings st;
+  EEPROM.get(0, st);
+  if (st.magic[0] != 'B' || st.magic[1] != 'U' || st.magic[2] != 'D' || st.magic[3] != '1') return;
+  ChannelConfig *c[2] = { &channelA, &channelB };
+  for (uint8_t i = 0; i < 2; i++) {
+    c[i]->currentMenu = static_cast<Menu>(st.menu[i] % MENU_COUNT);
+    c[i]->probability = constrain(st.prob[i], 0, 100) / 100.0;
+    c[i]->swingAmount = constrain(st.swing[i], 0, 70) / 100.0;
+    c[i]->factor = constrain(st.factor[i], 1, 8);
+  }
+}
+
+// Copy the UI settings to the interrupt side.
+void applySettings() {
+  ChannelConfig *c[2] = { &channelA, &channelB };
+  for (uint8_t i = 0; i < 2; i++) {
+    uint8_t mode = c[i]->currentMenu;
+    uint8_t prob = (uint8_t)(c[i]->probability * 100 + 0.5);
+    uint8_t swing = (uint8_t)(c[i]->swingAmount * 100 + 0.5);
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      volatile Side &d = sides[i];
+      if (d.mode != mode) {  // new mode: start its pattern fresh
+        d.phase = 0;
+        d.count = 0;
+        d.odd = 0;
+        d.pend &= ~PEND_FIRE;
+      }
+      d.mode = mode;
+      d.prob = prob;
+      d.swing = swing;
+      d.factor = c[i]->factor;
+    }
+  }
+}
+
+// Toggle state flipped by hand (long click, or turning in Toggle mode).
+void flipLatch(uint8_t s) {
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    volatile Side &d = sides[s];
+    d.latch = !d.latch;
+    if (d.mode == TOGGLE) {
+      setOut(d.outMain, d.latch);
+      setOut(d.outInv, !d.latch);
+    }
+  }
+}
+
+void onEncoderIdle(EncoderButton &eb) {
   isEncoderIdle = true;
 }
 
-void onEncoderClicked() {
+void onEncoderClicked(EncoderButton &eb) {
   isEncoderIdle = false;
   isChannelASelected = !isChannelASelected;
 }
 
-void onEncoderDoubleClicked() {
+void onEncoderDoubleClicked(EncoderButton &eb) {
   isEncoderIdle = false;
   isChannelASelected = !isChannelASelected;  // Switch sides
 }
 
-void onEncoderLongClicked() {
+void onEncoderLongClicked(EncoderButton &eb) {
   isEncoderIdle = false;
-  if (isChannelASelected) {
-    channelA.state = !channelA.state;  // Mute/unmute channel A
-  } else {
-    channelB.state = !channelB.state;  // Mute/unmute channel B
-  }
+  flipLatch(isChannelASelected ? 0 : 1);  // flip the toggle state of the selected side
 }
 
-void onEncoderPressedRotation() {
+void onEncoderPressedRotation(EncoderButton &eb) {
   isEncoderIdle = false;
   if (isChannelASelected) {
     channelA.currentMenu = static_cast<Menu>((channelA.currentMenu + 1) % MENU_COUNT);
   } else {
     channelB.currentMenu = static_cast<Menu>((channelB.currentMenu + 1) % MENU_COUNT);
   }
+  settingsChanged();
 }
 
 void onEncoderRotation(EncoderButton& eb) {
   isEncoderIdle = false;
   int increment = encoder.increment();  // Get the incremental change (could be negative, positive, or zero)
+#ifndef ENCODER_REVERSED
+  increment = -increment;  // hw.eb counts the other way round than this sketch's normal build
+#endif
   if (increment == 0) return;
 
   int acceleratedIncrement = increment * increment;  // Squaring the increment
@@ -312,7 +424,7 @@ void onEncoderRotation(EncoderButton& eb) {
         channelA.probability = constrain(channelA.probability + acceleratedIncrement * 0.02, 0.0, 1.0);
         break;
       case TOGGLE:
-        channelA.state = !channelA.state;
+        flipLatch(0);
         break;
       case SWING:
         channelA.swingAmount = constrain(channelA.swingAmount + acceleratedIncrement * 0.01, 0.0, 0.7);
@@ -329,7 +441,7 @@ void onEncoderRotation(EncoderButton& eb) {
         channelB.probability = constrain(channelB.probability + acceleratedIncrement * 0.02, 0.0, 1.0);
         break;
       case TOGGLE:
-        channelB.state = !channelB.state;
+        flipLatch(1);
         break;
       case SWING:
         channelB.swingAmount = constrain(channelB.swingAmount + acceleratedIncrement * 0.01, 0.0, 0.7);
@@ -341,87 +453,193 @@ void onEncoderRotation(EncoderButton& eb) {
         break;
     }
   }
+  settingsChanged();
 }
 
-void triggerOutput(int output, bool state) {
-  if (state) {
-    hw.outputs[output].High();
+// ---------- interrupt side ----------
+static inline uint8_t rand100() {  // xorshift16, 0..99
+  rng16 ^= rng16 << 7;
+  rng16 ^= rng16 >> 9;
+  rng16 ^= rng16 << 8;
+  return ((uint16_t)(rng16 >> 8) * 100) >> 8;
+}
+
+// Output o (0..5) and its LED with single-instruction port writes: short and safe in interrupts
+// (digitalWrite through libmodulove took a deep call chain in every clock interrupt).
+#define PAIR(out, led) \
+  do { \
+    if (on) { \
+      FastGPIO::Pin<out>::setOutputValueHigh(); \
+      FastGPIO::Pin<led>::setOutputValueHigh(); \
+    } else { \
+      FastGPIO::Pin<out>::setOutputValueLow(); \
+      FastGPIO::Pin<led>::setOutputValueLow(); \
+    } \
+  } while (0)
+static void setOut(uint8_t o, bool on) {
+  switch (o) {
+#ifdef ROTATE_PANEL
+    case 0: PAIR(8, 0); break;
+    case 1: PAIR(9, 1); break;
+    case 2: PAIR(10, 17); break;
+    case 3: PAIR(5, 14); break;
+    case 4: PAIR(6, 15); break;
+    case 5: PAIR(7, 16); break;
+#else
+    case 0: PAIR(5, 14); break;
+    case 1: PAIR(6, 15); break;
+    case 2: PAIR(7, 16); break;
+    case 3: PAIR(8, 0); break;
+    case 4: PAIR(9, 1); break;
+    case 5: PAIR(10, 17); break;
+#endif
+  }
+}
+
+// One step: set the outputs and start the 12 ms pulse.
+static void fire(uint8_t s) {
+  volatile Side &d = sides[s];
+  switch (d.mode) {
+    case PROB:
+      d.latch = rand100() < d.prob;
+      setOut(d.outMain, d.latch);
+      setOut(d.outInv, !d.latch);
+      break;
+    case TOGGLE:
+      d.latch = !d.latch;
+      setOut(d.outMain, d.latch);
+      setOut(d.outInv, !d.latch);
+      break;
+    case SWING:
+      setOut(d.outMain, true);
+      setOut(d.outInv, false);
+      break;
+    case FACTOR:
+      if (++d.count >= d.factor) {
+        d.count = 0;
+        setOut(d.outMain, true);
+        setOut(d.outInv, false);
+      }
+      break;
+    default:
+      break;
+  }
+  setOut(d.outClk, true);
+  d.endAt = TCNT1 + PULSE_TICKS;
+  d.pend |= PEND_END;
+  if (s == 0) redrawA = true;
+}
+
+static void pulseEnd(uint8_t s) {
+  volatile Side &d = sides[s];
+  setOut(d.outClk, false);
+  if (d.mode != TOGGLE) {  // toggle outputs stay latched
+    setOut(d.outMain, false);
+    setOut(d.outInv, false);
+  }
+}
+
+// Run what is due and arm the side's compare channel for the next event.
+static void service(uint8_t s) {
+  volatile Side &d = sides[s];
+  for (;;) {
+    uint16_t now = TCNT1;
+    if ((d.pend & PEND_END) && (int16_t)(now - d.endAt) >= 0) {
+      d.pend &= ~PEND_END;
+      pulseEnd(s);
+      continue;
+    }
+    if ((d.pend & PEND_FIRE) && (int16_t)(now - d.fireAt) >= 0) {
+      d.pend &= ~PEND_FIRE;
+      fire(s);
+      continue;
+    }
+    if (!d.pend) {
+      TIMSK1 &= ~(s ? (1 << OCIE1B) : (1 << OCIE1A));
+      return;
+    }
+    uint16_t at;
+    if ((d.pend & (PEND_END | PEND_FIRE)) == (PEND_END | PEND_FIRE))
+      at = (uint16_t)(d.fireAt - now) < (uint16_t)(d.endAt - now) ? d.fireAt : d.endAt;
+    else
+      at = (d.pend & PEND_FIRE) ? d.fireAt : d.endAt;
+    if (s) {
+      OCR1B = at;
+      TIFR1 = 1 << OCF1B;
+      TIMSK1 |= 1 << OCIE1B;
+    } else {
+      OCR1A = at;
+      TIFR1 = 1 << OCF1A;
+      TIMSK1 |= 1 << OCIE1A;
+    }
+    if ((int16_t)(TCNT1 - at) < 0) return;  // still ahead: the compare match will come
+  }
+}
+
+ISR(TIMER1_COMPA_vect) { service(0); }
+ISR(TIMER1_COMPB_vect) { service(1); }
+
+static void playNow(uint8_t s) {
+  sides[s].pend &= ~PEND_FIRE;
+  fire(s);
+}
+
+// Rising edge on a side's input (interrupt context).
+static void edge(uint8_t s) {
+  volatile Side &d = sides[s];
+  uint32_t now = micros();
+  uint32_t period = now - d.lastEdgeUs;
+  d.lastEdgeUs = now;
+  if (period < 2000000UL) d.periodUs = period;  // a pause of 2 s or more starts over
+  else d.periodUs = 0;
+  if (d.mode != SWING) {
+    playNow(s);
+  } else if (d.phase == 0) {
+    // Swing: the step on the beat plays on the clock; the off-beat step is placed at
+    // 2 x swing x period after it (50 % = straight, more = later, less = earlier).
+    if (d.pend & PEND_FIRE) playNow(s);  // the last off-beat step is still due: play it first
+    playNow(s);
+    d.phase = 1;
+    d.odd = 0;
+    uint32_t ticks = d.periodUs / T1_US_PER_TICK * d.swing / 50;
+    if (d.periodUs && d.swing != 50 && ticks > 2 && ticks < MAX_DELAY_TICKS) {
+      d.fireAt = TCNT1 + (uint16_t)ticks;
+      d.pend |= PEND_FIRE;
+      d.odd = 1;
+    }
   } else {
-    hw.outputs[output].Low();
+    d.phase = 0;
+    // straight, unknown tempo, or an early off-beat step that is now late: play it now;
+    // otherwise Timer1 plays it later (late swing) or already played it (early swing)
+    if (!d.odd || ((d.pend & PEND_FIRE) && d.swing < 50)) playNow(s);
   }
+  service(s);
 }
 
-void handleTrigger(ChannelConfig& channel, bool trigger, int mainOutput, int invOutput, int clockOutput) {
-  if (trigger) {
-    if (channel.currentMenu == TOGGLE) {
-      channel.state = !channel.state;
-      triggerOutput(mainOutput, channel.state);
-      triggerOutput(invOutput, !channel.state);
-    } else if (channel.currentMenu == SWING) {
-      if (channel.swingState) {
-        unsigned long delayTime = map(channel.swingAmount * 100, 0, 70, -150, 150);  // Convert swing amount to milliseconds
-        if (millis() - channel.lastSwingTime >= abs(delayTime)) {
-          triggerOutput(mainOutput, true);
-          triggerOutput(invOutput, false);
-          channel.lastSwingTime = millis();
-          channel.swingState = false;
-        }
-      } else {
-        unsigned long delayTime = map(channel.swingAmount * 100, 0, 70, -50, 50);  // Convert swing amount to milliseconds
-        if (delayTime < 0) {
-          delayMicroseconds(abs(delayTime) * 1000);  // Delay for negative swing
-        }
-        triggerOutput(mainOutput, true);
-        triggerOutput(invOutput, false);
-        channel.lastSwingTime = millis();
-        channel.swingState = true;
-      }
-    } else if (channel.currentMenu == PROB) {
-      channel.state = (random(100) < (int)(channel.probability * 100));
-      triggerOutput(mainOutput, channel.state);
-      triggerOutput(invOutput, !channel.state);
-    } else if (channel.currentMenu == FACTOR) {
-      channel.triggerCount++;
-      if (channel.triggerCount >= channel.factor) {
-        channel.triggerCount = 0;
-        triggerOutput(mainOutput, true);
-        triggerOutput(invOutput, false);
-      }
-    }
-    channel.lastTriggerTime = millis();
-    channel.triggerActive = true;
-    triggerOutput(clockOutput, true);
-  }
-  // Turn off the outputs after the pulse duration
-  if (channel.triggerActive && millis() - channel.lastTriggerTime >= TRIGGER_PULSE_DURATION) {
-    triggerOutput(clockOutput, false);
-    if (channel.currentMenu != TOGGLE) { // Only turn off outputs in non-toggle modes
-      triggerOutput(mainOutput, false);
-      triggerOutput(invOutput, false);
-    }
-    channel.triggerActive = false;
-  }
+// Called by libmodulove's pin-change interrupt on every CLK/RST change.
+static void onInputChange() {
+  uint8_t a = hw.rst.Read(), b = hw.clk.Read();
+  if (a && !sides[0].level) edge(0);
+  if (b && !sides[1].level) edge(1);
+  sides[0].level = a;
+  sides[1].level = b;
 }
 
 void loop() {
-  hw.ProcessInputs();
-
-  bool triggerA = hw.rst.State() == DigitalInput::STATE_RISING;
-  bool triggerB = hw.clk.State() == DigitalInput::STATE_RISING;
-
-  handleTrigger(channelA, triggerA, 1, 0, 2);
-  handleTrigger(channelB, triggerB, 4, 3, 5);
-
-  // Update encoder state
   encoder.update();
 
-  // Throttle OLED update rate
+  channelA.state = sides[0].latch;  // for the display
+  channelB.state = sides[1].latch;
+
+  // Throttle OLED update rate; side A steps still refresh it at once (timing no longer
+  // depends on the display, the outputs run in the interrupts)
   unsigned long currentTime = millis();
   unsigned long updateInterval = isEncoderIdle ? OLED_UPDATE_INTERVAL_IDLE : OLED_UPDATE_INTERVAL_NORMAL;
-
-  // updating on triggerA only bc doin both inputs is a bad thing for performance
-    if (currentTime - lastUpdateTime >= updateInterval || triggerA ) {
+  if (currentTime - lastUpdateTime >= updateInterval || redrawA) {
+    redrawA = false;
     lastUpdateTime = currentTime;
     updateOLED();
   }
+
+  if (settingsDirty && currentTime - settingsChangedAt >= 3000) saveSettings();
 }

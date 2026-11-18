@@ -62,8 +62,11 @@ jobs:
           # Each .hex also runs on LGT8F328P boards (LGT8F_Compat.h), so it has to fit
           # below the LGT8F bootloader at 0x7400 (29,696 bytes); the build fails if not.
           SIZE_LIMIT="--build-property upload.maximum_size=29696"
-          arduino-cli compile -v -b ${{ matrix.board}} $SIZE_LIMIT ${{ matrix.firmware}} -e --output-dir=./build/${{ matrix.boardpath }}
-          arduino-cli compile -v -b ${{ matrix.board}} $SIZE_LIMIT --build-property "build.extra_flags=-DENCODER_REVERSED" ${{ matrix.firmware}} -e --output-dir=./build_reversed/${{ matrix.boardpath }}
+          # SSD1306_NO_SPLASH: leave out the Adafruit library's splash logos (~1.2 KB of flash,
+          # never shown). It has to be a compiler flag: it must reach the library's own .cpp.
+          FLAGS="-DSSD1306_NO_SPLASH"
+          arduino-cli compile -v -b ${{ matrix.board}} $SIZE_LIMIT --build-property "build.extra_flags=$FLAGS" ${{ matrix.firmware}} -e --output-dir=./build/${{ matrix.boardpath }}
+          arduino-cli compile -v -b ${{ matrix.board}} $SIZE_LIMIT --build-property "build.extra_flags=$FLAGS -DENCODER_REVERSED" ${{ matrix.firmware}} -e --output-dir=./build_reversed/${{ matrix.boardpath }}
           mkdir -p ./release
           cp ./build/${{ matrix.boardpath }}/${{ matrix.firmware }}.ino.hex ./release/${{ matrix.firmware }}.${{ matrix.boardpath }}.hex
           cp ./build_reversed/${{ matrix.boardpath }}/${{ matrix.firmware }}.ino.hex ./release/${{ matrix.firmware }}.${{ matrix.boardpath }}.reversed.hex
