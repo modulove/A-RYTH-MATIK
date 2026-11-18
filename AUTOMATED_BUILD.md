@@ -56,7 +56,7 @@ For each firmware listed in the workflow's `firmware` matrix:
 - **ARYTHMATIK_Stitch**
 - **ARYTHMATIK_DEBUG** (hardware test)
 - **ARYTHMATIK_Cat**
-- **ARYTHMATIK_Funghi**
+- **ARYTHMATIK_Fungi**
 - **ARYTHMATIK_Kiss**
 - **ARYTHMATIK_Walz**
 
@@ -126,7 +126,7 @@ The workflow enforces two rules:
 
 ### Animation frames
 
-Cat, Funghi, Kiss and Walz draw their animation frames from `frames.h`: run-length coded
+Cat, Fungi, Kiss and Walz draw their animation frames from `frames.h`: run-length coded
 display pages, about a third of the flash of plain bitmaps. `frames.h` is generated from the
 editable bitmaps in `frames_src.h` by `Firmware/tools/oled_rle.py`; the exact command is in
 line 2 of each `frames.h`. The drawing code is `OledRle.h`, one identical copy per folder.

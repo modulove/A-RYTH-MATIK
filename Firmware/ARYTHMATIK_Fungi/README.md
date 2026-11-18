@@ -1,9 +1,9 @@
-# Funghi
+# Fungi
 
 Three mushrooms dance over a slime mold: a Game of Life colony grows, dies back and is fed at
 the bottom of the display, one generation per clock, and the outputs fire on what happens in it.
 
-![Funghi on the A-RYTH-MATIK display](img/Funghi_OLED.gif)
+![Fungi on the A-RYTH-MATIK display](img/Fungi_OLED.gif)
 
 ## What it does
 
@@ -30,7 +30,9 @@ the bottom of the display, one generation per clock, and the outputs fire on wha
   roughly 100 steps per second can a step come before its generation is ready; such a step
   fires nothing.
 
-There is no start screen: the colony starts right after power-up.
+At power-up it shows "Fungi - for Omri Cohen" (about 2 s). The clock, RST and the outputs
+already run during this screen: the colony evolves as usual, only the display shows the text.
+Turning or pressing the encoder ends the screen early (and does what it always does).
 
 ## Controls
 
@@ -115,8 +117,12 @@ Building it yourself (Arduino IDE or arduino-cli):
   `frames_src.h`).
 
 ```
-arduino-cli compile -b arduino:avr:nano --build-property "build.extra_flags=-DSSD1306_NO_SPLASH" --build-property upload.maximum_size=29696 ARYTHMATIK_Funghi
+arduino-cli compile -b arduino:avr:nano --build-property "build.extra_flags=-DSSD1306_NO_SPLASH" --build-property upload.maximum_size=29696 ARYTHMATIK_Fungi
 ```
+
+## Dedication
+
+Fungi is dedicated to Omri Cohen: developed for him and inspired by working with him.
 
 ## Credits
 

@@ -1,4 +1,4 @@
-// Funghi animation frames: the editable source of frames.h. The sketch does NOT include this file.
+// Fungi animation frames: the editable source of frames.h. The sketch does NOT include this file.
 // The original bitmaps (Adafruit drawBitmap layout, 108x47 px each) and their frame order
 // (pilz_bitmap_allArray). The sketch draws the mushrooms at x = 10, y = 5 as before: frames.h
 // adds 5 empty rows on top, so the sprite starts on display page 0. After a change, regenerate

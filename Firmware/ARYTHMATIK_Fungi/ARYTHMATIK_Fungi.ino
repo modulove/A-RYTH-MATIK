@@ -7,10 +7,14 @@
 #include "frames.h"  // the mushrooms, generated from frames_src.h by ../tools/oled_rle.py
 
 /*
- * Funghi - slime mold under dancing mushrooms
+ * Fungi - slime mold under dancing mushrooms. Dedicated to Omri Cohen.
  * A Game of Life colony on a 42 x 7 cell grid at the bottom of the display grows, dies back and
  * is fed, one generation per clock step, while three mushrooms dance above it (one animation
  * frame per generation). The outputs fire on what happens in the colony.
+ *
+ * Start screen "Fungi / for Omri Cohen" for 2 s: the main loop draws it instead of the colony
+ * and keeps computing generations, so clock, reset and triggers run as usual meanwhile. An
+ * encoder action ends it early (and does what it always does).
  *
  * Timing: the main loop computes up to 4 generations ahead (their trigger bits go into a queue).
  * The clock edge (pin-change interrupt) or the internal clock (Timer1) plays the next one: its
@@ -102,6 +106,7 @@ using namespace arythmatik;
 #define RESET_WINDOW_US 5000UL           // a CLK edge this soon after RST is the reset's downbeat
 #define OVERLAY_MS 2000
 #define COLONY_MSG_MS 1000
+#define INTRO_MS 2000                    // start screen
 #define SAVE_DELAY_MS 3000               // an EEPROM write stalls an LGT8F ~46 ms: save once, later
 #define LONG_PRESS_MS 700
 
@@ -171,7 +176,7 @@ enum : uint8_t { ITEM_CLOCK, ITEM_ATTRACTION, ITEM_REPULSION, ITEM_RANDOMNESS, I
 #define OV_COLONY ITEM_COUNT  // info box "NEW COLONY"
 
 // Settings, saved in EEPROM as one block (EEPROM.put = one page swap on the LGT8F).
-struct FunghiSettings {
+struct FungiSettings {
   char magic[4];     // "FUN1"
   uint16_t bpm;      // internal tempo, MIN_BPM..MAX_BPM
   uint8_t divIdx;    // external clock divider 1 << divIdx, 0..DIV_COUNT - 1
@@ -181,7 +186,7 @@ struct FunghiSettings {
 
 Arythmatik hw;
 
-FunghiSettings settings = { { 'F', 'U', 'N', '1' }, DEFAULT_BPM, 0, { 7, 3, 6 }, DEFAULT_SEED };
+FungiSettings settings = { { 'F', 'U', 'N', '1' }, DEFAULT_BPM, 0, { 7, 3, 6 }, DEFAULT_SEED };
 bool settingsDirty = false;
 uint32_t settingsChangedAt;
 
@@ -218,8 +223,10 @@ uint8_t seenEpoch = 0xFF; // colonyEpoch the colony was last started for
 uint8_t menuItem = ITEM_CLOCK;
 uint8_t overlayItem;
 bool overlayOn = false;
+bool introOn = true;  // start screen instead of the colony
 bool redraw = true;
 uint32_t overlayUntil;
+uint32_t introUntil;
 uint32_t lastTurnMs;
 
 // ---------- outputs and steps (interrupt side) ----------
@@ -354,7 +361,7 @@ static uint16_t tempoTop(uint16_t bpm) {
 // Start Timer1 (internal clock), Timer2 (trigger ends) and the CLK/RST handler.
 static void startClock() {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    TCCR1A = 0;  // Arduino set Timer1 up for PWM on D9/D10; Funghi doesn't use analogWrite()
+    TCCR1A = 0;  // Arduino set Timer1 up for PWM on D9/D10; Fungi doesn't use analogWrite()
     TCCR1B = 0;
     TCNT1 = 0;
     OCR1A = tempoTop(settings.bpm);
@@ -613,7 +620,7 @@ static void newColony() {
 
 // ---------- settings ----------
 void loadSettings() {
-  FunghiSettings st;
+  FungiSettings st;
   EEPROM.get(0, st);
   if (st.magic[0] != 'F' || st.magic[1] != 'U' || st.magic[2] != 'N' || st.magic[3] != '1') return;
   settings.bpm = constrain(st.bpm, MIN_BPM, MAX_BPM);
@@ -636,6 +643,7 @@ void settingsChanged() {
 
 // ---------- encoder ----------
 void showOverlay(uint8_t item) {
+  introOn = false;  // an encoder action ends the start screen
   overlayItem = item;
   overlayOn = true;
   overlayUntil = millis() + (item == OV_COLONY ? COLONY_MSG_MS : OVERLAY_MS);
@@ -782,7 +790,7 @@ static void drawInfo() {
   }
 }
 
-// Draw the generation playing and send it. False = not shown (try again).
+// Draw the generation playing (or the start screen) and send it. False = not shown (try again).
 static bool drawScreen() {
   uint8_t target, e;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -790,11 +798,20 @@ static bool drawScreen() {
     e = colonyEpoch;
   }
   if (e != seenEpoch) return false;  // RST came: the loop restarts the colony first
-  catchUp(target);
+  catchUp(target);  // also during the start screen: `shown` must not fall behind
   if (shown.step != target || colonyEpoch != seenEpoch) return false;  // (RST during the catch-up)
   uint8_t *buf = hw.display.getBuffer();
   if (!buf) return false;
   hw.display.clearDisplay();
+  if (introOn) {
+    hw.display.setTextSize(1);
+    hw.display.setTextColor(WHITE);
+    hw.display.setCursor(49, 20);
+    hw.display.print(F("Fungi"));
+    hw.display.setCursor(22, 35);
+    hw.display.print(F("for Omri Cohen"));
+    return i2cGuardShow(hw.display);
+  }
   oledRleDraw(buf, PILZ_RLE, PILZ_OFS, shown.gen & 7, PILZ_W, PILZ_PAGES, PILZ_X, 0, false, PANEL_ROTATED);
   hw.display.drawFastHLine(0, LINE_Y, SCREEN_WIDTH, WHITE);
   drawCells(buf, shown);
@@ -817,7 +834,7 @@ void setup() {
   i2cGuardBegin();  // a stuck display bus can no longer freeze the module
   hw.Init();
 
-  // Outputs and LEDs as outputs. Funghi sets them itself (FastGPIO): libmodulove's rotated pin
+  // Outputs and LEDs as outputs. Fungi sets them itself (FastGPIO): libmodulove's rotated pin
   // table has OUT4 on D1 instead of D5.
   PinOut1::setOutputLow();
   PinOut2::setOutputLow();
@@ -833,7 +850,7 @@ void setup() {
   PinLed6::setOutputLow();
   PinClkLed::setOutputLow();
 
-  // libmodulove's encoder (D2/D3, switch D12); Funghi creates no second one on the same pins.
+  // libmodulove's encoder (D2/D3, switch D12); Fungi creates no second one on the same pins.
   hw.eb.setDebounceInterval(5);
   hw.eb.setMultiClickInterval(30);  // no double clicks: a click fires right after the release
   hw.eb.setLongClickDuration(LONG_PRESS_MS);
@@ -846,6 +863,7 @@ void setup() {
   restartColony();  // the start colony and the first generations are ready before the clock runs
   fillQueue();
   startClock();
+  introUntil = millis() + INTRO_MS;  // the loop shows the start screen until then
 }
 
 void loop() {
@@ -860,8 +878,12 @@ void loop() {
   fillQueue();
 
   uint32_t now = millis();
+  if (introOn && (int32_t)(now - introUntil) >= 0) {  // start screen over: the colony
+    introOn = false;
+    redraw = true;
+  }
   bool ext = extClock;
-  if (ext != shownExt) {  // clock patched in or gone: TEMPO <-> DIVIDER, show it for a moment
+  if (ext != shownExt && !introOn) {  // clock patched in or gone: TEMPO <-> DIVIDER, show it
     shownExt = ext;
     menuItem = ITEM_CLOCK;
     showOverlay(ITEM_CLOCK);
