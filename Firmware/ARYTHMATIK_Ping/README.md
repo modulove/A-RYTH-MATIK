@@ -1,9 +1,11 @@
-# Pong
+# Ping
 
-A playable Pong with gravity and bounce. Every time a ball hits a wall or a paddle, the module
+_Ping was called Pong up to v1.1.0._
+
+A playable ping-pong game with gravity and bounce. Every time a ball hits a wall or a paddle, the module
 fires a trigger.
 
-![Pong on the A-RYTH-MATIK display](img/Pong_OLED.gif)
+![Ping on the A-RYTH-MATIK display](img/Ping_OLED.gif)
 
 ## What it does
 
@@ -17,7 +19,7 @@ fires a trigger.
 - Each hit fires a 10 ms trigger on its own output, and OUT6 fires on every hit.
 - With a clock at CLK the game runs in sync: a set number of physics steps per clock pulse, so
   the rhythms lock to the tempo. Without a clock it runs 128 steps per second.
-- For classic Pong set GRAVITY 0, BOUNCE 100 %, BALLS 1, SPEED 100 %.
+- For the classic game set GRAVITY 0, BOUNCE 100 %, BALLS 1, SPEED 100 %.
 
 ## Controls
 
@@ -32,7 +34,7 @@ Parameters:
 
 | Parameter | Range | First start | What it does |
 |---|---|---|---|
-| GRAVITY | 0-9 | 3 | 0 = straight lines (classic Pong), higher = stronger arcs |
+| GRAVITY | 0-9 | 3 | 0 = straight lines (the classic game), higher = stronger arcs |
 | BOUNCE | 50-100 % in 5 % steps | 90 % | height a ball keeps per top or bottom hit |
 | BALLS | 1-3 | 2 | number of balls |
 | SPEED | 25-300 % in 25 % steps | 100 % | horizontal ball speed |
@@ -84,7 +86,7 @@ Building it yourself (Arduino IDE or arduino-cli):
   `git clone --recursive` (or run `git submodule update --init`).
 - Libraries: EncoderButton, Adafruit GFX Library, Adafruit SSD1306.
 - Option: `ENCODER_REVERSED` reverses the encoder (pass it as a `-D` flag or add a `#define` at
-  the top of the sketch). Pong has no option for the upside-down panel.
+  the top of the sketch). Ping has no option for the upside-down panel.
 - The release builds pass `-DSSD1306_NO_SPLASH`: it leaves out the display library's unused
   splash logo (about 1.2 KB). Without it (for example in the Arduino IDE) the build still works,
   it is just bigger.
@@ -92,7 +94,7 @@ Building it yourself (Arduino IDE or arduino-cli):
   [AUTOMATED_BUILD.md](../../AUTOMATED_BUILD.md).
 
 ```
-arduino-cli compile -b arduino:avr:nano --build-property "build.extra_flags=-DSSD1306_NO_SPLASH" --build-property upload.maximum_size=29696 ARYTHMATIK_Pong
+arduino-cli compile -b arduino:avr:nano --build-property "build.extra_flags=-DSSD1306_NO_SPLASH" --build-property upload.maximum_size=29696 ARYTHMATIK_Ping
 ```
 
 ## Credits

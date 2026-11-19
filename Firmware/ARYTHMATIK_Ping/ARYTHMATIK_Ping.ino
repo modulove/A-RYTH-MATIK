@@ -1,9 +1,9 @@
 #include "LGT8F_Compat.h"  // Nano + LGT8F328P from one .hex (chip setup, EEPROM) - must be the first include
 /**
- * ARYTHMATIK Pong - physics rhythm generator for the A-RYTH-MATIK (libModulove).
+ * ARYTHMATIK Ping - physics rhythm generator for the A-RYTH-MATIK (libModulove).
  * Based on https://github.com/shveytank/Arduino_Pong_Game
  *
- * A playable Pong with gravity and bounce: 1-3 balls with different speeds fly
+ * A playable ping-pong game with gravity and bounce: 1-3 balls with different speeds fly
  * through the court, every hit fires a 10 ms trigger.
  *   OUT1 left wall (behind the CPU paddle)   OUT4 CPU paddle
  *   OUT2 right wall (behind your paddle)     OUT5 your paddle
@@ -23,7 +23,7 @@
  *                      5 ms before the reset)
  *
  * Parameters (saved 3 s after the last change)
- *   GRAVITY   0-9      0 = straight lines (classic Pong), more = arcs
+ *   GRAVITY   0-9      0 = straight lines (the classic game), more = arcs
  *   BOUNCE    50-100%  height kept per top/bottom hit; below 100% the balls die down
  *                      and are launched again when they come to rest
  *   BALLS     1-3      ball 2 flies 1.5x, ball 3 0.75x the speed of ball 1
@@ -31,7 +31,7 @@
  *   STEPS/CLK 1-96     physics steps per clock pulse (free running: the internal
  *                      clock for QUANTIZE ticks every STEPS/CLK steps)
  *   QUANTIZE  OFF/ON   ON = hits wait for the next clock pulse (or internal clock)
- * Classic Pong: GRAVITY 0, BOUNCE 100%, BALLS 1, SPEED 100%.
+ * The classic game: GRAVITY 0, BOUNCE 100%, BALLS 1, SPEED 100%.
  *
  * Timing: physics steps run in the Timer1 compare A interrupt (or on the clock edge in
  * the pin change interrupt), trigger ends in the compare B interrupt, so the game speed

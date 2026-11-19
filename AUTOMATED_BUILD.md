@@ -52,7 +52,7 @@ For each firmware listed in the workflow's `firmware` matrix:
 - **ARYTHMATIK_Euclid**
 - **ARYTHMATIK_Gate-seq**
 - **ARYTHMATIK_Labor**
-- **ARYTHMATIK_Pong**
+- **ARYTHMATIK_Ping**
 - **ARYTHMATIK_Stitch**
 - **ARYTHMATIK_DEBUG** (hardware test)
 - **ARYTHMATIK_Cat**

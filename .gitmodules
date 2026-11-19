@@ -1,9 +1,6 @@
 [submodule "Firmware/ARYTHMATIK_Buds/src/libmodulove"]
 	path = Firmware/ARYTHMATIK_Buds/src/libmodulove
 	url = https://github.com/awonak/libModulove.git
-[submodule "Firmware/ARYTHMATIK_Pong/src/libmodulove"]
-	path = Firmware/ARYTHMATIK_Pong/src/libmodulove
-	url = https://github.com/awonak/libModulove.git
 [submodule "Firmware/ARYTHMATIK_Labor/src/libmodulove"]
 	path = Firmware/ARYTHMATIK_Labor/src/libmodulove
 	url = https://github.com/awonak/libModulove.git
@@ -18,4 +15,7 @@
 	url = https://github.com/awonak/libModulove.git
 [submodule "Firmware/ARYTHMATIK_Fungi/src/libmodulove"]
 	path = Firmware/ARYTHMATIK_Fungi/src/libmodulove
+	url = https://github.com/awonak/libModulove.git
+[submodule "Firmware/ARYTHMATIK_Ping/src/libmodulove"]
+	path = Firmware/ARYTHMATIK_Ping/src/libmodulove
 	url = https://github.com/awonak/libModulove.git
